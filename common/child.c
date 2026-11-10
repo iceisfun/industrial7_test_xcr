@@ -24,42 +24,57 @@ static void drain(HANDLE rd, t_child_result *r) {
     }
 }
 
-/* Under tools/sde_run.sh, SDE writes its error reports to XCR_SDE_ERRFILE (a Windows path), not to the
- * child's stdout/stderr pipe. Snapshot it around a child run; new text is appended to r->out so that
- * t_sde_killed_child() can see it. Never active outside SDE runs. */
-static size_t sde_errfile_read(char *buf, size_t cap) {
-    char list[2 * MAX_PATH];
-    size_t len = 0;
-    buf[0] = 0;
-    if (!t_sde_model()) return 0;
-    DWORD n = GetEnvironmentVariableA("XCR_SDE_ERRFILE", list, sizeof list);   /* ';'-separated */
-    if (n == 0 || n >= sizeof list) return 0;
-    for (char *path = list, *next; path && *path; path = next) {
-        next = strchr(path, ';');
-        if (next) *next++ = 0;
+/* Under tools/sde_run.sh, SDE writes its error reports (chip-check stops, failed emulated accesses) to
+ * files in XCR_SDE_LOGDIR_WIN (one per Pin process: sde-chip-check[.<ppid>-<pid>].txt, sde-error*.txt), not
+ * to the child's stdout/stderr pipe. Snapshot the file sizes around a child run; error text from files
+ * that changed is appended to r->out so that t_sde_killed_child() can see it. Inactive outside SDE runs. */
+typedef struct sde_snap { int n; struct { char name[96]; DWORD size; FILETIME t; } f[256]; } sde_snap;
+static void sde_snap_take(sde_snap *sn, char *dir, size_t cap) {
+    sn->n = 0; dir[0] = 0;
+    if (!t_sde_model()) return;
+    DWORD n = GetEnvironmentVariableA("XCR_SDE_LOGDIR_WIN", dir, (DWORD)cap);
+    if (n == 0 || n >= cap - 16) { dir[0] = 0; return; }
+    char pat[MAX_PATH + 16]; snprintf(pat, sizeof pat, "%s\\sde-*.txt", dir);
+    WIN32_FIND_DATAA fd; HANDLE h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (sn->n >= (int)T_COUNTOF(sn->f) || strstr(fd.cFileName, "align-checker") || strlen(fd.cFileName) >= sizeof sn->f[0].name) continue;
+        snprintf(sn->f[sn->n].name, sizeof sn->f[0].name, "%s", fd.cFileName);
+        sn->f[sn->n].size = fd.nFileSizeLow; sn->f[sn->n].t = fd.ftLastWriteTime; sn->n++;
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+}
+static void sde_snap_append(t_child_result *r, const sde_snap *before, char *dir) {
+    if (!dir[0]) return;
+    sde_snap *ap = (sde_snap *)malloc(sizeof *ap);
+    if (!ap) return;
+    char d2[MAX_PATH]; sde_snap_take(ap, d2, sizeof d2);
+#define after (*ap)
+    for (int i = 0; i < after.n; i++) {
+        int changed = 1;
+        for (int j = 0; j < before->n; j++)
+            if (!strcmp(after.f[i].name, before->f[j].name))
+                changed = after.f[i].size != before->f[j].size || CompareFileTime(&after.f[i].t, &before->f[j].t) != 0;
+        if (!changed) continue;
+        char path[MAX_PATH + 100]; snprintf(path, sizeof path, "%s\\%s", dir, after.f[i].name);
         HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
         if (h == INVALID_HANDLE_VALUE) continue;
-        DWORD got = 0;
-        if (len + 2 < cap && !ReadFile(h, buf + len, (DWORD)(cap - 1 - len), &got, NULL)) got = 0;
+        char buf[2048]; DWORD got = 0;
+        if (!ReadFile(h, buf, sizeof buf - 1, &got, NULL)) got = 0;
         CloseHandle(h);
-        len += got;
-        buf[len] = 0;
+        buf[got] = 0;
+        const char *m = strstr(buf, "SDE-ERROR");
+        if (!m) m = strstr(buf, "SDE ERROR");
+        if (!m || r->out_len + 64 >= sizeof r->out) continue;
+        snprintf(r->out + r->out_len, sizeof r->out - r->out_len, "\n[%s] %.400s", after.f[i].name, m);
+        r->out_len += strlen(r->out + r->out_len);
     }
-    return len;
-}
-static void sde_errfile_append(t_child_result *r, const char *before, size_t nb) {
-    char after[4096];
-    size_t na = sde_errfile_read(after, sizeof after);
-    if (!na || (na == nb && !memcmp(after, before, na))) return;
-    const char *add = (na > nb && !memcmp(after, before, nb)) ? after + nb : after;
-    snprintf(r->out + r->out_len, sizeof r->out - r->out_len, "\n[sde errfile] %s", add);
-    r->out_len += strlen(r->out + r->out_len);
+#undef after
+    free(ap);
 }
 
 int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r) {
-    char sde_before[4096];
     memset(r, 0, sizeof *r);
-    size_t sde_nb = sde_errfile_read(sde_before, sizeof sde_before);
     char *cmd = (char *)malloc(8192);
     if (!cmd) return 0;
     snprintf(cmd, 8192, "\"%s\" %s", t_self_path(), args ? args : "");
@@ -89,6 +104,10 @@ int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r) {
     if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
     if (!ok) { CloseHandle(rd); if (job) CloseHandle(job); return 0; }
     r->spawn_error = 0;
+    /* the child is still suspended: everything SDE reports from here on belongs to this run */
+    sde_snap *sde_before = t_sde_model() ? (sde_snap *)malloc(sizeof *sde_before) : NULL;
+    char sde_dir[MAX_PATH]; sde_dir[0] = 0;
+    if (sde_before) sde_snap_take(sde_before, sde_dir, sizeof sde_dir);
     if (job && !AssignProcessToJobObject(job, pi.hProcess)) { CloseHandle(job); job = NULL; }  /* nested jobs unsupported: fine */
     ResumeThread(pi.hThread);
     r->started = 1;
@@ -111,7 +130,7 @@ int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r) {
     GetExitCodeProcess(pi.hProcess, &r->exit_code);
     CloseHandle(pi.hThread); CloseHandle(pi.hProcess); CloseHandle(rd);
     if (job) CloseHandle(job);    /* kill-on-close: grandchildren die here */
-    sde_errfile_append(r, sde_before, sde_nb);
+    if (sde_before) { sde_snap_append(r, sde_before, sde_dir); free(sde_before); }
 
     char v[128];
     if (t_child_find(r, "T_CHILD_EXCEPTION ", v, sizeof v)) {
