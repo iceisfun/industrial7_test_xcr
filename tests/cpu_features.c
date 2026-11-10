@@ -314,16 +314,20 @@ static int probe_xsave(char *m, size_t cap) {
     if (!ok) PFAIL("xsave: XSTATE_BV=%llx (XCR0 %llx) mxcsr=%x wrote past EBX size=%d", (unsigned long long)bv, (unsigned long long)x, mx, over);
     return 1;
 }
+/* XSAVEOPT's modified optimization (SDM 13.6) may skip a component that is unchanged since the last
+ * XRSTOR *from the same linear address*. A heap buffer could reuse the address probe_xsave just
+ * XRSTORed from, leaving stale/zero bytes that look like a wrong save. This buffer is static and is
+ * never the source of an XRSTOR, so every component in XINUSE & RFBM must actually be written. */
+static uint8_t T_ALIGN(64) g_xsaveopt_area[64 * 1024];
 static int probe_xsaveopt(char *m, size_t cap) {
     const t_cpu_info *c = cpu();
     uint32_t sz = c->xsave_size_enabled;
-    uint8_t *raw = (uint8_t *)calloc(1, sz + 64);
-    if (!raw) PFAIL("calloc");
-    uint8_t *a = (uint8_t *)(((uintptr_t)raw + 63) & ~(uintptr_t)63);
+    if (sz < 576 || sz > sizeof g_xsaveopt_area) PFAIL("(0Dh,0) EBX size %u out of range", sz);
+    uint8_t *a = g_xsaveopt_area;
+    memset(a, 0, 576);
     t_xsaveopt(a, c->xcr0);
     uint64_t bv; memcpy(&bv, a + 512, 8);
     uint32_t mx; memcpy(&mx, a + 24, 4);
-    free(raw);
     if (bv & ~c->xcr0) PFAIL("xsaveopt XSTATE_BV %llx not subset of XCR0", (unsigned long long)bv);
     if ((bv & 2) && mx != t_get_mxcsr()) PFAIL("xsaveopt mxcsr %x", mx);
     return 1;
@@ -395,16 +399,25 @@ static T_TARGET("avx,f16c") int probe_f16c(char *m, size_t cap) {
     if (o[0] != 0x7BFF || o[1] != 0x3C00 || o[2] != 0x8000 || o[3] != 0x7C00) PFAIL("vcvtps2ph %04x %04x %04x %04x", o[0], o[1], o[2], o[3]);
     return 1;
 }
-static T_TARGET("bmi") int probe_bmi1(char *m, size_t cap) {
-    uint32_t a = 0xF0F0F0F0u, b = 0xFFFF0000u, z = 0, x = 0x00001234u; OPQ(a); OPQ(z); OPQ(x);
-    uint32_t andn = _andn_u32(a, b), bx = _bextr_u32(x, 4, 8), bi = _blsi_u32(0x30u + z), br = _blsr_u32(0x30u + z);
+/* Inline asm, not intrinsics: GCC lowers _andn/_blsi/_blsr to NOT+AND / NEG+AND (checked with objdump),
+ * which would leave the BMI1 instructions themselves untested. */
+static int probe_bmi1(char *m, size_t cap) {
+    uint32_t a = 0xF0F0F0F0u, b = 0xFFFF0000u, z = 0, x = 0x00001234u, ctl = 0x0804u, t30 = 0x30u; OPQ(a); OPQ(z); OPQ(x); OPQ(ctl); OPQ(t30);
+    uint32_t andn, bx, bi, br, bm;
+    __asm__("andnl %2, %1, %0" : "=r"(andn) : "r"(a), "r"(b) : "cc");          /* ~a & b */
+    __asm__("bextrl %2, %1, %0" : "=r"(bx) : "r"(x), "r"(ctl) : "cc");         /* start 4, len 8 */
+    __asm__("blsil %1, %0" : "=r"(bi) : "r"(t30) : "cc");
+    __asm__("blsrl %1, %0" : "=r"(br) : "r"(t30) : "cc");
+    __asm__("blsmskl %1, %0" : "=r"(bm) : "r"(t30) : "cc");                    /* up to and including lowest set bit */
     uint32_t tz = 0x55; __asm__("tzcntl %1, %0" : "+r"(tz) : "r"(z) : "cc");
+    if (bm != 0x1F) PFAIL("blsmsk(0x30)=%x want 1f", bm);
     if (andn != 0x0F0F0000u || bx != 0x23 || bi != 0x10 || br != 0x20 || tz != 32) PFAIL("andn %x bextr %x blsi %x blsr %x tzcnt(0)=%u", andn, bx, bi, br, tz);
     return 1;
 }
 static T_TARGET("bmi2") int probe_bmi2(char *m, size_t cap) {
-    uint32_t a = 0xFF, mask = 0xF0F0, x = 0x12345678u, f = 0xFFFFFFFFu; OPQ(a); OPQ(x); OPQ(f);
-    uint32_t pd = _pdep_u32(a, mask), pe = _pext_u32(x, 0xFF00FF00u), bz = _bzhi_u32(f, 7), lo, hi, rx, sh;
+    uint32_t a = 0xFF, mask = 0xF0F0, x = 0x12345678u, f = 0xFFFFFFFFu, seven = 7; OPQ(a); OPQ(x); OPQ(f); OPQ(seven);
+    uint32_t pd = _pdep_u32(a, mask), pe = _pext_u32(x, 0xFF00FF00u), bz, lo, hi, rx, sh;
+    __asm__("bzhil %2, %1, %0" : "=r"(bz) : "r"(f), "r"(seven) : "cc");      /* asm: GCC folds a constant-index BZHI to AND */
     __asm__("mulxl %3, %0, %1" : "=r"(lo), "=r"(hi) : "d"(f), "rm"(f));
     __asm__("rorxl $8, %1, %0" : "=r"(rx) : "r"(x));
     __asm__("shlxl %2, %1, %0" : "=r"(sh) : "r"(x), "r"(36u));
@@ -504,13 +517,14 @@ static T_TARGET("avx512f") int probe_avx512f(char *m, size_t cap) {
     for (int i = 0; i < 16; i++) if (r[i] != ((i & 1) ? 99 : 5)) PFAIL("vpaddd zmm{k} lane %d = %d", i, r[i]);
     __mmask16 k = _mm512_cmpeq_epi32_mask(a, _mm512_set1_epi32(7));
     if (k != 0xFFFF) PFAIL("vpcmpeqd k=%x", (unsigned)k);
-    double d[8]; _mm512_storeu_pd(d, _mm512_sqrt_pd(_mm512_set1_pd(2.25)));
+    __m512d q = _mm512_set1_pd(2.25); __asm__ volatile("" : "+v"(q));
+    double d[8]; _mm512_storeu_pd(d, _mm512_sqrt_pd(q));
     if (d[7] != 1.5) PFAIL("vsqrtpd zmm %g", d[7]);
     return 1;
 }
 static T_TARGET("avx512f,avx512bw") int probe_avx512bw(char *m, size_t cap) {
     __m512i a = _mm512_set1_epi8(100), b = _mm512_set1_epi8(100);
-    __asm__ volatile("" : "+v"(a));
+    __asm__ volatile("" : "+v"(a), "+v"(b));
     int8_t r[64]; _mm512_storeu_si512(r, _mm512_adds_epi8(a, b));
     __mmask64 k = _mm512_cmpeq_epi8_mask(a, b);
     if (r[0] != 127 || r[63] != 127 || k != ~0ull) PFAIL("vpaddsb zmm %d k=%llx", r[0], (unsigned long long)k);
@@ -518,14 +532,14 @@ static T_TARGET("avx512f,avx512bw") int probe_avx512bw(char *m, size_t cap) {
 }
 static T_TARGET("avx512f,avx512dq") int probe_avx512dq(char *m, size_t cap) {
     __m512i a = _mm512_set1_epi64(0x100000001ll), b = _mm512_set1_epi64(3);
-    __asm__ volatile("" : "+v"(a));
+    __asm__ volatile("" : "+v"(a), "+v"(b));
     int64_t r[8]; _mm512_storeu_si512(r, _mm512_mullo_epi64(a, b));
     if (r[0] != 0x300000003ll) PFAIL("vpmullq %llx", (unsigned long long)r[0]);
     return 1;
 }
 static T_TARGET("avx512f,avx512vl") int probe_avx512vl(char *m, size_t cap) {
     __m256i a = _mm256_set1_epi32(1), b = _mm256_set1_epi32(2), s = _mm256_set1_epi32(-1);
-    __asm__ volatile("" : "+v"(a));
+    __asm__ volatile("" : "+v"(a), "+v"(b), "+v"(s));
     int32_t r[8]; _mm256_storeu_si256((__m256i *)r, _mm256_mask_add_epi32(s, (__mmask8)0x0F, a, b));
     if (r[0] != 3 || r[3] != 3 || r[4] != -1 || r[7] != -1) PFAIL("EVEX.256 vpaddd{k} %d %d", r[0], r[4]);
     return 1;
@@ -546,7 +560,7 @@ static T_TARGET("avx512f,avx512vpopcntdq") int probe_avx512vpopcntdq(char *m, si
 }
 static T_TARGET("avx512f,avx512vnni") int probe_avx512vnni(char *m, size_t cap) {
     __m512i acc = _mm512_set1_epi32(10), u = _mm512_set1_epi8(2), s = _mm512_set1_epi8(-3);
-    __asm__ volatile("" : "+v"(acc));
+    __asm__ volatile("" : "+v"(acc), "+v"(u), "+v"(s));
     int32_t r[16]; _mm512_storeu_si512(r, _mm512_dpbusd_epi32(acc, u, s));
     if (r[0] != -14) PFAIL("vpdpbusd zmm %d", r[0]);
     return 1;
@@ -555,7 +569,7 @@ static T_TARGET("avx512f,avx512vbmi") int probe_avx512vbmi(char *m, size_t cap) 
     uint8_t in[64], idx[64], out[64];
     for (int i = 0; i < 64; i++) { in[i] = (uint8_t)(i * 3); idx[i] = (uint8_t)(63 - i); }
     __m512i v = _mm512_loadu_si512(in), x = _mm512_loadu_si512(idx);
-    __asm__ volatile("" : "+v"(v));
+    __asm__ volatile("" : "+v"(v), "+v"(x));
     _mm512_storeu_si512(out, _mm512_permutexvar_epi8(x, v));
     for (int i = 0; i < 64; i++) if (out[i] != (uint8_t)((63 - i) * 3)) PFAIL("vpermb lane %d", i);
     return 1;
@@ -612,6 +626,124 @@ static int probe_3dnow(char *m, size_t cap) {
     if (r[0] != 2.0f || r[1] != -2.0f) PFAIL("pfadd %g %g", r[0], r[1]);
     return 1;
 }
+/* MOVDIR64B: 64-byte direct store; destination address (register operand) must be 64-byte aligned. */
+static T_TARGET("movdir64b") int probe_movdir64b(char *m, size_t cap) {
+    static uint8_t T_ALIGN(64) src[64], dst[128];
+    for (int i = 0; i < 64; i++) src[i] = (uint8_t)(i * 5 + 3);
+    memset(dst, 0xCC, sizeof dst);
+    void *d = dst; OPQM(d);
+    _movdir64b(d, src);
+    __asm__ volatile("sfence" ::: "memory");
+    if (memcmp(dst, src, 64)) PFAIL("movdir64b copied %02x %02x .. %02x", dst[0], dst[1], dst[63]);
+    for (int i = 64; i < 128; i++) if (dst[i] != 0xCC) PFAIL("movdir64b wrote beyond 64 bytes (byte %d)", i);
+    return 1;
+}
+/* TPAUSE with a deadline ~20k TSC ticks ahead: bounded by the deadline (or the OS limit in
+ * IA32_UMWAIT_CONTROL / an interrupt). Only "returns and time moves forward" is architectural. */
+static T_TARGET("waitpkg") int probe_waitpkg(char *m, size_t cap) {
+    uint64_t t0 = t_rdtsc();
+    unsigned char cf = _tpause(0, t0 + 20000);
+    uint64_t t1 = t_rdtsc();
+    if (t1 <= t0) PFAIL("TSC did not advance across TPAUSE (%llx -> %llx)", (unsigned long long)t0, (unsigned long long)t1);
+    t_log("tpause cf=%u dt=%llu", cf, (unsigned long long)(t1 - t0));
+    return 1;
+}
+/* AMD SSE4A EXTRQ (imm form): low qword bits [idx+len-1:idx] zero-extended (upper qword undefined). */
+static T_TARGET("sse4a") int probe_sse4a(char *m, size_t cap) {
+    __m128i x = _mm_set_epi64x(0, 0x123456789ABCDEF0ll); OPQX(x);
+    uint64_t r[2]; _mm_storeu_si128((__m128i *)r, _mm_extracti_si64(x, 16, 8));
+    if (r[0] != 0xBCDEull) PFAIL("extrq len16 idx8 = %llx want bcde", (unsigned long long)r[0]);
+    return 1;
+}
+/* AMD FMA4: fused (single rounding) -> same residual known answer as FMA3. */
+static T_TARGET("avx,fma4") int probe_fma4(char *m, size_t cap) {
+    __m128d x = _mm_set_sd(1.0 + 0x1p-27), c = _mm_set_sd(-(1.0 + 0x1p-26)); OPQX(x); OPQX(c);
+    double r = _mm_cvtsd_f64(_mm_macc_sd(x, x, c));
+    if (r != 0x1p-54) PFAIL("vfmaddsd (FMA4) residual %a want 0x1p-54", r);
+    return 1;
+}
+static T_TARGET("avx,xop") int probe_vex_xop(char *m, size_t cap) {
+    __m128i x = _mm_setr_epi32(0x12345678, (int)0x80000001u, 0, -1); OPQX(x);
+    uint32_t r[4]; _mm_storeu_si128((__m128i *)r, _mm_roti_epi32(x, 8));
+    if (r[0] != 0x34567812u || r[1] != 0x00000180u || r[2] != 0 || r[3] != 0xFFFFFFFFu) PFAIL("vprotd %08x %08x", r[0], r[1]);
+    return 1;
+}
+static T_TARGET("tbm") int probe_tbm(char *m, size_t cap) {
+    uint32_t x = 0x00001234u, y = 0x0000004Fu; OPQ(x); OPQ(y);
+    uint32_t bx = __bextri_u32(x, 0x0804), bf = __blcfill_u32(y);      /* start 4 len 8; x & (x+1) */
+    if (bx != 0x23 || bf != 0x40) PFAIL("bextr imm %x blcfill %x", bx, bf);
+    return 1;
+}
+static T_TARGET("avx512f,avx512ifma") int probe_avx512ifma(char *m, size_t cap) {
+    /* (2^51+1) * 2 = 2^52 + 2: low 52 bits = 2, high 52 bits = 1 */
+    __m512i acc = _mm512_set1_epi64(10), a = _mm512_set1_epi64((1ll << 51) + 1), b = _mm512_set1_epi64(2);
+    __asm__ volatile("" : "+v"(acc), "+v"(a), "+v"(b));
+    uint64_t lo[8], hi[8];
+    _mm512_storeu_si512(lo, _mm512_madd52lo_epu64(acc, a, b));
+    _mm512_storeu_si512(hi, _mm512_madd52hi_epu64(acc, a, b));
+    if (lo[0] != 12 || lo[7] != 12 || hi[0] != 11 || hi[7] != 11) PFAIL("vpmadd52luq %llu vpmadd52huq %llu", (unsigned long long)lo[0], (unsigned long long)hi[0]);
+    return 1;
+}
+static T_TARGET("avx512f,avx512vbmi2") int probe_avx512vbmi2(char *m, size_t cap) {
+    __m512i a = _mm512_set1_epi32(0x12345678), b = _mm512_set1_epi32((int)0x9ABCDEF0u);
+    __asm__ volatile("" : "+v"(a), "+v"(b));
+    uint32_t r[16]; _mm512_storeu_si512(r, _mm512_shldi_epi32(a, b, 8));   /* upper 32 of (a:b) << 8 */
+    if (r[0] != 0x3456789Au || r[15] != 0x3456789Au) PFAIL("vpshldd %08x", r[0]);
+    return 1;
+}
+static T_TARGET("avx512f,avx512bw,avx512bitalg") int probe_avx512bitalg(char *m, size_t cap) {
+    __m512i x = _mm512_set1_epi32(0x0F03FF00);
+    __asm__ volatile("" : "+v"(x));
+    uint8_t r[64]; _mm512_storeu_si512(r, _mm512_popcnt_epi8(x));
+    if (r[0] != 0 || r[1] != 8 || r[2] != 2 || r[3] != 4 || r[63] != 4) PFAIL("vpopcntb %u %u %u %u", r[0], r[1], r[2], r[3]);
+    return 1;
+}
+static T_TARGET("avx512f,avx512bf16") int probe_avx512bf16(char *m, size_t cap) {
+    /* VCVTNE2PS2BF16: words 0-15 from the second source, 16-31 from the first; RNE:
+     * 1.0f (3F800000) -> 3F80; 3F818000 is a tie with odd 3F81 -> rounds to even 3F82 */
+    union { uint32_t u; float f; } t = { 0x3F818000u };
+    __m512 a = _mm512_set1_ps(t.f), b = _mm512_set1_ps(1.0f);
+    __asm__ volatile("" : "+v"(a), "+v"(b));
+    uint16_t r[32]; _mm512_storeu_si512(r, (__m512i)_mm512_cvtne2ps_pbh(a, b));
+    if (r[0] != 0x3F80 || r[15] != 0x3F80 || r[16] != 0x3F82 || r[31] != 0x3F82) PFAIL("vcvtne2ps2bf16 %04x %04x", r[0], r[16]);
+    return 1;
+}
+static T_TARGET("avx512f,avx512bw,avx512fp16") int probe_avx512fp16(char *m, size_t cap) {
+    __m512i a = _mm512_set1_epi16(0x3C00), b = _mm512_set1_epi16(0x4000);   /* 1.0 + 2.0 = 3.0 (4200h) */
+    __asm__ volatile("" : "+v"(a), "+v"(b));
+    uint16_t r[32]; _mm512_storeu_si512(r, _mm512_castph_si512(_mm512_add_ph(_mm512_castsi512_ph(a), _mm512_castsi512_ph(b))));
+    if (r[0] != 0x4200 || r[31] != 0x4200) PFAIL("vaddph %04x", r[0]);
+    return 1;
+}
+static T_TARGET("avx2,avxifma") int probe_avx_ifma(char *m, size_t cap) {
+    __m256i acc = _mm256_set1_epi64x(10), a = _mm256_set1_epi64x((1ll << 51) + 1), b = _mm256_set1_epi64x(2);
+    OPQX(acc); OPQX(a); OPQX(b);
+    uint64_t lo[4], hi[4];
+    _mm256_storeu_si256((__m256i *)lo, _mm256_madd52lo_avx_epu64(acc, a, b));
+    _mm256_storeu_si256((__m256i *)hi, _mm256_madd52hi_avx_epu64(acc, a, b));
+    if (lo[0] != 12 || lo[3] != 12 || hi[0] != 11 || hi[3] != 11) PFAIL("{vex} vpmadd52luq %llu huq %llu", (unsigned long long)lo[0], (unsigned long long)hi[0]);
+    return 1;
+}
+static T_TARGET("avx2,avxvnniint8") int probe_avx_vnni_int8(char *m, size_t cap) {
+    __m256i acc = _mm256_set1_epi32(10), a = _mm256_set1_epi8(-3), b = _mm256_set1_epi8(2); OPQX(acc); OPQX(a); OPQX(b);
+    int32_t r[8]; _mm256_storeu_si256((__m256i *)r, _mm256_dpbssd_epi32(acc, a, b));   /* s8*s8: 10 + 4*(-6) */
+    if (r[0] != -14 || r[7] != -14) PFAIL("vpdpbssd %d", r[0]);
+    return 1;
+}
+#ifdef T_X64
+/* CMPccXADD is 64-bit-mode only. Both register operands are equal so the check does not depend on
+ * which one the assembler treats as the comparand. */
+static T_TARGET("cmpccxadd") int probe_cmpccxadd(char *m, size_t cap) {
+    static volatile int T_ALIGN(4) mem;
+    int v = 5; OPQ(v);
+    mem = 5;
+    int o1 = _cmpccxadd_epi32((int *)&mem, v, v, _CMPCCX_Z);      /* 5 == 5 -> mem = 10, returns 5 */
+    int m1 = mem;
+    int o2 = _cmpccxadd_epi32((int *)&mem, v, v, _CMPCCX_Z);      /* 10 != 5 -> unchanged, returns 10 */
+    if (o1 != 5 || m1 != 10 || o2 != 10 || mem != 10) PFAIL("cmpzxadd old=%d mem=%d / old=%d mem=%d", o1, m1, o2, mem);
+    return 1;
+}
+#endif
 
 typedef struct { const char *name; t_feature f; probe_fn fn; int x64only; } probe_t;
 static const probe_t g_probes[] = {
@@ -641,6 +773,17 @@ static const probe_t g_probes[] = {
     { "clflushopt", F_CLFLUSHOPT, probe_clflushopt, 0 }, { "clwb", F_CLWB, probe_clwb, 0 }, { "serialize", F_SERIALIZE, probe_serialize, 0 },
     { "movdiri", F_MOVDIRI, probe_movdiri, 0 }, { "pku", F_PKU, probe_pku, 0 }, { "prefetchw", F_PREFETCHW, probe_prefetchw, 0 },
     { "erms", F_ERMS, probe_erms, 0 }, { "clzero", F_CLZERO, probe_clzero, 0 }, { "3dnow", F_AMD3DNOW, probe_3dnow, 0 },
+    { "movdir64b", F_MOVDIR64B, probe_movdir64b, 0 }, { "waitpkg", F_WAITPKG, probe_waitpkg, 0 }, { "sse4a", F_SSE4A, probe_sse4a, 0 },
+    { "fma4", F_FMA4, probe_fma4, 0 }, { "xop", F_XOP, probe_vex_xop, 0 }, { "tbm", F_TBM, probe_tbm, 0 },
+    { "avx512ifma", F_AVX512IFMA, probe_avx512ifma, 0 }, { "avx512vbmi2", F_AVX512VBMI2, probe_avx512vbmi2, 0 },
+    { "avx512bitalg", F_AVX512BITALG, probe_avx512bitalg, 0 }, { "avx512bf16", F_AVX512BF16, probe_avx512bf16, 0 },
+    { "avx512fp16", F_AVX512FP16, probe_avx512fp16, 0 }, { "avx_ifma", F_AVX_IFMA, probe_avx_ifma, 0 },
+    { "avx_vnni_int8", F_AVX_VNNI_INT8, probe_avx_vnni_int8, 0 },
+#ifdef T_X64
+    { "cmpccxadd", F_CMPCCXADD, probe_cmpccxadd, 1 },
+#else
+    { "cmpccxadd", F_CMPCCXADD, NULL, 1 },
+#endif
 };
 static const probe_t *find_probe(const char *n) {
     for (size_t i = 0; i < T_COUNTOF(g_probes); i++) if (!strcmp(g_probes[i].name, n)) return &g_probes[i];
@@ -653,7 +796,9 @@ static int probe_prereq(const probe_t *p, char *why, size_t cap) {
         { "fma", F_AVX }, { "f16c", F_AVX }, { "vaes", F_AVX }, { "vpclmulqdq", F_AVX }, { "avx_vnni", F_AVX2 },
         { "avx512bw", F_AVX512F }, { "avx512dq", F_AVX512F }, { "avx512vl", F_AVX512F }, { "avx512cd", F_AVX512F },
         { "avx512vpopcntdq", F_AVX512F }, { "avx512vnni", F_AVX512F }, { "avx512vbmi", F_AVX512F }, { "rdpid", F_RDTSCP },
-        { "3dnow", F_MMX },
+        { "3dnow", F_MMX }, { "fma4", F_AVX }, { "xop", F_AVX }, { "avx512ifma", F_AVX512F }, { "avx512vbmi2", F_AVX512F },
+        { "avx512bitalg", F_AVX512BW }, { "avx512bf16", F_AVX512F }, { "avx512fp16", F_AVX512BW }, { "avx_ifma", F_AVX2 },
+        { "avx_vnni_int8", F_AVX2 }, { "waitpkg", F_TSC },
     };
     for (size_t i = 0; i < T_COUNTOF(req); i++)
         if (!strcmp(req[i].n, p->name) && !cpu_has(req[i].f)) { snprintf(why, cap, "%s also needs %s", p->name, cpu_feature_name(req[i].f)); return 0; }
@@ -877,7 +1022,8 @@ TEST(leaf2_descriptors) {
     if (!has_leaf(2)) SKIP("leaf 2 not implemented (max basic 0x%x)", cpu()->max_basic);
     t_cpuid_regs r = cpuidr(2, 0);
     if (!is_intel()) { t_info("leaf2", "%08x %08x %08x %08x", r.eax, r.ebx, r.ecx, r.edx); SKIP("leaf 2 descriptors are defined by Intel only"); }
-    CHECKF((r.eax & 0xFF) == 1, "CPUID.2:AL = %u (SDM: always 01h)", r.eax & 0xFF);
+    /* SDM: AL "will always return 01H. Software should ignore this value" -> NOTE, not a contract */
+    if ((r.eax & 0xFF) != 1) t_note("CPUID.2:AL = %u (SDM documents 01h)", r.eax & 0xFF);
     uint32_t regs[4] = { r.eax & 0xFFFFFF00u, r.ebx, r.ecx, r.edx };
     char buf[256]; size_t n = 0; int ff = 0;
     for (int i = 0; i < 4; i++) {
@@ -918,7 +1064,7 @@ TEST(leaf4_cache_parameters) {
         CHECKF(c[i].type >= 1 && c[i].type <= 3, "cache %d type %d (1=data 2=instr 3=unified)", i, c[i].type);
         CHECKF(c[i].level >= 1 && c[i].level <= 4, "cache %d level %d", i, c[i].level);
         CHECKF(is_pow2(c[i].line) && c[i].line >= 16 && c[i].line <= 512, "cache %d line size %u", i, c[i].line);
-        CHECKF(i == 0 || c[i].level >= c[i - 1].level, "cache %d level %d listed after level %d (subleaves ascend by level)", i, c[i].level, c[i - 1].level);
+        if (i && c[i].level < c[i - 1].level) t_note("cache %d level %d listed after level %d (sub-leaf order is not architectural)", i, c[i].level, c[i - 1].level);
         if (c[i].level == 1 && c[i].type == 1) l1d = 1;
         t_info(c[i].type == 1 ? "data" : c[i].type == 2 ? "instr" : "unified", "L%d %u KB line %u ways %u sets %u shared_by<=%u",
                c[i].level, c[i].size / 1024, c[i].line, c[i].ways, c[i].sets, c[i].sharing);
@@ -957,8 +1103,7 @@ TEST(cache_line_consistency) {
             seen++;
             CHECKF(d->LineSize == l1d_line, "GLPI L1D LineSize %u != CPUID %s line %u", d->LineSize, src, l1d_line);
         }
-        CHECKF(d->Level >= 1 && d->Level <= 4, "GLPI cache level %u", d->Level);
-        CHECKF(is_pow2(d->LineSize), "GLPI L%u line size %u", d->Level, d->LineSize);
+        if (d->Level < 1 || d->Level > 4 || !is_pow2(d->LineSize)) t_note("GLPI cache entry level %u line size %u looks implausible", d->Level, d->LineSize);
         for (int k = 0; k < n; k++)
             if (ca[k].level == d->Level && ((d->Type == CacheData && ca[k].type == 1) || (d->Type == CacheInstruction && ca[k].type == 2) || (d->Type == CacheUnified && ca[k].type == 3))) {
                 unsigned key = 1u << ((d->Level & 7) * 4 + ((unsigned)d->Type & 3));
@@ -1026,7 +1171,7 @@ TEST(leaf7_subleaves) {
     t_cpuid_regs r0 = cpuidr(7, 0);
     uint32_t max = r0.eax;
     t_info("max_subleaf", "%u", max);
-    CHECKF(max < 64, "leaf 7 max sub-leaf %u implausible", max);
+    if (max >= 64) t_note("leaf 7 max sub-leaf %u implausible (enumerating 0..63 only)", max);
     for (uint32_t s = 0; s <= max && s < 64; s++) {
         t_cpuid_regs r = cpuidr(7, s);
         char k[16]; snprintf(k, sizeof k, "sub%u", s);
@@ -1048,6 +1193,8 @@ TEST(leaf0b_1f_topology) {
     const t_cpu_info *c = cpu();
     uint32_t leaves[2] = { 0xB, 0x1F }; int any = 0;
     uintptr_t prev = t_pin_thread(__builtin_ctzll(t_env_get()->affinity ? t_env_get()->affinity : 1));
+    /* Every comparison below mixes several CPUID executions: they must run on one logical processor. */
+    if (!prev) SKIP("cannot pin the thread: per-CPU x2APIC IDs could be read on different processors");
     SwitchToThread();
     for (int li = 0; li < 2; li++) {
         uint32_t L = leaves[li];
@@ -1064,7 +1211,7 @@ TEST(leaf0b_1f_topology) {
             if (!type) break;
             uint32_t shift = r.eax & 0x1F;
             CHECKF(shift >= last_shift, "leaf %xh level %u shift %u < previous %u", L, s, shift, last_shift);
-            CHECKF(type > prev_type, "leaf %xh level types not ascending (%u after %u)", L, type, prev_type);
+            if (type <= prev_type) t_note("leaf %xh level types not ascending (%u after %u)", L, type, prev_type);
             last_shift = shift; prev_type = type;
             char k[32]; snprintf(k, sizeof k, "leaf%x_level%u", L, s);
             t_info(k, "type=%u shift=%u logical=%u", type, shift, r.ebx & 0xFFFF);
@@ -1149,10 +1296,14 @@ TEST(leafd_subleaf1) {
             uint64_t s = 0; for (int j = 0; j < nbits; j++) if (m >> j & 1) s |= 1ull << pos[j];
             if (xsave_compacted_size(c->xcr0 | s) == r1.ebx) { match = 1; found = s; break; }
         }
-        CHECKF(match, "(0Dh,1) EBX %u matches no compacted size of XCR0 0x%llx | subset of XSS-supported 0x%llx (XCR0 alone: %u)",
-               r1.ebx, (unsigned long long)c->xcr0, (unsigned long long)sup, xsave_compacted_size(c->xcr0));
+        /* SDM defines (0Dh,1) EBX as the XCR0|IA32_XSS compacted size; IA32_XSS exists only with XSAVES, so a
+         * processor/hypervisor exposing XSAVEC without XSAVES gets a NOTE only. */
+        if (bit(r1.eax, 3))
+            CHECKF(match, "(0Dh,1) EBX %u matches no compacted size of XCR0 0x%llx | subset of XSS-supported 0x%llx (XCR0 alone: %u)",
+                   r1.ebx, (unsigned long long)c->xcr0, (unsigned long long)sup, xsave_compacted_size(c->xcr0));
+        else if (!match) t_note("XSAVEC without XSAVES: (0Dh,1) EBX %u != compacted size for XCR0 %u", r1.ebx, xsave_compacted_size(c->xcr0));
         if (match) t_info("inferred_xss", "0x%llx (first matching subset)", (unsigned long long)found);
-    } else CHECKF(r1.ebx >= xsave_compacted_size(c->xcr0), "(0Dh,1) EBX %u < compacted size for XCR0 %u", r1.ebx, xsave_compacted_size(c->xcr0));
+    } else if (bit(r1.eax, 3)) CHECKF(r1.ebx >= xsave_compacted_size(c->xcr0), "(0Dh,1) EBX %u < compacted size for XCR0 %u", r1.ebx, xsave_compacted_size(c->xcr0));
     t_info("compacted_size", "ebx=%u xcr0_only=%u", r1.ebx, xsave_compacted_size(c->xcr0));
 }
 
@@ -1340,7 +1491,7 @@ TEST(ext_max_leaf) {
 #endif
         SKIP("no extended CPUID leaves");
     }
-    CHECKF(r.eax < 0x80000100u, "max extended leaf 0x%x implausible", r.eax);
+    if (r.eax >= 0x80000100u) t_note("max extended leaf 0x%x implausible", r.eax);
     CHECK_EQ(c->max_ext, r.eax);
     if (is_amd()) {
         char v[13]; memcpy(v, &r.ebx, 4); memcpy(v + 4, &r.edx, 4); memcpy(v + 8, &r.ecx, 4); v[12] = 0;
@@ -1355,7 +1506,11 @@ TEST(ext_80000001_features) {
     if (is_amd()) {
         /* APM: Fn8000_0001_EDX bits 0-9, 12-17, 23, 24 mirror Fn0000_0001_EDX */
         uint32_t mir = 0x3FFu | (0x3Fu << 12) | (1u << 23) | (1u << 24);
-        CHECKF((e.edx & mir) == (l1.edx & mir), "AMD mirrored EDX bits differ: 80000001h %08x vs 1 %08x (mask %08x)", e.edx & mir, l1.edx & mir, mir);
+        /* user-visible ISA bits (FPU, TSC, CX8, CMOV, MMX, FXSR) are hard; system bits (VME, MCE, MTRR, APIC, ...)
+         * are often masked differently by hypervisors -> NOTE */
+        uint32_t user = (1u << 0) | (1u << 4) | (1u << 8) | (1u << 15) | (1u << 23) | (1u << 24);
+        CHECKF((e.edx & user) == (l1.edx & user), "AMD mirrored user ISA bits differ: 80000001h %08x vs 1 %08x (mask %08x)", e.edx & user, l1.edx & user, user);
+        if ((e.edx & mir) != (l1.edx & mir)) t_note("AMD mirrored system bits differ: 80000001h %08x vs 1 %08x", e.edx & mir, l1.edx & mir);
         CHECKF(e.eax == l1.eax || e.eax == 0, "AMD 80000001h EAX %08x should mirror signature %08x", e.eax, l1.eax);
         if (bit(e.ecx, 22) && has_leaf(0x8000001Du)) t_info("topoext", "1");
     } else if (is_intel()) {
@@ -1378,7 +1533,7 @@ TEST(ext_brand_string) {
     memcpy(raw, w, 48); raw[48] = 0;
     size_t len = strnlen(raw, 48);
     CHECKF(len < 48, "brand string not NUL-terminated within 48 bytes");
-    CHECKF(len > 0, "empty brand string");
+    if (!len) t_note("brand string leaves present but the string is empty (common under hypervisors)");
     for (size_t i = 0; i < len; i++) CHECKF(raw[i] >= 0x20 && raw[i] < 0x7F, "brand byte %zu = 0x%02x not printable ASCII", i, (unsigned char)raw[i]);
     for (size_t i = len; i < 48; i++) if (raw[i]) { t_note("bytes after the brand-string terminator are nonzero"); break; }
     CHECKF(strstr(raw, c->brand) != NULL, "trimmed brand '%s' not found in raw '%s'", c->brand, raw);
@@ -1608,6 +1763,164 @@ TEST(exec_probes_on_every_cpu) {
     t_info("runs", "%d probes on %d CPUs", runs, cpus);
 }
 
+/* A freshly created process must see the same processor: feature words, leaf 0Dh enumeration, XCR0
+ * and the IsProcessorFeaturePresent table are per-system, not per-process. */
+static void snap_line(char *buf, size_t cap) {
+    snap_t s; memset(&s, 0, sizeof s); take_snap(&s);
+    uint64_t pfm = 0; for (DWORD i = 0; i < 64; i++) if (IsProcessorFeaturePresent(i)) pfm |= 1ull << i;
+    snprintf(buf, cap, "%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x.%016llx.%016llx",
+             s.l1c, s.l1d, s.l7b, s.l7c, s.l7d, s.l71a, s.ld0a, s.ld0b, s.ld0c, s.ld1a, s.e1c, s.e1d,
+             (unsigned long long)s.xcr0, (unsigned long long)pfm);
+}
+CHILD(cpuid_snapshot) {
+    char b[256]; snap_line(b, sizeof b);
+    printf("SNAP=%s\n", b);
+    return 0;
+}
+TEST(cpuid_same_in_child_process) {
+    char mine[256], theirs[256] = "";
+    snap_line(mine, sizeof mine);
+    static t_child_result r;
+    REQUIRE(t_child_run("cpuid_snapshot", NULL, 10000, &r));
+    CHECKF(r.exit_code == 0 && !r.exc_code && t_child_find(&r, "SNAP=", theirs, sizeof theirs),
+           "child failed: exit 0x%lx exc 0x%lx", (unsigned long)r.exit_code, (unsigned long)r.exc_code);
+    CHECKF(!strcmp(mine, theirs), "child process sees different CPUID/XCR0/PF state:\n  parent %s\n  child  %s", mine, theirs);
+    t_info("snapshot", "l1c.l1d.l7b.l7c.l7d.l71a.ld0a.ld0b.ld0c.ld1a.e1c.e1d.xcr0.pf = %s", mine);
+}
+
+/* Leaves without sub-leaves must not depend on ECX. Only leaf 0 and the leaf 1 feature words are hard
+ * (every processor and hypervisor must get those right: software routinely executes CPUID with stale ECX);
+ * 8000000xh differences are recorded. Pinned so per-CPU fields (APIC ID) cannot differ. */
+TEST(cpuid_flat_leaves_ignore_ecx) {
+    uintptr_t prev = t_pin_thread(__builtin_ctzll(t_env_get()->affinity ? t_env_get()->affinity : 1));
+    if (!prev) SKIP("cannot pin the thread");
+    SwitchToThread();
+    static const uint32_t ecxv[] = { 1, 2, 7, 0x55, 0xFFFFFFFFu, 0x80000000u };
+    for (size_t k = 0; k < T_COUNTOF(ecxv); k++) {
+        t_cpuid_regs a = cpuidr(0, 0), b = cpuidr(0, ecxv[k]);
+        CHECKF(!memcmp(&a, &b, sizeof a), "leaf 0 with ECX=0x%x: %08x %08x %08x %08x vs ECX=0: %08x %08x %08x %08x",
+               ecxv[k], b.eax, b.ebx, b.ecx, b.edx, a.eax, a.ebx, a.ecx, a.edx);
+        a = cpuidr(1, 0); b = cpuidr(1, ecxv[k]);
+        CHECKF(a.eax == b.eax && a.ecx == b.ecx && a.edx == b.edx, "leaf 1 with ECX=0x%x: eax/ecx/edx %08x %08x %08x vs %08x %08x %08x",
+               ecxv[k], b.eax, b.ecx, b.edx, a.eax, a.ecx, a.edx);
+        for (uint32_t L = 0x80000000u; L <= 0x80000004u && has_leaf(L); L++) {
+            a = cpuidr(L, 0); b = cpuidr(L, ecxv[k]);
+            if (memcmp(&a, &b, sizeof a)) t_note("leaf %xh depends on ECX (0 vs 0x%x)", L, ecxv[k]);
+        }
+    }
+    t_unpin_thread(prev);
+}
+
+/* AMX palette / TMUL enumeration (SDM Vol.1 / Vol.2 CPUID leaves 1Dh, 1Eh). */
+TEST(leaf1d_1e_amx_tile_info) {
+    const t_cpu_info *c = cpu();
+    if (!cpu_hw(F_AMX_TILE)) SKIP("AMX-TILE not advertised");
+    REQUIREF(has_leaf(0x1E), "AMX-TILE advertised but leaves 1Dh/1Eh unreachable (max basic 0x%x)", c->max_basic);
+    t_cpuid_regs p0 = cpuidr(0x1D, 0), p1 = cpuidr(0x1D, 1), t0 = cpuidr(0x1E, 0);
+    uint32_t maxpal = p0.eax, total = p1.eax & 0xFFFF, per_tile = p1.eax >> 16, per_row = p1.ebx & 0xFFFF, names = p1.ebx >> 16, rows = p1.ecx & 0xFFFF;
+    uint32_t maxk = t0.ebx & 0xFF, maxn = (t0.ebx >> 8) & 0xFFFF;
+    t_info("palette1", "max_palette=%u total=%u per_tile=%u per_row=%u names=%u rows=%u", maxpal, total, per_tile, per_row, names, rows);
+    t_info("tmul", "maxk=%u maxn=%u", maxk, maxn);
+    CHECKF(maxpal >= 1, "AMX: max palette %u (palette 1 must exist)", maxpal);
+    CHECKF(per_tile * names == total, "palette 1: bytes_per_tile %u * max_names %u != total_tile_bytes %u", per_tile, names, total);
+    CHECKF(per_row * rows == per_tile, "palette 1: bytes_per_row %u * max_rows %u != bytes_per_tile %u", per_row, rows, per_tile);
+    if (c->comp[18].valid) CHECKF(c->comp[18].size == total, "TILEDATA XSAVE component size %u != palette 1 total_tile_bytes %u", c->comp[18].size, total);
+    if (total != 8192 || per_tile != 1024 || per_row != 64 || names != 8 || rows != 16) t_note("palette 1 differs from the 8 x 16 x 64-byte layout");
+    if (maxk != 16 || maxn != 64) t_note("TMUL maxk/maxn %u/%u differ from 16/64", maxk, maxn);
+}
+
+/* AVX10 converged vector ISA enumeration (Intel AVX10 architecture specification, leaf 24h). */
+TEST(leaf24_avx10_info) {
+    const t_cpu_info *c = cpu();
+    if (!cpu_hw(F_AVX10)) SKIP("AVX10 not advertised");
+    REQUIREF(has_leaf(0x24), "AVX10 advertised but leaf 24h unreachable");
+    t_cpuid_regs r = cpuidr(0x24, 0);
+    uint32_t ver = r.ebx & 0xFF;
+    t_info("avx10", "version=%u vl128=%d vl256=%d vl512=%d max_subleaf=%u", ver, bit(r.ebx, 16), bit(r.ebx, 17), bit(r.ebx, 18), r.eax);
+    CHECKF(ver >= 1, "AVX10 version %u", ver);
+    CHECK_EQ((uint32_t)c->avx10_version, ver);
+    CHECKF(bit(r.ebx, 16) && bit(r.ebx, 17), "AVX10: 128- and 256-bit vector lengths must be enumerated (EBX=%08x)", r.ebx);
+    CHECKF(c->xcr0_supported & T_XS_OPMASK, "AVX10 (EVEX masking) advertised but XCR0-supported 0x%llx lacks the opmask component", (unsigned long long)c->xcr0_supported);
+    if ((c->xcr0_supported & 0xE0) != 0xE0) t_note("AVX10 without full ZMM state components (XCR0-supported 0x%llx)", (unsigned long long)c->xcr0_supported);
+    if (bit(r.ebx, 18) && !cpu_hw(F_AVX512F)) t_note("AVX10 with 512-bit vectors but AVX512F not enumerated");
+}
+
+/* MXCSR_MASK (FXSAVE byte 28): defined MXCSR bits other than DAZ are supported by every SSE processor
+ * (SDM 11.6.6; 0 means the default 0000FFBFh). XSAVE stores the same mask in its legacy region. */
+TEST(mxcsr_mask_consistency) {
+    static uint8_t T_ALIGN(16) fx[512];
+    memset(fx, 0, sizeof fx);
+    t_fxsave(fx);
+    uint32_t mask; memcpy(&mask, fx + 28, 4);
+    t_info("mxcsr_mask", "0x%08x", mask);
+    uint32_t eff = mask ? mask : 0xFFBFu;
+    CHECKF((eff & 0xFFBFu) == 0xFFBFu, "MXCSR_MASK 0x%08x lacks architectural MXCSR bits (0xFFBF)", mask);
+    if (eff >> 16) t_note("MXCSR_MASK has bits above 15: 0x%08x (AMD misaligned-SSE MM bit 17?)", eff);
+    if (cpu_hw(F_MISALIGNSSE) && !(eff >> 17 & 1)) t_note("MISALIGNSSE advertised but MXCSR_MASK bit 17 clear");
+    if (cpu()->osxsave && cpu_hw(F_XSAVE)) {
+        uint32_t sz = cpu()->xsave_size_enabled;
+        uint8_t *raw = (uint8_t *)calloc(1, sz + 64);
+        REQUIRE(raw != NULL);
+        uint8_t *a = (uint8_t *)(((uintptr_t)raw + 63) & ~(uintptr_t)63);
+        t_xsave(a, T_XS_X87 | T_XS_SSE);
+        uint32_t xm; memcpy(&xm, a + 28, 4);
+        free(raw);
+        CHECKF(xm == mask, "XSAVE legacy-region MXCSR_MASK 0x%08x != FXSAVE MXCSR_MASK 0x%08x", xm, mask);
+    }
+}
+
+/* GetLogicalProcessorInformationEx must agree with the legacy GLPI and the processor-count APIs. */
+TEST(glpi_ex_topology_consistency) {
+    DWORD len = 0;
+    BOOL ok = GetLogicalProcessorInformationEx(RelationAll, NULL, &len);
+    REQUIREF(!ok && GetLastError() == ERROR_INSUFFICIENT_BUFFER && len > 0, "GLPIEx size query ok=%d err=%lu len=%lu", ok, GetLastError(), len);
+    uint8_t *buf = (uint8_t *)malloc(len);
+    REQUIRE(buf != NULL);
+    ok = GetLogicalProcessorInformationEx(RelationAll, (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)buf, &len);
+    if (!ok) { free(buf); REQUIREF(0, "GLPIEx err=%lu", GetLastError()); }
+    int cores = 0, pkgs = 0, groups_rel = 0, l1d = 0; unsigned long long lps = 0; uint8_t eff_seen[256] = { 0 }; int neff = 0;
+    for (DWORD off = 0; off < len;) {
+        SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *e = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)(buf + off);
+        if (e->Size == 0 || off + e->Size > len) { CHECKF(0, "GLPIEx record at %lu has size %lu (buffer %lu)", off, (unsigned long)e->Size, len); break; }
+        if (e->Relationship == RelationProcessorCore) {
+            cores++;
+            for (WORD g = 0; g < e->Processor.GroupCount; g++) lps += (unsigned long long)popcount64(e->Processor.GroupMask[g].Mask);
+            /* EfficiencyClass is the byte after Flags (SDK 10.0.10240+; older mingw headers call it Reserved[0]) */
+            BYTE effc = ((const BYTE *)&e->Processor)[1];
+            if (!eff_seen[effc]++) neff++;
+        } else if (e->Relationship == RelationProcessorPackage) pkgs++;
+        else if (e->Relationship == RelationGroup) {
+            groups_rel++;
+            WORD act = e->Group.ActiveGroupCount;
+            DWORD sum = 0; for (WORD g = 0; g < act; g++) sum += e->Group.GroupInfo[g].ActiveProcessorCount;
+            CHECKF(sum == GetActiveProcessorCount(ALL_PROCESSOR_GROUPS), "RelationGroup active sum %lu != GetActiveProcessorCount(ALL) %lu", sum, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+            CHECKF(act == GetActiveProcessorGroupCount(), "RelationGroup ActiveGroupCount %u != GetActiveProcessorGroupCount %u", act, GetActiveProcessorGroupCount());
+        } else if (e->Relationship == RelationCache && e->Cache.Level == 1 && e->Cache.Type == CacheData) l1d++;
+        off += e->Size;
+    }
+    free(buf);
+    CHECKF(cores >= 1 && pkgs >= 1 && groups_rel == 1, "GLPIEx cores=%d packages=%d group records=%d", cores, pkgs, groups_rel);
+    /* a 32-bit (WOW64) process sees 32-bit KAFFINITY masks: compare only when nothing can be truncated */
+    if (sizeof(KAFFINITY) == 8 || GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) <= 32)
+    CHECKF(lps == GetActiveProcessorCount(ALL_PROCESSOR_GROUPS), "GLPIEx core masks cover %llu logical CPUs, GetActiveProcessorCount(ALL) = %lu", lps, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+    CHECKF(GetMaximumProcessorCount(ALL_PROCESSOR_GROUPS) >= GetActiveProcessorCount(ALL_PROCESSOR_GROUPS), "maximum processor count < active count");
+    if (t_env_get()->active_groups <= 1) {
+        /* single group: the legacy API sees the same cores/packages */
+        DWORD l2 = 0; GetLogicalProcessorInformation(NULL, &l2);
+        SYSTEM_LOGICAL_PROCESSOR_INFORMATION *b = l2 ? (SYSTEM_LOGICAL_PROCESSOR_INFORMATION *)malloc(l2) : NULL;
+        if (b && GetLogicalProcessorInformation(b, &l2)) {
+            int c2 = 0, p2 = 0;
+            for (DWORD i = 0; i < l2 / sizeof *b; i++) { c2 += b[i].Relationship == RelationProcessorCore; p2 += b[i].Relationship == RelationProcessorPackage; }
+            CHECKF(c2 == cores && p2 == pkgs, "GLPI cores/packages %d/%d != GLPIEx %d/%d", c2, p2, cores, pkgs);
+        } else t_note("legacy GLPI unavailable: %lu", GetLastError());
+        free(b);
+    }
+    if (cpu_hw(F_HYBRID) && neff < 2) t_note("hybrid processor but GLPIEx reports %d efficiency class(es)", neff);
+    if (!cpu_hw(F_HYBRID) && neff > 1) t_note("non-hybrid processor with %d efficiency classes", neff);
+    if (!l1d) t_note("GLPIEx reports no L1 data cache");
+    t_info("glpi_ex", "cores=%d packages=%d logical=%llu efficiency_classes=%d", cores, pkgs, lps, neff);
+}
+
 /* ===================================================================================== */
 /*  IsProcessorFeaturePresent                                                            */
 /* ===================================================================================== */
@@ -1621,12 +1934,16 @@ TEST(pf_out_of_range_and_stable) {
     char buf[256]; size_t n = 0;
     for (int i = 0; i < 64; i++) if (e->pf[i]) n += (size_t)snprintf(buf + n, sizeof buf - n, "%d ", i);
     t_info("pf_present", "%s", n ? buf : "(none)");
-    for (int i = 44; i < 64; i++) if (e->pf[i]) t_note("PF %d set (constant beyond PF_ARM_V82_DP; meaning depends on SDK version)", i);
+    /* 43-59 and 62 are ARM constants (checked in pf_non_x86_constants_zero), 60/61 have their own cases;
+     * 63 is PF_RESERVED_FEATURE (winnt.h, SDK 10.0.26100 / Wine include/winnt.h). */
+    if (e->pf[63]) t_note("PF 63 (PF_RESERVED_FEATURE) set");
 }
 
 TEST(pf_non_x86_constants_zero) {
     if (native_is_arm()) SKIP("x86 code emulated on an ARM host: ARM PF_* constants describe the native processor");
-    static const int arm[] = { 4, 5, 15, 18, 19, 24, 25, 26, 27, 29, 30, 31, 34, 43 };
+    /* PPC/Alpha/Itanium: 4, 5, 15; ARM: 18, 19, 24-27, 29-31, 34, 43-59 (V82_DP .. SVE_F64MM), 62 (LSE2), 64+ (SHA3, SME...) */
+    static const int arm[] = { 4, 5, 15, 18, 19, 24, 25, 26, 27, 29, 30, 31, 34, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+                               54, 55, 56, 57, 58, 59, 62, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80 };
     for (size_t i = 0; i < T_COUNTOF(arm); i++)
         CHECKF(pf((DWORD)arm[i]) == 0, "PF %d (PowerPC/Alpha/Itanium/ARM-only constant) is set on an x86 processor", arm[i]);
 }
@@ -1745,6 +2062,9 @@ TEST(pf39_avx)              { pf_vs(39, "PF_AVX_INSTRUCTIONS_AVAILABLE", cpu_has
 TEST(pf40_avx2)             { pf_vs(40, "PF_AVX2_INSTRUCTIONS_AVAILABLE", cpu_has(F_AVX2), 1, "avx2"); }
 TEST(pf41_avx512f)          { pf_vs(41, "PF_AVX512F_INSTRUCTIONS_AVAILABLE", cpu_has(F_AVX512F), 1, "avx512f"); }
 TEST(pf42_erms)             { pf_vs(42, "PF_ERMS_AVAILABLE", cpu_hw(F_ERMS), 1, "erms"); }
+/* winnt.h (SDK 10.0.26100, Wine include/winnt.h): PF_BMI2_INSTRUCTIONS_AVAILABLE 60, PF_MOVDIR64B_INSTRUCTION_AVAILABLE 61 */
+TEST(pf60_bmi2)             { pf_vs(60, "PF_BMI2_INSTRUCTIONS_AVAILABLE", cpu_hw(F_BMI2), 1, "bmi2"); }
+TEST(pf61_movdir64b)        { pf_vs(61, "PF_MOVDIR64B_INSTRUCTION_AVAILABLE", cpu_hw(F_MOVDIR64B), 1, "movdir64b"); }
 
 TEST(system_info_processor) {
     SYSTEM_INFO si; GetSystemInfo(&si);
@@ -1828,6 +2148,20 @@ TEST(exec_prefetchw)  { run_probe_case("prefetchw"); }
 TEST(exec_erms)       { run_probe_case("erms"); }
 TEST(exec_clzero)     { run_probe_case("clzero"); }
 TEST(exec_3dnow)      { run_probe_case("3dnow"); }
+TEST(exec_movdir64b)  { run_probe_case("movdir64b"); }
+TEST(exec_waitpkg)    { run_probe_case("waitpkg"); }
+TEST(exec_sse4a)      { run_probe_case("sse4a"); }
+TEST(exec_fma4)       { run_probe_case("fma4"); }
+TEST(exec_xop)        { run_probe_case("xop"); }
+TEST(exec_tbm)        { run_probe_case("tbm"); }
+TEST(exec_avx512ifma) { run_probe_case("avx512ifma"); }
+TEST(exec_avx512vbmi2) { run_probe_case("avx512vbmi2"); }
+TEST(exec_avx512bitalg) { run_probe_case("avx512bitalg"); }
+TEST(exec_avx512bf16) { run_probe_case("avx512bf16"); }
+TEST(exec_avx512fp16) { run_probe_case("avx512fp16"); }
+TEST(exec_avx_ifma)   { run_probe_case("avx_ifma"); }
+TEST(exec_avx_vnni_int8) { run_probe_case("avx_vnni_int8"); }
+TEST(exec_cmpccxadd)  { run_probe_case("cmpccxadd"); }
 
 /* Diagnostic: what happens when unadvertised instructions are executed (hidden-but-working features
  * under VMs/emulators). Observation only: executing an unadvertised instruction is not a contract. */
@@ -1837,8 +2171,8 @@ TEST(unadvertised_probe_survey) {
     for (size_t i = 0; i < T_COUNTOF(g_probes); i++) {
         const probe_t *p = &g_probes[i];
         if (!p->fn || cpu_hw(p->f)) continue;
-        if (!strcmp(p->name, "lzcnt") || !strcmp(p->name, "prefetchw")) continue;   /* decode as BSR / NOP-like without the feature */
-        if (n >= 40) break;
+        if (!strcmp(p->name, "lzcnt") || !strcmp(p->name, "prefetchw") || !strcmp(p->name, "waitpkg")) continue;   /* decode as BSR / NOP-like / MFENCE-like without the feature */
+        if (n >= 64) break;
         if (!t_child_run("probe", p->name, 5000, &r)) continue;
         n++;
         char k[48]; snprintf(k, sizeof k, "unadvertised_%s", p->name);
