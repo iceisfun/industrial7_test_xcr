@@ -20,7 +20,9 @@
 #   XCR_SDE_PREFIX base prefix for that Wine (default ~/.cache/xcr_suite/prefix_sde; created on first use)
 #   XCR_SDE_LOGDIR where SDE/Pin write pin-log.txt, sde-*.txt (default: a temp dir, removed unless kept)
 #   XCR_SDE_DIR    where --fetch unpacks SDE (default ~/.cache/xcr_suite/sde)
-#   XCR_SDE_ARGS   extra SDE knobs (put before "--")
+#   XCR_SDE_ARGS   extra SDE knobs (put before "--"). Always passed: -ptr_raise 1 (an emulated
+#                  instruction that touches an inaccessible page raises #PF -> STATUS_ACCESS_VIOLATION
+#                  like hardware, instead of SDE aborting) and -align_checker_action warn.
 #   XCR_TIMEOUT    hard timeout in seconds (default 1800 here: SDE is 10-100x slower than native)
 #   XCR_SDE_LOCK   lock file that serialises SDE+Wine runs (default ~/.cache/xcr_suite/sde.lock):
 #                  only one wine tree started by this script runs at a time.
@@ -87,7 +89,7 @@ export XCR_BASE_PREFIX="${XCR_SDE_PREFIX:-$HOME/.cache/xcr_suite/prefix_sde}"
 export XCR_SDE="$CPU" WINELOADERNOEXEC=1
 export XCR_TIMEOUT="${XCR_TIMEOUT:-1800}"
 # The Windows exe sees XCR_SDE (model); SDE gets the chip option and any extra knobs.
-export XCR_WINE_WRAP="$SDE -$CPU ${XCR_SDE_ARGS:-} --"
+export XCR_WINE_WRAP="$SDE -$CPU -ptr_raise 1 -align_checker_action warn ${XCR_SDE_ARGS:-} --"
 LOGDIR="${XCR_SDE_LOGDIR:-}"
 if [ -z "$LOGDIR" ]; then LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/xcr_sde_log.XXXXXX")"; trap 'rm -rf "$LOGDIR"' EXIT; fi
 mkdir -p "$LOGDIR"
