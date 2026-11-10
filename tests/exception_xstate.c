@@ -30,6 +30,11 @@
  *    lpArguments == NULL.
  *  - ntdll!RtlCaptureContext (x64): ContextFlags 0x10000F, Rip = return address, Rsp = caller RSP after return,
  *    FXSAVE of all XMM + MXCSR. RtlCaptureContext2 adds XSTATE when the CONTEXT_EX asks for it.
+ *  - ntdll!RtlRestoreContext (internal body): a CONTEXT whose flags minus XSTATE are exactly 0x10000F is restored in
+ *    user mode (XRSTOR/FXRSTOR/iretq); anything else (e.g. exception contexts carrying CONTEXT_DEBUG_REGISTERS)
+ *    goes through NtContinue, so Dr7 edits in a handler's CONTEXT take effect (veh_hw_breakpoint_dr0_rf).
+ *  - ntdll!RtlCaptureContext2: ContextFlags &= 0x100040; XSTATE captured when CONTEXT_XSTATE was requested;
+ *    then ContextFlags |= 0x10000F.
  *  - ntdll!RtlRestoreContext: STATUS_LONGJUMP loads Rbx,Rsp,Rbp,Rsi,Rdi,R12-R15,Rip,MxCsr,FpCsr,Xmm6-15 from
  *    the _JUMP_BUFFER; plain restore: XRSTOR (when CONTEXT_XSTATE) + FXRSTOR + XMM0-15 + LDMXCSR.
  */
@@ -267,6 +272,16 @@ __asm__(
     KIND(sse_add, "", "addps %xmm1, %xmm0")
     KIND(x87_div, "  fdiv %st(1), %st\n", "fwait")
     KIND(x87_ovf, "  fld1\n", "fwait")
+    KIND(x87_mul, "  fmul %st(1), %st\n", "fwait")
+    KIND(x87_sqrt, "  fsqrt\n", "fwait")
+    /* VEX-encoded faulting instructions (reached only after cpu_has(F_AVX); names carry "avx" for check_isa) */
+    KIND(avx_div, "", "vdivps %ymm1, %ymm0, %ymm0")
+    KIND(avx_movmis, "", "vmovaps (%rcx), %ymm0")
+    KIND(avx_ld, "", "vmovdqu (%rcx), %ymm2")
+    /* touch one page below the other until the stack reserve is exhausted (bounded: 16384 pages = 64 MB);
+     * the handler resumes at the resume label with RSP reset to rsp_at */
+    KIND(stkovf, "  movl $16384, %ecx\n81:\n  subq $4096, %rsp\n",
+         "movq %rax, (%rsp)\n  decl %ecx\n  jnz 81b\n  movq 4496(%rbx), %rsp")
     KSEH(div0, "", "divl %ecx")
     KSEH(rd, "", "movq (%rcx), %rax")
     KSEH(int3, "", "int3")
@@ -425,6 +440,13 @@ __asm__(
     KIND(sse_add, "", "addps %xmm1, %xmm0")
     KIND(x87_div, "  fdiv %st(1), %st\n", "fwait")
     KIND(x87_ovf, "  fld1\n", "fwait")
+    KIND(x87_mul, "  fmul %st(1), %st\n", "fwait")
+    KIND(x87_sqrt, "  fsqrt\n", "fwait")
+    KIND(avx_div, "", "vdivps %ymm1, %ymm0, %ymm0")
+    KIND(avx_movmis, "", "vmovaps (%ecx), %ymm0")
+    KIND(avx_ld, "", "vmovdqu (%ecx), %ymm2")
+    KIND(stkovf, "  movl $16384, %ecx\n81:\n  subl $4096, %esp\n",
+         "movl %eax, (%esp)\n  decl %ecx\n  jnz 81b\n  movl 4496(%ebx), %esp")
     KIND(into, "", "into")
     KIND(bound, "", "boundl %eax, (%ecx)")
 
@@ -474,7 +496,7 @@ typedef struct xk {
 #define XKES(n) { #n, xf_##n, xf_##n##_op, xf_##n##_at, xf_##n##_resume, xfs_##n, xfs_##n##_op, xfs_##n##_at, xfs_##n##_resume },
 #define XK_COMMON(X) X(nop) X(idivov) X(int3cd) X(wr) X(exec) X(ss) X(ud2) X(hlt) X(cli) X(sti) X(inb) X(outb) \
     X(wbinvd) X(rdmsr) X(wrmsr) X(movcr) X(clts) X(invd) X(xsetbv) X(int2c) X(fastfail) X(movaps) X(sse_sqrt) \
-    X(sse_mul) X(sse_add) X(x87_div) X(x87_ovf)
+    X(sse_mul) X(sse_add) X(x87_div) X(x87_ovf) X(x87_mul) X(x87_sqrt) X(avx_div) X(avx_movmis) X(avx_ld) X(stkovf)
 XK_COMMON(XKD)
 XKD(div0) XKD(rd) XKD(int3) XKD(sse_div)
 #ifdef T_X64
@@ -698,9 +720,17 @@ enum { RS_SKIP, RS_STAY, RS_RET };
 enum {
     M_MOD_XMM = 1 << 0, M_MOD_GPR = 1 << 1, M_MOD_MXCSR = 1 << 2, M_MOD_MXCSR_TOP = 1 << 3, M_MOD_YMM = 1 << 4,
     M_MOD_X87 = 1 << 5, M_CLOBBER = 1 << 6, M_FPFIX = 1 << 7, M_CLEAR_TF = 1 << 8, M_NOVERIFY = 1 << 9,
-    M_NESTED_VEH = 1 << 10, M_CLEAR_AVX = 1 << 11, M_MOD_ZMM = 1 << 12, M_VEH_SEARCH = 1 << 13
+    M_NESTED_VEH = 1 << 10, M_CLEAR_AVX = 1 << 11, M_MOD_ZMM = 1 << 12, M_VEH_SEARCH = 1 << 13,
+    M_SET_RF = 1 << 14, M_CLEAR_DR7 = 1 << 15, M_NESTED_HW = 1 << 16, M_RESET_SP = 1 << 17
 };
-enum { V_VEH = 0, V_SEHFRAME = 1, V_SEHCALL = 2 };
+/* V_NONE: no vectored or frame handler of ours; only the top-level (unhandled) exception filter (children only) */
+enum { V_VEH = 0, V_SEHFRAME = 1, V_SEHCALL = 2, V_NONE = 3 };
+#ifdef T_X64
+#define X_CONTEXT_DEBUG 0x100010u
+#else
+#define X_CONTEXT_DEBUG 0x10010u
+#endif
+#define XS_STACK_OVERFLOW 0xC00000FDu
 
 typedef struct xexp {
     DWORD code;              /* 0 = no exception expected */
@@ -712,8 +742,14 @@ typedef struct xexp {
     intptr_t sp_delta;
     uint32_t mx_set, mx_any;           /* context MXCSR = mxcsr_in | mx_set (mx_any bits ignored) */
     uint16_t x87_sw_set;               /* x87 kinds: bits expected in the context status word */
+    uint16_t x87_sw_clear;             /* x87 kinds: bits that must be clear in the context status word */
     int check_fip;
     int resume;
+    int sp_soft;                       /* context SP not predictable (stack overflow): NOTE only */
+    uint32_t gany;                     /* GPRs (bit = hardware number) not compared in the handler CONTEXT */
+    int x87_st0;                       /* context ST(0): 0 = x87in[0], 1 = any (recorded), 2 = x87_st0_val */
+    uint8_t x87_st0_val[10];
+    int check_dr;                      /* hardware breakpoint: Dr0 = 'at', Dr6.B0, Dr7.L0 in the CONTEXT */
 } xexp;
 
 struct xh;
@@ -736,6 +772,9 @@ typedef struct xh {
     uintptr_t retval;
     int seh_action;          /* 0 = continue execution, 1 = search, 2 = unwind to resume label */
     int quiet;
+    uint8_t ctx_st0[10];     /* ST(0) as found in the handler CONTEXT */
+    int ctx_has_dr; uintptr_t ctx_dr0, ctx_dr6, ctx_dr7;
+    int nested_hw_calls;     /* M_NESTED_HW: inner handler invocations */
 } xh;
 
 static DWORD g_tls = TLS_OUT_OF_INDEXES;
@@ -858,12 +897,15 @@ static void xh_verify(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who)
     } else
         CHECKF(CPC(c) == (uintptr_t)want_pc, "%s: context PC %p want %p (label%+ld)", who, (void *)CPC(c), want_pc,
                (long)((intptr_t)CPC(c) - (intptr_t)want_pc));
-    CHECKF(CSP(c) == (uintptr_t)f->rsp_at + (uintptr_t)e->sp_delta, "%s: context SP 0x%llx want 0x%llx", who,
-           (unsigned long long)CSP(c), (unsigned long long)((uintptr_t)f->rsp_at + (uintptr_t)e->sp_delta));
+    if (e->sp_soft) {
+        if (!s->quiet) t_info("ctx_sp", "%s: context SP = rsp_at%+lld", who, (long long)((intptr_t)CSP(c) - (intptr_t)f->rsp_at));
+    } else
+        CHECKF(CSP(c) == (uintptr_t)f->rsp_at + (uintptr_t)e->sp_delta, "%s: context SP 0x%llx want 0x%llx", who,
+               (unsigned long long)CSP(c), (unsigned long long)((uintptr_t)f->rsp_at + (uintptr_t)e->sp_delta));
     CHECKF(*ctx_gpr(c, 3) == (uintptr_t)f, "%s: context %s 0x%llx want frame %p", who, g_gname[3],
            (unsigned long long)*ctx_gpr(c, 3), (void *)f);
     for (int i = 0; i < NGPR; i++) {
-        if (!gpr_patterned(i)) continue;
+        if (!gpr_patterned(i) || (e->gany & (1u << i))) continue;
         CHECKF(*ctx_gpr(c, i) == (uintptr_t)f->gin[i], "%s: context %s 0x%llx want 0x%llx", who, g_gname[i],
                (unsigned long long)*ctx_gpr(c, i), (unsigned long long)(uintptr_t)f->gin[i]);
     }
@@ -887,13 +929,18 @@ static void xh_verify(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who)
             uint16_t cw, sw; memcpy(&cw, fx + 0, 2); memcpy(&sw, fx + 2, 2);
             CHECKF(cw == f->fcw_in, "%s: context x87 CW 0x%04x want 0x%04x", who, cw, f->fcw_in);
             CHECKF(fx[4] == 0xFF, "%s: context abridged x87 tag 0x%02x want 0xFF (8 valid registers)", who, fx[4]);
+            memcpy(s->ctx_st0, fx + 32, 10);
             for (int i = 0; i < 8; i++) {
                 char a[48], b[48];
-                CHECKF(!memcmp(fx + 32 + 16 * i, f->x87in[i], 10), "%s: context ST(%d) %s want %s", who, i,
-                       t_hex(a, sizeof a, fx + 32 + 16 * i, 10), t_hex(b, sizeof b, f->x87in[i], 10));
+                const uint8_t *want = (i == 0 && e->x87_st0 == 2) ? e->x87_st0_val : f->x87in[i];
+                if (i == 0 && e->x87_st0 == 1) continue;   /* destination written with a scaled result: recorded */
+                CHECKF(!memcmp(fx + 32 + 16 * i, want, 10), "%s: context ST(%d) %s want %s", who, i,
+                       t_hex(a, sizeof a, fx + 32 + 16 * i, 10), t_hex(b, sizeof b, want, 10));
             }
             if (e->x87_sw_set)
                 CHECKF((sw & e->x87_sw_set) == e->x87_sw_set, "%s: context x87 SW 0x%04x lacks 0x%04x", who, sw, e->x87_sw_set);
+            if (e->x87_sw_clear)
+                CHECKF((sw & e->x87_sw_clear) == 0, "%s: context x87 SW 0x%04x has 0x%04x set", who, sw, sw & e->x87_sw_clear);
             if (e->check_fip) {
                 uint32_t fip; memcpy(&fip, fx + 8, 4);
                 CHECKF(fip == (uint32_t)(uintptr_t)s->op, "%s: context x87 FIP 0x%08x want 0x%08x (the faulting x87 op)", who,
@@ -903,8 +950,11 @@ static void xh_verify(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who)
             if ((c->ContextFlags & X_CONTEXT_FP) == X_CONTEXT_FP) {
                 CHECKF((c->FloatSave.ControlWord & 0xFFFF) == f->fcw_in, "%s: FloatSave.ControlWord 0x%lx want 0x%04x", who,
                        (unsigned long)c->FloatSave.ControlWord, f->fcw_in);
-                for (int i = 0; i < 8; i++)
-                    CHECKF(!memcmp(c->FloatSave.RegisterArea + 10 * i, f->x87in[i], 10), "%s: FloatSave ST(%d) differs", who, i);
+                for (int i = 0; i < 8; i++) {
+                    if (i == 0 && e->x87_st0 == 1) continue;
+                    const uint8_t *want = (i == 0 && e->x87_st0 == 2) ? e->x87_st0_val : f->x87in[i];
+                    CHECKF(!memcmp(c->FloatSave.RegisterArea + 10 * i, want, 10), "%s: FloatSave ST(%d) differs", who, i);
+                }
             }
 #endif
         }
@@ -913,7 +963,20 @@ static void xh_verify(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who)
         CHECKF((c->EFlags & 0xCD5) == (f->efl_in & 0xCD5), "%s: context EFLAGS 0x%lx want arithmetic/DF bits 0x%llx", who,
                (unsigned long)c->EFlags, (unsigned long long)(f->efl_in & 0xCD5));
     if (f->flags & (XF_YMM | XF_ZMM)) xh_check_xstate(s, c, who);
+    if (e->check_dr) {
+        s->ctx_has_dr = (c->ContextFlags & X_CONTEXT_DEBUG) == X_CONTEXT_DEBUG;
+        if (s->ctx_has_dr) {
+            s->ctx_dr0 = (uintptr_t)c->Dr0; s->ctx_dr6 = (uintptr_t)c->Dr6; s->ctx_dr7 = (uintptr_t)c->Dr7;
+            CHECKF(s->ctx_dr0 == (uintptr_t)s->at, "%s: context Dr0 %p want the breakpoint address %p", who, (void *)s->ctx_dr0,
+                   (const void *)s->at);
+            CHECKF(s->ctx_dr6 & 1, "%s: context Dr6 0x%llx lacks B0 (breakpoint 0 hit)", who, (unsigned long long)s->ctx_dr6);
+            CHECKF(s->ctx_dr7 & 1, "%s: context Dr7 0x%llx lacks L0", who, (unsigned long long)s->ctx_dr7);
+        } else if (!s->quiet)
+            t_note("%s: exception CONTEXT has no CONTEXT_DEBUG_REGISTERS (flags 0x%lx)", who, (unsigned long)c->ContextFlags);
+    }
 }
+
+static void xh_nested_hw(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who);
 
 static void xh_modify(xh *s, CONTEXT *c) {
     xf *f = s->f;
@@ -981,6 +1044,8 @@ static void xh_modify(xh *s, CONTEXT *c) {
         }
     }
     if (s->mode & M_CLEAR_TF) c->EFlags &= ~0x100u;
+    if (s->mode & M_SET_RF) c->EFlags |= 0x10000u;      /* resume flag: re-execute the instruction without re-hitting DR0 */
+    if (s->mode & M_CLEAR_DR7) c->Dr7 = 0;
 }
 
 static LONG CALLBACK nested_inner_veh(EXCEPTION_POINTERS *ep);
@@ -996,14 +1061,17 @@ static int xh_core(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who) {
         CHECKF(0, "%s: exception 0x%08lx at %p repeated %ld times; forcing resume", who, (unsigned long)rec->ExceptionCode,
                rec->ExceptionAddress, (long)n);
         CSET_PC(c, s->resume);
+        if (s->mode & M_RESET_SP) CSET_SP(c, s->f->rsp_at);
         if (s->k && !strncmp(s->k->name, "x87", 3)) s->mode |= M_FPFIX;
+        s->mode |= M_SET_RF | M_CLEAR_DR7;
         xh_modify(s, c);
         return 1;
     }
     if (!(s->mode & M_NOVERIFY)) xh_verify(s, rec, c, who);
+    if (s->mode & M_NESTED_HW) xh_nested_hw(s, rec, c, who);
     xh_modify(s, c);
     switch (s->e.resume) {
-    case RS_SKIP: CSET_PC(c, s->resume); break;
+    case RS_SKIP: CSET_PC(c, s->resume); if (s->mode & M_RESET_SP) CSET_SP(c, s->f->rsp_at); break;
     case RS_RET: {
         uintptr_t ra = *(uintptr_t *)CSP(c);
         CHECKF(ra == (uintptr_t)s->resume, "%s: return address on the faulting stack %p want %p", who, (void *)ra, (const void *)s->resume);
@@ -1265,11 +1333,11 @@ static int xk_arm_and_run(xh *s, const xk *k, xf *f, int variant) {
     s->op = seh ? k->sop : k->op; s->at = seh ? k->sat : k->at; s->resume = seh ? k->sresume : k->resume;
     s->calls = s->veh_calls = s->seh_calls = s->unwind_calls = s->nested_calls = 0;
     s->dc_valid = 0; s->had_xstate = 0; s->xmask = 0; s->unwind_flags = 0; s->nested_flags = 0;
-    if (variant != V_VEH && !s->sehfn) s->sehfn = seh_kind;
+    if (variant != V_VEH && variant != V_NONE && !s->sehfn) s->sehfn = seh_kind;
     TlsSetValue(g_tls, s);
     s->armed = 1;
     if (variant == V_SEHFRAME && k->sfn) k->sfn(f);
-    else if (variant == V_VEH) k->fn(f);
+    else if (variant == V_VEH || variant == V_NONE) k->fn(f);
     else xseh_call((void *(*)(void *))(void *)k->fn, f);   /* handler in the caller's frame */
     s->armed = 0;
     return (int)s->calls;
@@ -1310,7 +1378,46 @@ static int xk_test(const char *kname, int vk, int mode, int variant, xk_tweak tw
     return calls;
 }
 
+/* M_NESTED_HW: from inside the outer handler, run a second kind routine (own patterns in every vector register,
+ * GPRs, MXCSR) that takes a hardware access violation, handled by the vectored handler with an XMM edit. The nested
+ * dispatch builds its own CONTEXT/XSTATE frame below the outer one; afterwards the outer CONTEXT must be unchanged
+ * (re-verified) and the outer resume must still restore the outer state. */
+static void xh_nested_hw(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who) {
+    xf *g = xf_alloc();
+    xh *t = (xh *)calloc(1, sizeof(xh));
+    if (!g || !t) { CHECKF(0, "%s: nested scenario allocation failed", who); xf_free(g); free(t); return; }
+    const xk *k = xk_find("rd");
+    xf_init(g, (s->tag2 ^ 0x3C3Cu) | 1u, vk_of(s->f), 0, 0);
+    xk_prepare(k, g, &t->e);
+    t->veh_on = 1; t->quiet = 1; t->mode = M_MOD_XMM; t->tag2 = s->tag2 + 0x99u;
+    int calls = xk_arm_and_run(t, k, g, V_VEH);
+    TlsSetValue(g_tls, s);
+    s->nested_hw_calls = calls;
+    CHECKF(calls == 1, "%s: nested hardware fault inside the handler: inner handler ran %d times", who, calls);
+    CHECKF(t->rec.ExceptionCode == XS_ACCESS_VIOLATION, "%s: nested fault code 0x%08lx", who, (unsigned long)t->rec.ExceptionCode);
+    xf_check_out(g, "nested fault raised inside the handler");
+    char w2[64]; snprintf(w2, sizeof w2, "%s after a nested fault", who);
+    int q = s->quiet; s->quiet = 1;
+    xh_verify(s, rec, c, w2);
+    s->quiet = q;
+    xf_free(g); free(t);
+}
+
 /* ---- child-process scenarios ---------------------------------------------------------------- */
+/* Top-level filter for V_NONE: reached through RtlUserThreadStart's filter -> UnhandledExceptionFilter ->
+ * SetUnhandledExceptionFilter callback. Returning EXCEPTION_CONTINUE_EXECUTION resumes with the (edited) CONTEXT
+ * (documented UnhandledExceptionFilter contract). Anything else terminates like the harness child filter. */
+static LONG WINAPI uef_core(EXCEPTION_POINTERS *ep) {
+    xh *s = xh_cur();
+    if (s && s->armed && xh_mine(s, ep->ExceptionRecord, ep->ContextRecord) && xh_core(s, ep->ExceptionRecord, ep->ContextRecord, "UEF"))
+        return EXCEPTION_CONTINUE_EXECUTION;
+    DWORD c = ep->ExceptionRecord->ExceptionCode;
+    printf("T_CHILD_EXCEPTION code=0x%08lx addr=0x%llx\n", (unsigned long)c, (unsigned long long)(ULONG_PTR)ep->ExceptionRecord->ExceptionAddress);
+    fflush(stdout);
+    TerminateProcess(GetCurrentProcess(), c);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 /* argv: xk <kind> <vk> <mode> <variant> */
 CHILD(xk) {
     if (argc < 5) return 3;
@@ -1319,6 +1426,7 @@ CHILD(xk) {
     const char *kname = argv[1];
     int vk = atoi(argv[2]), mode = atoi(argv[3]), variant = atoi(argv[4]);
     if (!vk_supported(vk)) { printf("XK_SKIP=%s not usable\n", vk_name(vk)); return 0; }
+    if (variant == V_NONE) SetUnhandledExceptionFilter(uef_core);
     int calls = xk_test(kname, vk, mode, variant, NULL, kname);
     printf("XK_CALLS=%d CODE=0x%08lx\n", calls, (unsigned long)g_main_xh.rec.ExceptionCode);
     fflush(stdout);
@@ -2685,6 +2793,321 @@ TEST(cap_ntcontinue_ymm_x64) {
 #else
     SKIP("x64 only");
 #endif
+}
+
+/* ========================================================================================== */
+/* x87 unmasked exception matrix (IE, DE, OE, UE, PE; ZE and stack fault above)                */
+/* ========================================================================================== */
+static void f80_raw(uint8_t out[16], int sign, uint16_t exp, uint64_t mant) {
+    uint16_t se = (uint16_t)((sign ? 0x8000u : 0u) | exp);
+    memset(out, 0, 16); memcpy(out, &mant, 8); memcpy(out + 8, &se, 2);
+}
+/* Codes per ntoskrnl!KiFloatingErrorFault (19041, checked in the disassembly): unmasked flags = SW & ~CW & 0x3F;
+ * IE -> SF ? 0xC0000092 : 0xC0000090, else ZE 0xC000008E, DE 0xC0000090 (not _DENORMAL_OPERAND), OE 0xC0000091,
+ * UE 0xC0000093, PE 0xC000008F; NumberParameters = 1, Information[0] = 0, address = RIP of the waiting
+ * instruction. KiFloatingErrorFault does not look at CS, so WOW64 code gets the same codes; native 32-bit
+ * kernels are not pinned, hence the x86 alternatives. Per the SDM, IE/DE are pre-computation (destination
+ * unchanged); OE/UE with a register destination store the exponent-scaled result; PE stores the rounded result. */
+static const xk *x87_setup_fpe(fpe_t which, xf *f, xexp *e) {
+    const xk *k = xk_find(which == FPE_IE ? "x87_sqrt" : which == FPE_PE ? "x87_div" : "x87_mul");
+    xk_prepare(k, f, e);
+    f->flags |= XF_X87;
+    uint16_t bit = 0; DWORD code = 0;
+    switch (which) {
+    case FPE_IE: f80_from_double(f->x87in[0], -1.0); bit = 0x01; code = XS_FLT_INVALID; e->x87_sw_clear = 0x40; break;
+    case FPE_DE: f80_from_double(f->x87in[0], 1.0); f80_raw(f->x87in[1], 0, 0, 1); bit = 0x02; code = XS_FLT_INVALID;
+                 e->alt[0] = XS_FLT_DENORMAL; break;
+    case FPE_OE: f80_raw(f->x87in[0], 0, 0x7FFE, ~0ull); f80_from_double(f->x87in[1], 2.0); bit = 0x08; code = XS_FLT_OVERFLOW;
+                 e->x87_st0 = 1; break;
+    case FPE_UE: f80_raw(f->x87in[0], 0, 0x0001, 1ull << 63); f80_from_double(f->x87in[1], 0.5); bit = 0x10; code = XS_FLT_UNDERFLOW;
+                 e->x87_st0 = 1; break;
+    case FPE_PE: f80_from_double(f->x87in[0], 1.0); f80_from_double(f->x87in[1], 3.0); bit = 0x20; code = XS_FLT_INEXACT;
+                 /* PC = 53 bits, RC = nearest: the stored quotient is exactly the double 1/3 */
+                 e->x87_st0 = 2; { uint8_t t[16]; f80_from_double(t, 1.0 / 3.0); memcpy(e->x87_st0_val, t, 10); } break;
+    default: break;
+    }
+    f->fcw_in = (uint16_t)(0x027F & ~bit);
+    xf_sync_exp(f);
+    if (e->x87_st0 == 2) memcpy(f->x87exp[0], e->x87_st0_val, 10);
+    e->code = code;
+#ifdef T_X64
+    e->nparams = 1; e->ninfo = 1; e->info[0] = 0;
+#else
+    e->alt[1] = XS_FLT_MULTIPLE_TRAPS; e->alt[2] = XS_FLT_MULTIPLE_FAULTS;
+    e->addr_soft = 1;
+#endif
+    e->x87_sw_set = (uint16_t)(bit | 0x80);
+    e->check_fip = 1;
+    e->resume = RS_STAY;
+    return k;
+}
+static void fp_x87_fpe_case(fpe_t which) {
+#ifdef T_X64
+    if (which != FPE_DE) wine_gap("x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)");
+#endif
+    xs_init();
+    xf *f = xf_alloc(); REQUIRE(f);
+    xh *s = &g_main_xh; memset(s, 0, sizeof *s);
+    xf_init(f, 0x6500u + (uint32_t)which, cpu_has(F_AVX) ? 32 : 16, 1, 0);
+    const xk *k = x87_setup_fpe(which, f, &s->e);
+    s->mode = M_FPFIX; s->veh_on = 1;
+    char lab[80]; snprintf(lab, sizeof lab, "after unmasked x87 %s (status cleared in CONTEXT)", g_fpe_name[which]);
+    CHECKF(xk_arm_and_run(s, k, f, V_VEH) == 1, "%s: handler ran %ld times", lab, (long)s->calls);
+    t_info("code", "0x%08lx np=%lu", (unsigned long)s->rec.ExceptionCode, (unsigned long)s->rec.NumberParameters);
+#ifdef T_X86
+    CHECKF(s->rec.ExceptionAddress == (PVOID)k->at || s->rec.ExceptionAddress == (PVOID)k->op,
+           "x87 exception address %p is neither the waiting instruction %p nor the x87 op %p", s->rec.ExceptionAddress,
+           (const void *)k->at, (const void *)k->op);
+#endif
+    if (s->e.x87_st0 == 1) {
+        /* the scaled result found in the CONTEXT is what must come back after the resume */
+        char a[48];
+        t_info("st0_scaled_result", "%s", t_hex(a, sizeof a, s->ctx_st0, 10));
+        memcpy(f->x87exp[0], s->ctx_st0, 10);
+    }
+    xf_check_out(f, lab);
+    CHECKF((f->fsw_out & 0x80BF) == 0, "x87 SW after resume 0x%04x still has exception/ES bits", f->fsw_out);
+    xf_free(f);
+}
+TEST(fp_x87_invalid_unmasked) { fp_x87_fpe_case(FPE_IE); }
+TEST(fp_x87_denormal_unmasked) {
+#ifdef T_X64
+    wine_gap("x87 #MF exception record has NumberParameters=0 and only-DE-unmasked is reported as STATUS_FLOAT_UNDERFLOW");
+#endif
+    fp_x87_fpe_case(FPE_DE);
+}
+TEST(fp_x87_overflow_unmasked) { fp_x87_fpe_case(FPE_OE); }
+TEST(fp_x87_underflow_unmasked) { fp_x87_fpe_case(FPE_UE); }
+TEST(fp_x87_inexact_unmasked) { fp_x87_fpe_case(FPE_PE); }
+
+/* ========================================================================================== */
+/* VEX-encoded (AVX) faulting instructions                                                    */
+/* ========================================================================================== */
+/* vdivps ymm: unmasked #XM raised by a 256-bit VEX instruction. Same KiXmmException mapping as SSE; the
+ * destination is unchanged at the fault; after masking in the CONTEXT the re-executed instruction writes all 8 lanes. */
+static void fp_avx_case(int invalid) {
+    if (!cpu_has(F_AVX)) SKIP("AVX not usable");
+    xs_init();
+    xf *f = xf_alloc(); REQUIRE(f);
+    xh *s = &g_main_xh; memset(s, 0, sizeof *s);
+    xf_init(f, 0x6600u + (uint32_t)invalid, 32, 0, 0);
+    const xk *k = xk_find("avx_div");
+    xexp *e = &s->e;
+    xk_prepare(k, f, e);
+    uint32_t a = invalid ? 0u : f32bits(1.0f), r = invalid ? 0xFFC00000u : 0x7F800000u, bit = invalid ? 0x01u : 0x04u;
+    for (int i = 0; i < 8; i++) { memcpy(f->vin[0] + 4 * i, &a, 4); memset(f->vin[1] + 4 * i, 0, 4); }
+    f->mxcsr_in = 0x1F80u & ~(bit << 7);
+    xf_sync_exp(f);
+    for (int i = 0; i < 8; i++) memcpy(f->vexp[0] + 4 * i, &r, 4);
+    f->mxexp = 0x1F80u | bit;
+#ifdef T_X64
+    e->code = invalid ? XS_FLT_INVALID : XS_FLT_DIVIDE_BY_ZERO;
+    e->nparams = 2; e->ninfo = 1; e->info[0] = 0;
+#else
+    e->code = XS_FLT_MULTIPLE_TRAPS; e->alt[0] = invalid ? XS_FLT_INVALID : XS_FLT_DIVIDE_BY_ZERO;
+#endif
+    e->mx_set = bit; e->resume = RS_STAY;
+    s->mode = M_FPFIX; s->veh_on = 1;
+    const char *lab = invalid ? "after unmasked VEX vdivps 0/0, masked in CONTEXT, re-executed" :
+                                "after unmasked VEX vdivps 1/0, masked in CONTEXT, re-executed";
+    CHECKF(xk_arm_and_run(s, k, f, V_VEH) == 1, "%s: handler ran %ld times", lab, (long)s->calls);
+    t_info("code", "0x%08lx np=%lu", (unsigned long)s->rec.ExceptionCode, (unsigned long)s->rec.NumberParameters);
+    xf_check_out(f, lab);
+    xf_free(f);
+}
+TEST(fp_avx_zero_divide_unmasked_ymm) { fp_avx_case(0); }
+TEST(fp_avx_invalid_unmasked_ymm) { fp_avx_case(1); }
+TEST(veh_avx_misaligned_vmovaps_ymm) {
+    /* VEX.256 vmovaps needs 32-byte alignment: #GP -> STATUS_ACCESS_VIOLATION (KiPreprocessFault) */
+    if (!cpu_has(F_AVX)) SKIP("AVX not usable");
+    xs_init();
+    xf *f = xf_alloc(); REQUIRE(f);
+    xh *s = &g_main_xh; memset(s, 0, sizeof *s);
+    xf_init(f, 0x6701, 32, 0, 1);
+    const xk *k = xk_find("avx_movmis");
+    xk_prepare(k, f, &s->e);
+    f->gin[1] = (uintptr_t)(g_mis_buf + 16); xf_sync_exp(f);
+    s->e.code = XS_ACCESS_VIOLATION; s->e.alt[0] = XS_MISALIGNMENT;
+    s->veh_on = 1; s->mode = M_MOD_YMM;
+    s->tag2 = 0x6777;
+    CHECK_EQ(xk_arm_and_run(s, k, f, V_VEH), 1);
+    t_info("code", "0x%08lx np=%lu info0=0x%llx info1=0x%llx", (unsigned long)s->rec.ExceptionCode, (unsigned long)s->rec.NumberParameters,
+           (unsigned long long)s->rec.ExceptionInformation[0], (unsigned long long)s->rec.ExceptionInformation[1]);
+    if (!s->had_xstate) for (int i = 0; i < 16; i++) memcpy(f->vexp[i] + 16, f->vin[i] + 16, 16);
+    xf_check_out(f, "after misaligned VEX.256 vmovaps (YMM uppers edited in CONTEXT)");
+    xf_free(f);
+}
+TEST(veh_avx_load_straddle_guard_ymm) {
+    /* 32-byte VEX load whose last 16 bytes are in a PAGE_NOACCESS page: read AV; the reported address lies
+     * inside the access (the CPU reports the first inaccessible byte); the destination is unchanged. */
+    if (!cpu_has(F_AVX)) SKIP("AVX not usable");
+    void *base = NULL;
+    uint8_t *p = (uint8_t *)t_guarded_alloc(64, &base);
+    if (!p) SKIP("t_guarded_alloc failed");
+    xs_init();
+    xf *f = xf_alloc(); REQUIRE(f);
+    xh *s = &g_main_xh; memset(s, 0, sizeof *s);
+    xf_init(f, 0x6801, 32, 0, 0);
+    const xk *k = xk_find("avx_ld");
+    xk_prepare(k, f, &s->e);
+    uint8_t *ld = p + 64 - 16;
+    f->gin[1] = (uintptr_t)ld; xf_sync_exp(f);
+    s->e.code = XS_ACCESS_VIOLATION; s->e.nparams = 2; s->e.ninfo = 1; s->e.info[0] = 0;
+    s->veh_on = 1;
+    CHECK_EQ(xk_arm_and_run(s, k, f, V_VEH), 1);
+    uintptr_t a = (uintptr_t)s->rec.ExceptionInformation[1];
+    CHECKF(a >= (uintptr_t)ld && a < (uintptr_t)ld + 32, "AV address 0x%llx outside the 32-byte access at %p",
+           (unsigned long long)a, (void *)ld);
+    t_info("av_address", "access%+ld (page boundary at +16)", (long)(a - (uintptr_t)ld));
+    xf_check_out(f, "after a page-straddling VEX.256 load fault");
+    xf_free(f);
+    t_guarded_free(base);
+}
+
+/* ========================================================================================== */
+/* Nested hardware fault inside a handler                                                      */
+/* ========================================================================================== */
+TEST(veh_nested_hw_fault_in_handler) {
+    for (int vk = 16; vk <= 64; vk *= 2) {
+        if (!vk_supported(vk)) continue;
+        char lab[80]; snprintf(lab, sizeof lab, "outer state after a nested hardware fault in the VEH (%s)", vk_name(vk));
+        xk_test("div0", vk, M_NESTED_HW | M_MOD_XMM, V_VEH, tw_x87_efl, lab);
+        CHECK_EQ(g_main_xh.nested_hw_calls, 1);
+    }
+}
+TEST(seh_nested_hw_fault_in_frame_handler) {
+    int vk = cpu_has(F_AVX) ? 32 : 16;
+    xk_test("div0", vk, M_NESTED_HW, V_SEHCALL, NULL, "outer state after a nested hardware fault in the frame handler");
+    CHECK_EQ(g_main_xh.nested_hw_calls, 1);
+#ifdef T_X64
+    xk_test("rd", vk, M_NESTED_HW | M_MOD_GPR, V_SEHFRAME, NULL, "outer state after a nested fault (handler on the faulting frame)");
+    CHECK_EQ(g_main_xh.nested_hw_calls, 1);
+#endif
+}
+
+/* ========================================================================================== */
+/* Top-level (unhandled) exception filter that continues execution (child process)            */
+/* ========================================================================================== */
+TEST(child_unhandled_filter_continue) {
+    DWORD c = 0;
+    CHECKF(run_child_kind("div0", 16, M_MOD_XMM | M_MOD_GPR, V_NONE, &c) == 1, "filter did not run exactly once");
+    CHECK_EQ(c, XS_INT_DIVIDE_BY_ZERO);
+    CHECKF(run_child_kind("rd", 16, M_MOD_MXCSR, V_NONE, &c) == 1, "filter did not run exactly once");
+    CHECK_EQ(c, XS_ACCESS_VIOLATION);
+    if (cpu_has(F_AVX)) CHECKF(run_child_kind("div0", 32, M_MOD_YMM | M_CLOBBER, V_NONE, &c) == 1, "filter did not run exactly once (ymm)");
+}
+
+/* ========================================================================================== */
+/* STATUS_STACK_OVERFLOW with live vector state (child process, worker with a 1 MB reserve)    */
+/* ========================================================================================== */
+static void tw_stkovf(xf *f, xexp *e, xh *s) {
+    (void)s;
+    e->code = XS_STACK_OVERFLOW; e->nparams = -1; e->sp_soft = 1;
+    e->gany = 1u << 1;            /* ecx/rcx = loop counter */
+    f->gskip = 1u << 1;
+}
+static volatile LONG g_so_guarantee_ok;
+static DWORD WINAPI stkovf_thread(void *p) {
+    int vk = *(int *)p;
+    ULONG g = 64 * 1024;
+    g_so_guarantee_ok = SetThreadStackGuarantee(&g) ? 1 : 0;
+    printf("SO_GUARANTEE ok=%ld err=%lu\n", (long)g_so_guarantee_ok, (unsigned long)GetLastError()); fflush(stdout);
+    int calls = xk_test("stkovf", vk, M_RESET_SP | M_MOD_XMM, V_VEH, tw_stkovf, "after STATUS_STACK_OVERFLOW (RSP reset by handler)");
+    EXCEPTION_RECORD *r = &g_main_xh.rec;
+    printf("XK_CALLS=%d CODE=0x%08lx\n", calls, (unsigned long)r->ExceptionCode);
+    printf("SO_INFO np=%lu info0=0x%llx info1=0x%llx guarantee=%ld\n", (unsigned long)r->NumberParameters,
+           (unsigned long long)(r->NumberParameters > 0 ? r->ExceptionInformation[0] : 0),
+           (unsigned long long)(r->NumberParameters > 1 ? r->ExceptionInformation[1] : 0), (long)g_so_guarantee_ok);
+    fflush(stdout);
+    return 0;
+}
+CHILD(stkovf) {
+    if (argc < 2) return 3;
+    g_in_child = 1;
+    xs_init();
+    static int vk; vk = atoi(argv[1]);
+    HANDLE h = CreateThread(NULL, 1u << 20, stkovf_thread, &vk, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
+    if (!h) { printf("XK_SKIP=CreateThread failed (%lu)\n", (unsigned long)GetLastError()); return 0; }
+    DWORD w = WaitForSingleObject(h, 15000);
+    CloseHandle(h);
+    if (w != WAIT_OBJECT_0) { printf("SO_HANG\n"); fflush(stdout); TerminateProcess(GetCurrentProcess(), 0x5A); }
+    return 0;
+}
+TEST(child_stack_overflow_context) {
+    /* Wine 11: STATUS_STACK_OVERFLOW is raised only in the very last stack page (the SetThreadStackGuarantee
+     * reserve is not kept back), the exception frame does not fit, and the thread is killed (x64) or the process
+     * hangs (WOW64). Not run there: it would only burn the child timeout. */
+    if (t_is_wine()) XFAIL("Wine gap: STATUS_STACK_OVERFLOW delivered without the guaranteed stack; handler cannot run");
+    int vk = cpu_has(F_AVX512F) ? 64 : cpu_has(F_AVX) ? 32 : 16;
+    char a[16]; snprintf(a, sizeof a, "%d", vk);
+    if (!t_child_run("stkovf", a, 20000, &g_cr) || !g_cr.started) { CHECKF(0, "child spawn failed (error %lu)", (unsigned long)g_cr.spawn_error); return; }
+    CHECKF(!g_cr.timed_out, "child timed out");
+    child_forward(&g_cr, "stkovf");
+    char v[160];
+    if (t_child_find(&g_cr, "XK_SKIP=", v, sizeof v)) SKIP("%s", v);
+    CHECKF(!t_child_find(&g_cr, "SO_HANG", v, sizeof v), "stack-overflow worker did not finish");
+    int calls = -1; unsigned long code = 0;
+    if (t_child_find(&g_cr, "XK_CALLS=", v, sizeof v)) sscanf(v, "%d CODE=0x%lx", &calls, &code);
+    CHECKF(calls == 1, "handler ran %d times (exit 0x%08lx, exception 0x%08lx at 0x%llx)", calls, (unsigned long)g_cr.exit_code,
+           (unsigned long)g_cr.exc_code, g_cr.exc_addr);
+    CHECKF(code == XS_STACK_OVERFLOW, "exception 0x%08lx want STATUS_STACK_OVERFLOW", code);
+    CHECKF(g_cr.exit_code == 0, "child exit code 0x%08lx", (unsigned long)g_cr.exit_code);
+    if (t_child_find(&g_cr, "SO_INFO ", v, sizeof v)) t_info("record", "%s", v);
+    t_info("vk", "%s", vk_name(vk));
+}
+
+/* ========================================================================================== */
+/* Hardware execution breakpoint (DR0 set with SetThreadContext) on a worker                   */
+/* ========================================================================================== */
+typedef struct hwbp { int vk; int calls[3]; } hwbp;
+static void tw_hwbp(xf *f, xexp *e, xh *s) {
+    (void)f; (void)s;
+    e->code = XS_SINGLE_STEP; e->resume = RS_STAY; e->check_dr = 1;
+}
+static DWORD WINAPI hwbp_worker(void *p) {
+    hwbp *h = (hwbp *)p;
+    /* run 0: handler sets RF -> the nop executes once, DR0 stays armed; run 1: handler clears Dr7 in the
+     * CONTEXT (and sets RF); run 2: no exception expected any more */
+    static const int modes[3] = { M_SET_RF, M_SET_RF | M_CLEAR_DR7, 0 };
+    for (int r = 0; r < 3; r++) {
+        char lab[80]; snprintf(lab, sizeof lab, "after DR0 execute breakpoint run %d", r);
+        h->calls[r] = xk_test("nop", h->vk, modes[r] | (r == 0 ? M_MOD_XMM : 0), V_VEH, r < 2 ? tw_hwbp : NULL, lab);
+    }
+    return 0;
+}
+TEST(veh_hw_breakpoint_dr0_rf) {
+    xs_init();
+    hwbp h; memset(&h, 0, sizeof h);
+    h.vk = cpu_has(F_AVX) ? 32 : 16;
+    HANDLE t = CreateThread(NULL, 256 * 1024, hwbp_worker, &h, CREATE_SUSPENDED, NULL);
+    if (!t) SKIP("CreateThread failed");
+    CONTEXT ctx; memset(&ctx, 0, sizeof ctx);
+    ctx.ContextFlags = X_CONTEXT_DEBUG;
+    BOOL ok = GetThreadContext(t, &ctx);
+    if (ok) {
+        ctx.ContextFlags = X_CONTEXT_DEBUG;
+        ctx.Dr0 = (uintptr_t)xk_find("nop")->at;
+        ctx.Dr7 = 1;                       /* L0, R/W0 = 00 (execute), LEN0 = 00 */
+        ok = SetThreadContext(t, &ctx);
+    }
+    if (!ok) {
+        DWORD err = GetLastError();
+        TerminateThread(t, 0); CloseHandle(t);
+        CHECKF(0, "Get/SetThreadContext(CONTEXT_DEBUG_REGISTERS) on a suspended thread failed (error %lu)", (unsigned long)err);
+        return;
+    }
+    if (t_is_wine()) {
+        CONTEXT chk; memset(&chk, 0, sizeof chk); chk.ContextFlags = X_CONTEXT_DEBUG;
+        if (GetThreadContext(t, &chk) && chk.Dr7 == 0) wine_gap("debug registers written with SetThreadContext are not kept");
+    }
+    ResumeThread(t);
+    DWORD w = WaitForSingleObject(t, 15000);
+    CHECKF(w == WAIT_OBJECT_0, "breakpoint worker did not finish (wait 0x%lx)", (unsigned long)w);
+    if (w != WAIT_OBJECT_0) TerminateThread(t, 0);
+    CloseHandle(t);
+    CHECKF(h.calls[0] == 1, "run 0: DR0 execute breakpoint raised %d exceptions, want 1", h.calls[0]);
+    CHECKF(h.calls[1] == 1, "run 1: DR0 still armed after an RF resume: %d exceptions, want 1", h.calls[1]);
+    CHECKF(h.calls[2] == 0, "run 2: DR7 cleared in the CONTEXT did not take effect (%d exceptions)", h.calls[2]);
 }
 
 /* ========================================================================================== */
