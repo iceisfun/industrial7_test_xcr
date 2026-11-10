@@ -812,8 +812,11 @@ static uint64_t xp_safe_rfbm(void) {
     return m;
 }
 
+/* Emulator artifacts (README "Emulated validation"), under tools/sde_run.sh only; checks unchanged. */
+#define XP_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) %s", t_sde_model(), why); } while (0)
 TEST(xsavec_xcomp_bv_equals_xcr0) {
     xp_raw x; xp_need_xcr0(&x);
+    XP_SDE_XFAIL("XSAVEC emulation omits PKRU (and Hi16_ZMM outside 64-bit mode) from XCOMP_BV");
     if (!cpu_has(F_XSAVEC)) SKIP("XSAVEC not available");
     uint8_t *area = (uint8_t *)VirtualAlloc(NULL, 65536, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     REQUIRE(area);
@@ -902,18 +905,21 @@ static void expect_xrstor_rejects(const char *mode, const char *what) {
 TEST(xrstor_rejects_xstate_bv_outside_xcr0) {
     xp_raw x; xp_need_xcr0(&x);
     if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable");
+    XP_SDE_XFAIL("XRSTOR emulation has no #GP header checks");
     expect_xrstor_rejects("std", "XSTATE_BV bits clear in XCR0 (standard form)");
 }
 
 TEST(xrstor_compacted_rejects_xcomp_bv_outside_xcr0) {
     xp_raw x; xp_need_xcr0(&x);
     if (!cpu_has(F_XSAVEC)) SKIP("XSAVEC (compaction) not available");
+    XP_SDE_XFAIL("XRSTOR emulation has no #GP header checks");
     expect_xrstor_rejects("cmp", "XCOMP_BV[62:0] bits clear in XCR0 (compacted form)");
 }
 
 TEST(xrstor_rejects_reserved_header_bytes) {
     xp_raw x; xp_need_xcr0(&x);
     if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable");
+    XP_SDE_XFAIL("XRSTOR emulation has no #GP header checks");
     expect_xrstor_rejects("rsvd", "nonzero reserved XSAVE header bytes");
 }
 
@@ -1060,6 +1066,7 @@ TEST(xgetbv1_gp_when_unsupported) {
 
 TEST(xgetbv_invalid_index_faults) {
     xp_raw x; xp_need_xcr0(&x);
+    XP_SDE_XFAIL("emulates XGETBV without the #GP check for an unsupported XCR index");
     expect_gp_fault("xgetbv_index", "ffffffff", 0);
     uint64_t un = 0;
     CHECKF(child_u64(&g_cr, "UNCHANGED=", &un) && un == 1, "a faulting XGETBV must leave EDX:EAX unchanged");
@@ -1119,16 +1126,19 @@ TEST(xgetbv_64bit_operand_semantics) {
  * =========================================================================================== */
 TEST(xsetbv_same_value_faults) {
     xp_raw x; xp_need_xcr0(&x);
+    XP_SDE_XFAIL("emulates XSETBV without the CPL0 check");
     expect_gp_fault("xsetbv_same", "", 1);
 }
 
 TEST(xsetbv_invalid_value_faults) {
     xp_raw x; xp_need_xcr0(&x);
+    XP_SDE_XFAIL("emulates XSETBV without the CPL0 check");
     expect_gp_fault("xsetbv_invalid", "", 1);
 }
 
 TEST(xsetbv_xcr1_faults) {
     xp_raw x; xp_need_xcr0(&x);
+    XP_SDE_XFAIL("emulates XSETBV without the CPL0 check");
     expect_gp_fault("xsetbv_xcr1", "", 1);
 }
 
@@ -1713,6 +1723,8 @@ TEST(api_reports_xcr0_documented_bits) {
     pfn_GetEnabledXStateFeatures gef = api_gef();
     if (!gef) SKIP("GetEnabledXStateFeatures not exported");
     uint64_t api = gef();
+    if (t_is_wine() && (x.xcr0 & 0xE0) && !(api & 0xE0))   /* known Wine gap (seen with Wine 9 on an AVX-512 CPU model) */
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures does not report the AVX-512 components XCR0 enables", t_wine_version());
     /* XSTATE_LEGACY_FLOATING_POINT(0), XSTATE_LEGACY_SSE(1), XSTATE_AVX(2), XSTATE_AVX512_KMASK(5),
      * XSTATE_AVX512_ZMM_H(6), XSTATE_AVX512_ZMM(7): when XCR0 enables them the API must report them. */
     static const int doc[] = { 0, 1, 2, 5, 6, 7 };

@@ -1150,8 +1150,20 @@ static uint8_t *fresh_area(size_t sz, size_t before, void **base) {
     *base = m;
     return m ? m + pg - before : NULL;                    /* `before` bytes in the first page */
 }
+/* Emulator artifacts (README "Emulated validation"): Intel SDE emulates the XSAVE family when its CPU model
+ * has state the host lacks, and that emulation deviates from the SDM in the places marked XR_SDE_XFAIL
+ * (32-bit XCOMP_BV[7], XINUSE tracking, XCOMP_BV for RFBM=0 / init components / PKRU, partial-RFBM XRSTOR,
+ * and no #GP/#PF checks). Under tools/sde_run.sh only; the checks themselves are unchanged. */
+#define XR_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) XSAVE emulation: %s", t_sde_model(), why); } while (0)
+#ifdef T_X64
+#define XR_SDE_XFAIL32(why) ((void)0)
+#else
+#define XR_SDE_XFAIL32(why) XR_SDE_XFAIL(why)
+#endif
+
 TEST(xsave_fresh_pages_straddle) {
     need_xsave();
+    XR_SDE_XFAIL32("clears XCOMP_BV[7] (Hi16_ZMM) outside 64-bit mode");
     make_vals(0x8A);
     xs_state p; st_pattern(&p, 0x118);
     static t_vregs vin; st_to_vregs(&p, &vin);
@@ -1418,8 +1430,8 @@ TEST(xrstor_init_sse_only)   { need_xsave(); xrstor_mix(g_m & ~2ull, g_m, "XSTAT
 TEST(xrstor_init_avx_only)   { need_avx(); xrstor_mix(g_m & ~4ull, g_m, "XSTATE_BV[2]=0 -> upper YMM init", 1); }
 TEST(xrstor_rfbm_sse_only)   { need_xsave(); xrstor_mix(g_m, 2, "RFBM=SSE leaves x87/AVX", 1); }
 TEST(xrstor_rfbm_avx_only)   { need_avx(); xrstor_mix(g_m, 4, "RFBM=AVX leaves XMM/x87", is_intel() ? 1 : -1); }
-TEST(xrstor_rfbm_x87_only)   { need_xsave(); xrstor_mix(g_m, 1, "RFBM=x87 leaves XMM/AVX/MXCSR", 0); }
-TEST(xrstor_rfbm_x87_avx)    { need_avx(); xrstor_mix(g_m, 5, "RFBM=x87|AVX leaves XMM", is_intel() ? 1 : -1); }
+TEST(xrstor_rfbm_x87_only)   { need_xsave(); XR_SDE_XFAIL("XRSTOR modifies components outside RFBM"); xrstor_mix(g_m, 1, "RFBM=x87 leaves XMM/AVX/MXCSR", 0); }
+TEST(xrstor_rfbm_x87_avx)    { need_avx(); XR_SDE_XFAIL("XRSTOR modifies components outside RFBM"); xrstor_mix(g_m, 5, "RFBM=x87|AVX leaves XMM", is_intel() ? 1 : -1); }
 TEST(xrstor_rfbm_zero_noop)  { need_xsave(); xrstor_mix(g_m, 0, "RFBM=0 changes nothing", 0); }
 TEST(xrstor_bv_subset_mixed) { need_avx(); xrstor_mix(5, 7, "XSTATE_BV=x87|AVX, RFBM=7", 1); }
 TEST(xrstor_init_all) {
@@ -1496,6 +1508,7 @@ TEST(xrstor_then_fxsave_consistent) {
 }
 TEST(fxrstor_then_xsave_consistent) {
     need_xsave();
+    XR_SDE_XFAIL("FXRSTOR of non-init x87 state does not set XINUSE[0]");
     xs_state p; st_pattern(&p, 0x136);
     put_legacy(g_c.b, &p);
     memset(g_b.b, SENT, std_size());
@@ -1683,9 +1696,10 @@ TEST(xsavec_rfbm_sse_only) { need_xsavec(); xsavec_mask_case(2, T_VK_XMM); }
 TEST(xsavec_rfbm_x87_sse)  { need_xsavec(); xsavec_mask_case(3, T_VK_XMM); }
 TEST(xsavec_rfbm_avx_only) { need_xsavec(); if (!cpu_has(F_AVX)) SKIP("AVX not usable"); xsavec_mask_case(4, T_VK_YMM); }
 TEST(xsavec_rfbm_x87_avx)  { need_xsavec(); if (!cpu_has(F_AVX)) SKIP("AVX not usable"); xsavec_mask_case(5, T_VK_YMM); }
-TEST(xsavec_rfbm_all_user) { need_xsavec(); xsavec_mask_case(g_m, g_kind); }
+TEST(xsavec_rfbm_all_user) { need_xsavec(); XR_SDE_XFAIL32("clears XCOMP_BV[7] (Hi16_ZMM) outside 64-bit mode"); xsavec_mask_case(g_m, g_kind); }
 TEST(xsavec_rfbm_beyond_xcr0) {
     need_xsavec();
+    XR_SDE_XFAIL("XCOMP_BV omits PKRU (and Hi16_ZMM outside 64-bit mode)");
     const t_cpu_info *c = cpu();
     uint32_t csz = xsave_compacted_size(c->xcr0);
     if (csz + 256 > XS_MAX) SKIP("compacted size %u exceeds the test buffer", csz);
@@ -1787,6 +1801,7 @@ static void xsavec_crafted(uint64_t m) {
 }
 TEST(xsavec_crafted_compacted_xrstor) {
     need_xsavec();
+    XR_SDE_XFAIL("XRSTOR modifies components outside RFBM");
     uint64_t ms[] = { 1, 2, 3, 4, 5, 6, 7, 0x21, 0x41, 0x81, 0x61, 0xE7, 0xA3 };
     int n = 0;
     for (size_t i = 0; i < T_COUNTOF(ms); i++) {
@@ -1847,6 +1862,7 @@ TEST(xsavec_compacted_mxcsr_load) {
  * with RFBM = 0 no component and no MXCSR (RFBM[1]=0) is written. */
 TEST(xsavec_rfbm_zero_header_only) {
     need_xsavec();
+    XR_SDE_XFAIL("XSAVEC with RFBM=0 leaves XCOMP_BV[63] clear");
     memset(g_a.b, SENT, 1024);
     xs_req q; q_init(&q);
     q_sav(&q, Q_S1, g_a.b, 0, XO_XSAVEC);
@@ -1895,6 +1911,7 @@ TEST(xrstor_cmp_rfbm_outside_xcomp_inits) {
 }
 TEST(xsavec_init_component_not_saved) {
     need_xsavec();
+    XR_SDE_XFAIL("XCOMP_BV drops RFBM components that are in their initial state");
     uint32_t csz = xsave_compacted_size(g_m);
     memset(g_a.b, SENT, csz);
     uint32_t mx = 0x1F80 | 0x2000;
@@ -1967,6 +1984,7 @@ TEST(zmm_ymm_restore_keeps_hi256) { need_avx512(); xrstor_mix(g_m, 6, "RFBM=SSE|
 TEST(zmm_xsavec_layouts) {
     need_avx512();
     if (!cpu_has(F_XSAVEC)) SKIP("XSAVEC not advertised");
+    XR_SDE_XFAIL32("clears XCOMP_BV[7] (Hi16_ZMM) outside 64-bit mode");
     uint64_t ms[] = { 0x21, 0x41, 0x81, 0xE3, 0xE7, 0x60, 0xA0 };
     for (size_t i = 0; i < T_COUNTOF(ms); i++) xsavec_mask_case(ms[i] & g_m, T_VK_ZMM);
 }
@@ -2336,6 +2354,10 @@ CHILD(xsf) {
 enum { EXP_GP, EXP_GP_OR_UD, EXP_PF, EXP_NONE, EXP_PFR };
 static void fault_case(const char *scen, int exp, int intact_hard) {
     static t_child_result r;
+    /* SDE runs FXSAVE/FXRSTOR and XSAVES/XRSTORS natively (those cases pass); the emulated XSAVE family
+     * and XSETBV have no #GP/#PF checks */
+    if (strncmp(scen, "fx", 2) && strncmp(scen, "xsaves", 6) && strncmp(scen, "xrstors", 7))
+        XR_SDE_XFAIL("no #GP/#PF checks in the emulated XSAVE family / XSETBV");
     REQUIREF(t_child_run("xsf", scen, 15000, &r), "spawn failed (error %lu)", r.spawn_error);
     CHECK(!r.timed_out);
     char line[512] = "";

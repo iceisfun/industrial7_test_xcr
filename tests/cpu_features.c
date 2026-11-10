@@ -1189,7 +1189,10 @@ TEST(leaf7_subleaves) {
     else CHECKF(!c->l7_1.eax && !c->l7_1.edx, "sub-leaf 1 features recorded although max sub-leaf is 0");
 }
 
+/* Emulator artifacts (README "Emulated validation"), under tools/sde_run.sh only; checks unchanged. */
+#define CF_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) %s", t_sde_model(), why); } while (0)
 TEST(leaf0b_1f_topology) {
+    CF_SDE_XFAIL("emulates CPUID leaves 0Bh/1Fh from its CPU model, not from the logical processor it runs on");
     const t_cpu_info *c = cpu();
     uint32_t leaves[2] = { 0xB, 0x1F }; int any = 0;
     uintptr_t prev = t_pin_thread(__builtin_ctzll(t_env_get()->affinity ? t_env_get()->affinity : 1));
@@ -1432,6 +1435,7 @@ TEST(osxsave_xgetbv_usable) {
 
 TEST(xgetbv_invalid_index_faults) {
     if (!cpu()->osxsave) SKIP("OSXSAVE = 0");
+    CF_SDE_XFAIL("emulates XGETBV without the #GP check for an unsupported XCR index");
     static t_child_result r;
     const char *idx = cpu_hw(F_XGETBV1) ? "0x7fffffff" : "1";
     REQUIRE(t_child_run("xgetbv_idx", idx, 10000, &r));
@@ -1445,6 +1449,7 @@ TEST(xgetbv_invalid_index_faults) {
 
 TEST(xsetbv_cpl3_faults) {
     if (!cpu()->osxsave) SKIP("OSXSAVE = 0 (XSETBV would #UD)");
+    CF_SDE_XFAIL("emulates XSETBV without the CPL0 check");
     static t_child_result r;
     REQUIRE(t_child_run("xsetbv_cpl3", NULL, 10000, &r));
     CHECK(!r.timed_out);
@@ -1699,6 +1704,7 @@ TEST(cpuid_consistent_across_threads) {
 }
 
 TEST(cpuid_consistent_across_cpus) {
+    CF_SDE_XFAIL("reports the same emulated APIC ID on every CPU");
     const t_env *e = t_env_get();
     unsigned long long aff = e->affinity;
     if (!aff) SKIP("process affinity mask unavailable");
@@ -1739,6 +1745,7 @@ TEST(cpuid_consistent_across_cpus) {
 }
 
 TEST(exec_probes_on_every_cpu) {
+    CF_SDE_XFAIL("XSAVEC emulation omits PKRU (and Hi16_ZMM outside 64-bit mode) from XCOMP_BV");
     unsigned long long aff = t_env_get()->affinity;
     if (!aff) SKIP("process affinity mask unavailable");
     int cpus = 0, runs = 0;
@@ -2111,7 +2118,7 @@ TEST(exec_pclmulqdq)  { run_probe_case("pclmulqdq"); }
 TEST(exec_sha)        { run_probe_case("sha"); }
 TEST(exec_xsave)      { run_probe_case("xsave"); }
 TEST(exec_xsaveopt)   { run_probe_case("xsaveopt"); }
-TEST(exec_xsavec)     { run_probe_case("xsavec"); }
+TEST(exec_xsavec)     { CF_SDE_XFAIL("XSAVEC emulation omits PKRU (and Hi16_ZMM outside 64-bit mode) from XCOMP_BV"); run_probe_case("xsavec"); }
 TEST(exec_xgetbv1)    { run_probe_case("xgetbv1"); }
 TEST(exec_avx1)       { run_probe_case("avx1"); }
 TEST(exec_avx2)       { run_probe_case("avx2"); }

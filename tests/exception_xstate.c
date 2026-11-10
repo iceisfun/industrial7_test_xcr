@@ -1493,6 +1493,10 @@ TEST(veh_div0_record_context_ymm) {
 }
 TEST(veh_div0_record_context_zmm) {
     if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
+    /* The OS documents which XSTATE components a CONTEXT can carry through GetEnabledXStateFeatures; a
+     * disagreement with XCR0 is reported by xcr0_probe (api_reports_xcr0_documented_bits). */
+    if (t_env_get()->api_xstate_present && (t_env_get()->api_xstate_features & 0xE0) != 0xE0)
+        SKIP("the OS does not report AVX-512 context state (GetEnabledXStateFeatures=0x%llx)", t_env_get()->api_xstate_features);
     xk_test("div0", 64, 0, V_VEH, NULL, "after #DE");
 }
 TEST(veh_div64_record_context) {
@@ -1515,6 +1519,8 @@ TEST(veh_int3_cd03_form) {
     t_info("address_delta", "%ld", (long)((intptr_t)g_main_xh.rec.ExceptionAddress - (intptr_t)xk_find("int3cd")->at));
 }
 TEST(veh_single_step_tf) {
+    if (t_sde_model())   /* emulator artifact (README "Emulated validation"): the process would die */
+        XFAIL("Intel SDE (%s): Pin cannot single-step the application (TF trap kills the process)", t_sde_model());
     xk_test("ss", 16, M_CLEAR_TF, V_VEH, NULL, "after single-step trap");
     if (cpu_has(F_AVX)) xk_test("ss", 32, M_CLEAR_TF | M_MOD_XMM, V_VEH, NULL, "after single-step trap (ymm, xmm edited)");
 }

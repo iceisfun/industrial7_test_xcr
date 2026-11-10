@@ -1626,8 +1626,8 @@ TEST(align_fxsave_needs_16) { al_expect_align("al_fxsave", 16, 48); }
 TEST(align_fxrstor_needs_16) { al_expect_align("al_fxrstor", 16, 48); }
 TEST(align_xsave_needs_64) { AL_SDE_XFAIL("XSAVE"); al_expect_align("al_xsave", 64, 128); }
 TEST(align_xrstor_needs_64) { AL_SDE_XFAIL("XRSTOR"); al_expect_align("al_xrstor", 64, 128); }
-TEST(align_xsaveopt_needs_64) { al_expect_align("al_xsaveopt", 64, 128); }
-TEST(align_xsavec_needs_64) { al_expect_align("al_xsavec", 64, 128); }
+TEST(align_xsaveopt_needs_64) { AL_SDE_XFAIL("XSAVEOPT"); al_expect_align("al_xsaveopt", 64, 128); }
+TEST(align_xsavec_needs_64) { AL_SDE_XFAIL("XSAVEC"); al_expect_align("al_xsavec", 64, 128); }
 TEST(align_cmpxchg16b_needs_16) {
 #ifdef T_X64
     al_expect_align("al_cmpxchg16b", 16, 48);
@@ -1812,7 +1812,10 @@ TEST(boundary_noaccess_avx_ymm_load_faults) { al_expect_boundary("al_avx_vmovdqu
 TEST(boundary_noaccess_avx_ymm_store_faults) { al_expect_boundary("al_avx_vmovdqu_y_st", "noaccess"); }
 TEST(boundary_noaccess_avx_alu_ymm_load_faults) { al_expect_boundary("al_avx_vaddps_y_ld", "noaccess"); }
 TEST(boundary_noaccess_avx512_zmm_load_faults) { al_expect_boundary("al_avx512_vmovdqu64_z_ld", "noaccess"); }
-TEST(boundary_noaccess_avx512_zmm_store_faults) { al_expect_boundary("al_avx512_vmovdqu64_z_st", "noaccess"); }
+/* Emulator artifact (README "Emulated validation"): SDE reports a page fault of an emulated EVEX/XSAVE store
+ * as a read (ExceptionInformation[0]=0) or stops the process. Under tools/sde_run.sh only. */
+#define AL_SDE_STORE_XFAIL() do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) reports a fault of an emulated store as a read (or aborts)", t_sde_model()); } while (0)
+TEST(boundary_noaccess_avx512_zmm_store_faults) { AL_SDE_STORE_XFAIL(); al_expect_boundary("al_avx512_vmovdqu64_z_st", "noaccess"); }
 TEST(boundary_readonly_loads_ok_stores_fault) {
     al_expect_boundary("al_movdqu_ld", "readonly");
     al_expect_boundary("al_movdqu_st", "readonly");
@@ -1854,6 +1857,7 @@ TEST(boundary_noaccess_below_avx_ymm) {
 TEST(boundary_noaccess_below_avx512_zmm) {
     if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
     al_expect_boundary("al_avx512_vmovdqu64_z_ld", "noaccess_lo");
+    AL_SDE_STORE_XFAIL();
     al_expect_boundary("al_avx512_vmovdqu64_z_st", "noaccess_lo");
 }
 /* save areas (correctly aligned) that run into a PAGE_NOACCESS page: a write fault (info0 = 1) whose
@@ -1867,8 +1871,8 @@ TEST(boundary_noaccess_fxsave_area) {
     al_expect_boundary_ex("al_fxsave", "noaccess", -(512 + 32), 0, 16, 1, 288);
 #endif
 }
-TEST(boundary_noaccess_xsave_area) { al_expect_boundary_ex("al_xsave", "noaccess", -(576 + 128), 0, 64, 1, 520); }
-TEST(boundary_noaccess_xsavec_area) { al_expect_boundary_ex("al_xsavec", "noaccess", -(576 + 128), 0, 64, 1, 520); }
+TEST(boundary_noaccess_xsave_area) { AL_SDE_STORE_XFAIL(); al_expect_boundary_ex("al_xsave", "noaccess", -(576 + 128), 0, 64, 1, 520); }
+TEST(boundary_noaccess_xsavec_area) { AL_SDE_STORE_XFAIL(); al_expect_boundary_ex("al_xsavec", "noaccess", -(576 + 128), 0, 64, 1, 520); }
 
 
 static void al_expect_maskpage(const char *stub, int lanes, int hard) {
@@ -1953,6 +1957,7 @@ TEST(masked_avx512_vmovdqu32_load_page_end) {
 }
 TEST(masked_avx512_vmovdqu32_store_page_end) {
     if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
+    AL_SDE_STORE_XFAIL();
     al_expect_maskpage("al_avx512_vmovdqu32_k_st", 16, 1);
 }
 

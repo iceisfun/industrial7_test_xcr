@@ -24,8 +24,36 @@ static void drain(HANDLE rd, t_child_result *r) {
     }
 }
 
+/* Under tools/sde_run.sh, SDE writes its error reports to XCR_SDE_ERRFILE (a Windows path), not to the
+ * child's stdout/stderr pipe. Snapshot it around a child run; new text is appended to r->out so that
+ * t_sde_killed_child() can see it. Never active outside SDE runs. */
+static size_t sde_errfile_read(char *buf, size_t cap) {
+    char path[MAX_PATH];
+    buf[0] = 0;
+    if (!t_sde_model()) return 0;
+    DWORD n = GetEnvironmentVariableA("XCR_SDE_ERRFILE", path, sizeof path);
+    if (n == 0 || n >= sizeof path) return 0;
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    DWORD got = 0;
+    if (!ReadFile(h, buf, (DWORD)cap - 1, &got, NULL)) got = 0;
+    CloseHandle(h);
+    buf[got] = 0;
+    return got;
+}
+static void sde_errfile_append(t_child_result *r, const char *before, size_t nb) {
+    char after[4096];
+    size_t na = sde_errfile_read(after, sizeof after);
+    if (!na || (na == nb && !memcmp(after, before, na))) return;
+    const char *add = (na > nb && !memcmp(after, before, nb)) ? after + nb : after;
+    snprintf(r->out + r->out_len, sizeof r->out - r->out_len, "\n[sde errfile] %s", add);
+    r->out_len += strlen(r->out + r->out_len);
+}
+
 int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r) {
+    char sde_before[4096];
     memset(r, 0, sizeof *r);
+    size_t sde_nb = sde_errfile_read(sde_before, sizeof sde_before);
     char *cmd = (char *)malloc(8192);
     if (!cmd) return 0;
     snprintf(cmd, 8192, "\"%s\" %s", t_self_path(), args ? args : "");
@@ -77,6 +105,7 @@ int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r) {
     GetExitCodeProcess(pi.hProcess, &r->exit_code);
     CloseHandle(pi.hThread); CloseHandle(pi.hProcess); CloseHandle(rd);
     if (job) CloseHandle(job);    /* kill-on-close: grandchildren die here */
+    sde_errfile_append(r, sde_before, sde_nb);
 
     char v[128];
     if (t_child_find(r, "T_CHILD_EXCEPTION ", v, sizeof v)) {
