@@ -1738,7 +1738,11 @@ TEST(xmm_exc_div0_continue) { exc_case("div0", 0); }
 TEST(xmm_exc_access_violation_continue) { exc_case("av", 0); }
 TEST(xmm_exc_privileged_hlt_continue) { exc_case("hlt", 0); }
 TEST(xmm_exc_misaligned_movaps_gp) { exc_case("misalign", 0); }
-TEST(xmm_exc_single_step_continue) { exc_case("sstep", 0); }
+TEST(xmm_exc_single_step_continue) {
+    if (t_sde_model())   /* emulator artifact (README "Emulated validation") */
+        t_expect_fail("Intel SDE (%s): Pin cannot single-step the application (a TF trap kills the child)", t_sde_model());
+    exc_case("sstep", 0);
+}
 TEST(xmm_exc_handler_modifies_xmm_ud2) { exc_case("ud2", 1); }
 TEST(xmm_exc_handler_modifies_xmm_av) { exc_case("av", 1); }
 
