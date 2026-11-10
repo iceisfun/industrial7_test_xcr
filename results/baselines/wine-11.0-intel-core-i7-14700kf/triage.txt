@@ -1,0 +1,715 @@
+run: results/baselines/wine-11.0-intel-core-i7-14700kf
+host: wine-11.0-intel-core-i7-14700kf  Linux-6.8.0-147-generic-x86_64-with-glibc2.39 wine-11.0 (Staging)  cpu Intel(R) Core(TM) i7-14700KF  git 04dd202b5ba1  note Wine run: plumbing reference only, not a Windows contract reference
+  [x64] os 10.0.19045.5796 Windows 10 Pro 21H1  wine 11.0  wow64 False  cpu Intel(R) Core(TM) i7-14700KF  xcr0 0x207  api_xstate 0x7  version 04dd202
+  [x86] os 10.0.19045.5796 Windows 10 Pro 21H1  wine 11.0  wow64 True  cpu Intel(R) Core(TM) i7-14700KF  xcr0 0x207  api_xstate 0x7  version 04dd202
+  results: PASS=3814 PERF=533 SKIP=652 XFAIL=178
+
+== EXE STATUS not OK: 0
+
+== CRASH: 0
+
+== TIMEOUT: 0
+
+== FAIL: 0
+
+== XFAIL: 178
+  x64/alignment/context_misaligned_getset_thread_context
+      reason: wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+      | {'file': 'alignment.c', 'line': 2334, 'expr': 'ok_', 'msg': 'GetThreadContext(CONTEXT at +1, not 16-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2346, 'expr': 'ok_', 'msg': 'SetThreadContext(CONTEXT at +1, not 16-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2334, 'expr': 'ok_', 'msg': 'GetThreadContext(CONTEXT at +2, not 16-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2346, 'expr': 'ok_', 'msg': 'SetThreadContext(CONTEXT at +2, not 16-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2334, 'expr': 'ok_', 'msg': 'GetThreadContext(CONTEXT at +4, not 16-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2346, 'expr': 'ok_', 'msg': 'SetThreadContext(CONTEXT at +4, not 16-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+  x64/alignment/context_misaligned_ntcontinue
+      reason: wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+      | {'file': 'alignment.c', 'line': 2461, 'expr': 'ok_', 'msg': 'NtContinue(CONTEXT at +8): resumed=1 status 0x00000000, want STATUS_DATATYPE_MISALIGNMENT returned'}
+      | {'file': 'alignment.c', 'line': 2461, 'expr': 'ok_', 'msg': 'NtContinue(CONTEXT at +4): resumed=1 status 0x00000000, want STATUS_DATATYPE_MISALIGNMENT returned'}
+  x64/alignment/context_misaligned_xstate_chunk_getset
+      reason: wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+      | {'file': 'alignment.c', 'line': 2381, 'expr': 'ok_', 'msg': 'GetThreadContext(XState chunk at 64*n+4): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2393, 'expr': 'ok_', 'msg': 'SetThreadContext(XState chunk at 64*n+4): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2381, 'expr': 'ok_', 'msg': 'GetThreadContext(XState chunk at 64*n+8): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2393, 'expr': 'ok_', 'msg': 'SetThreadContext(XState chunk at 64*n+8): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2381, 'expr': 'ok_', 'msg': 'GetThreadContext(XState chunk at 64*n+16): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2393, 'expr': 'ok_', 'msg': 'SetThreadContext(XState chunk at 64*n+16): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+  x64/context_bench/ctx_fiber_switch_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'context_bench.c', 'line': 345, 'expr': 't.x.main_bad == 0', 'msg': '935584 of the timed round trips came back with a foreign MXCSR on the main fiber (want 0x1f80 control bits)'}
+      | {'file': 'context_bench.c', 'line': 346, 'expr': 't.x.other_bad == 0', 'msg': '935584 resumptions of the other fiber saw a foreign MXCSR (want 0xbf80)'}
+  x64/context_bench/ctx_fiber_switch_noflag
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'context_bench.c', 'line': 345, 'expr': 't.x.main_bad == 0', 'msg': '946320 of the timed round trips came back with a foreign MXCSR on the main fiber (want 0x1f80 control bits)'}
+      | {'file': 'context_bench.c', 'line': 346, 'expr': 't.x.other_bad == 0', 'msg': '946320 resumptions of the other fiber saw a foreign MXCSR (want 0xbf80)'}
+  x64/context_xstate/copy_context_invalid_flags
+      reason: wine 11.0: CopyContext does not validate ContextFlags
+      | {'file': 'context_xstate.c', 'line': 1254, 'expr': 'ok_', 'msg': 'CopyContext(undefined flag bit) r=1 GLE 0 want FALSE / ERROR_INVALID_PARAMETER'}
+  x64/context_xstate/copy_context_partial_control
+      reason: wine 11.0: CopyContext does not copy CONTEXT.MxCsr
+      | {'file': 'context_xstate.c', 'line': 1288, 'expr': 'ok_', 'msg': 'CONTEXT.MxCsr 0x1f80 after CopyContext(FP), want 0x3F80'}
+  x64/context_xstate/err_xstate_chunk_too_short
+      reason: wine 11.0: GetThreadContext ignores CONTEXT_EX.XState.Length
+      | {'file': 'context_xstate.c', 'line': 2712, 'expr': 'ok_', 'msg': 'GetThreadContext wrote the AVX area beyond CONTEXT_EX.XState.Length'}
+  x64/context_xstate/get_mask_plain_contexts
+      reason: wine 11.0: GetXStateFeaturesMask fails without a last error
+      | {'file': 'context_xstate.c', 'line': 1227, 'expr': 'ok_', 'msg': 'GLE 0 want ERROR_NOT_SUPPORTED'}
+      | {'file': 'context_xstate.c', 'line': 1232, 'expr': 'ok_', 'msg': 'GLE 0 want ERROR_NOT_SUPPORTED'}
+  x64/context_xstate/getctx_segments_only
+      reason: wine 11.0: context reports fixed Windows selectors, not the thread's
+      | {'file': 'context_xstate.c', 'line': 1930, 'expr': 'ok_', 'msg': "SegDs 0x2b want 0x0 (the thread's selector)"}
+      | {'file': 'context_xstate.c', 'line': 1931, 'expr': 'ok_', 'msg': "SegEs 0x2b want 0x0 (the thread's selector)"}
+      | {'file': 'context_xstate.c', 'line': 1933, 'expr': 'ok_', 'msg': "SegGs 0x2b want 0x0 (the thread's selector)"}
+  x64/context_xstate/locate_enabled_and_unsupported_features
+      reason: wine 11.0: LocateXStateFeature locates features that are not enabled
+      | {'file': 'context_xstate.c', 'line': 1124, 'expr': 'ok_', 'msg': 'feature 63 not enabled (0x7) but located at 0000000000d00640'}
+  x64/context_xstate/set_mask_without_xstate_chunk
+      reason: wine 11.0: SetXStateFeaturesMask fails without a last error
+      | {'file': 'context_xstate.c', 'line': 1198, 'expr': 'ok_', 'msg': 'GLE 0 want ERROR_INVALID_PARAMETER'}
+  x64/context_xstate/setctx_eflags_sanitized
+      reason: wine 11.0: GetThreadContext reports unsanitized EFlags stored by SetThreadContext
+      | {'file': 'context_xstate.c', 'line': 2016, 'expr': 'ok_', 'msg': 'EFlags 0x7446: IOPL raised through SetThreadContext'}
+      | {'file': 'context_xstate.c', 'line': 2017, 'expr': 'ok_', 'msg': 'EFlags 0x7446: IF cleared through SetThreadContext'}
+      | {'file': 'context_xstate.c', 'line': 2020, 'expr': 'ok_', 'msg': 'EFlags 0x7446: NT applied'}
+  x64/context_xstate/setctx_fxsave_reserved_bytes_ignored
+      reason: wine 11.0: reserved FXSAVE bytes of a CONTEXT reach the kernel's sigreturn frame (YMM state dropped)
+      | {'file': 'context_xstate.c', 'line': 2151, 'expr': 'ok_', 'msg': 'YMM upper halves changed by a set whose only difference is reserved FXSAVE bytes'}
+  x64/context_xstate/setctx_mxcsr_reserved_bits
+      reason: wine 11.0: reserved MXCSR bits from a CONTEXT are not masked (worker died, exception 0xc000001d)
+  x64/context_xstate/xstate_copycontext_from_thread
+      reason: wine 11.0: CopyContext does not copy CONTEXT.MxCsr
+      | {'file': 'context_xstate.c', 'line': 2476, 'expr': 'ok_', 'msg': 'CONTEXT.MxCsr 0xa5a5a5a5 after CopyContext, source 0x1f80'}
+  x64/exception_xstate/child_stack_overflow_context
+      reason: Wine gap: STATUS_STACK_OVERFLOW delivered without the guaranteed stack; handler cannot run
+  x64/exception_xstate/fp_sse_denormal_unmasked
+      reason: Wine gap: SSE #XM with only DE unmasked is reported as STATUS_FLOAT_UNDERFLOW (Linux maps DE to FPE_FLTUND)
+      | {'file': 'exception_xstate.c', 'line': 907, 'expr': 'code == e->code || alt', 'msg': 'VEH: ExceptionCode 0xc0000093, expected 0xc0000090'}
+  x64/exception_xstate/fp_x87_denormal_unmasked
+      reason: Wine gap: x87 #MF exception record has NumberParameters=0 and only-DE-unmasked is reported as STATUS_FLOAT_UNDERFLOW
+      | {'file': 'exception_xstate.c', 'line': 907, 'expr': 'code == e->code || alt', 'msg': 'VEH: ExceptionCode 0xc0000093, expected 0xc0000090'}
+      | {'file': 'exception_xstate.c', 'line': 914, 'expr': '(int)rec->NumberParameters == e->nparams', 'msg': 'VEH: NumberParameters 0 want 1'}
+      | {'file': 'exception_xstate.c', 'line': 921, 'expr': 'rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i]', 'msg': 'VEH: ExceptionInformation[0] = 0x0 want 0x0'}
+  x64/exception_xstate/fp_x87_inexact_unmasked
+      reason: Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
+      | {'file': 'exception_xstate.c', 'line': 914, 'expr': '(int)rec->NumberParameters == e->nparams', 'msg': 'VEH: NumberParameters 0 want 1'}
+      | {'file': 'exception_xstate.c', 'line': 921, 'expr': 'rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i]', 'msg': 'VEH: ExceptionInformation[0] = 0x0 want 0x0'}
+  x64/exception_xstate/fp_x87_invalid_unmasked
+      reason: Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
+      | {'file': 'exception_xstate.c', 'line': 914, 'expr': '(int)rec->NumberParameters == e->nparams', 'msg': 'VEH: NumberParameters 0 want 1'}
+      | {'file': 'exception_xstate.c', 'line': 921, 'expr': 'rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i]', 'msg': 'VEH: ExceptionInformation[0] = 0x0 want 0x0'}
+  x64/exception_xstate/fp_x87_overflow_unmasked
+      reason: Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
+      | {'file': 'exception_xstate.c', 'line': 914, 'expr': '(int)rec->NumberParameters == e->nparams', 'msg': 'VEH: NumberParameters 0 want 1'}
+      | {'file': 'exception_xstate.c', 'line': 921, 'expr': 'rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i]', 'msg': 'VEH: ExceptionInformation[0] = 0x0 want 0x0'}
+  x64/exception_xstate/fp_x87_stack_overflow_unmasked
+      reason: Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
+      | {'file': 'exception_xstate.c', 'line': 914, 'expr': '(int)rec->NumberParameters == e->nparams', 'msg': 'VEH: NumberParameters 0 want 1'}
+      | {'file': 'exception_xstate.c', 'line': 921, 'expr': 'rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i]', 'msg': 'VEH: ExceptionInformation[0] = 0x0 want 0x0'}
+  x64/exception_xstate/fp_x87_underflow_unmasked
+      reason: Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
+      | {'file': 'exception_xstate.c', 'line': 914, 'expr': '(int)rec->NumberParameters == e->nparams', 'msg': 'VEH: NumberParameters 0 want 1'}
+      | {'file': 'exception_xstate.c', 'line': 921, 'expr': 'rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i]', 'msg': 'VEH: ExceptionInformation[0] = 0x0 want 0x0'}
+  x64/exception_xstate/fp_x87_zero_divide_unmasked
+      reason: Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
+      | {'file': 'exception_xstate.c', 'line': 914, 'expr': '(int)rec->NumberParameters == e->nparams', 'msg': 'VEH: NumberParameters 0 want 1'}
+      | {'file': 'exception_xstate.c', 'line': 921, 'expr': 'rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i]', 'msg': 'VEH: ExceptionInformation[0] = 0x0 want 0x0'}
+  x64/exception_xstate/vch_called_after_veh_continue
+      reason: Wine gap: vectored continue handlers are registered but never called by the dispatcher
+      | {'file': 'exception_xstate.c', 'line': 2104, 'expr': 'ok', 'msg': 'VEH(continue) then continue handler: handler order [3 ] want [3 9 ]'}
+  x64/exception_xstate/vch_context_edit_takes_effect
+      reason: Wine gap: vectored continue handlers are registered but never called by the dispatcher
+      | {'file': 'exception_xstate.c', 'line': 2171, 'expr': 's->nested_calls == 1', 'msg': 'continue handler ran 0 times after the VEH continued'}
+  x64/feature_faults/gp_int_80_not_a_system_call
+      reason: INT 80h executed without a fault under Wine (the Linux kernel handled the gate), result 0x142941
+      | {'file': 'feature_faults.c', 'line': 746, 'expr': 'r->fault', 'msg': 'gp_int_80: executed without raising an exception (expected STATUS_ACCESS_VIOLATION)'}
+  x64/feature_faults/priv_invlpg
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_invlpg: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_lgdt
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_lgdt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_lidt
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_lidt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_lldt
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_lldt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_lmsw
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_lmsw: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_ltr
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_ltr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_rdmsr
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_rdmsr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_swapgs
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_swapgs: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_sysexit
+      reason: Wine does not translate SYSEXIT faults to STATUS_PRIVILEGED_INSTRUCTION
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_sysexit: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_sysret
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_sysret: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/priv_wrmsr
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_wrmsr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x64/feature_faults/sse_unmasked_denormal
+      reason: Wine translates #XM differently from Windows
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'sseu_denormal: exception 0xc0000093 (STATUS_FLOAT_UNDERFLOW), expected STATUS_FLOAT_INVALID_OPERATION'}
+  x64/feature_faults/trap_div_quotient_overflow
+      reason: Wine reports every #DE as STATUS_INTEGER_DIVIDE_BY_ZERO
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'trap_div_overflow: exception 0xc0000094 (STATUS_INTEGER_DIVIDE_BY_ZERO), expected STATUS_INTEGER_OVERFLOW'}
+  x64/feature_faults/trap_idiv_int_min_by_minus1
+      reason: Wine reports every #DE as STATUS_INTEGER_DIVIDE_BY_ZERO
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'trap_idiv_overflow: exception 0xc0000094 (STATUS_INTEGER_DIVIDE_BY_ZERO), expected STATUS_INTEGER_OVERFLOW'}
+  x64/feature_faults/x87_unmasked_denormal
+      reason: Wine derives x87 codes from the Linux si_code (a denormal #MF arrives as FPE_FLTUND)
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'x87u_denormal: exception 0xc0000093 (STATUS_FLOAT_UNDERFLOW), expected STATUS_FLOAT_INVALID_OPERATION or STATUS_FLOAT_DENORMAL_OPERAND'}
+  x64/fiber_xstate/fiber_api_initial_not_fiber
+      reason: Wine: ConvertFiberToThread succeeds on a thread that is not a fiber
+      | {'file': 'fiber_xstate.c', 'line': 442, 'expr': 'b.r[1] == FALSE', 'msg': 'ConvertFiberToThread on a non-fiber thread returned 1'}
+      | {'file': 'fiber_xstate.c', 'line': 443, 'expr': 'b.e[1] == ERROR_ALREADY_THREAD', 'msg': 'GetLastError 0 want ERROR_ALREADY_THREAD (1281)'}
+  x64/fiber_xstate/fiber_convert_basic
+      reason: Wine: ConvertFiberToThread succeeds on a thread that is not a fiber
+      | {'file': 'fiber_xstate.c', 'line': 469, 'expr': 'b.r[6] == FALSE', 'msg': 'got 0x1 (1) want 0x0 (0)'}
+      | {'file': 'fiber_xstate.c', 'line': 470, 'expr': 'b.e[6] == ERROR_ALREADY_THREAD', 'msg': 'got 0x0 (0) want 0x501 (1281)'}
+  x64/fiber_xstate/fiber_convert_ex_bad_flags
+      reason: Wine: ConvertThreadToFiberEx does not reject unknown dwFlags bits
+      | {'file': 'fiber_xstate.c', 'line': 552, 'expr': 'b.p[i] == NULL', 'msg': 'ConvertThreadToFiberEx(flags=0x2) succeeded'}
+      | {'file': 'fiber_xstate.c', 'line': 553, 'expr': 'b.e[i] == ERROR_INVALID_PARAMETER', 'msg': 'flags=0x2: GetLastError 0 want 87'}
+      | {'file': 'fiber_xstate.c', 'line': 554, 'expr': 'b.r[i] == FALSE', 'msg': 'thread became a fiber after rejected flags 0x2'}
+      | {'file': 'fiber_xstate.c', 'line': 552, 'expr': 'b.p[i] == NULL', 'msg': 'ConvertThreadToFiberEx(flags=0x4) succeeded'}
+      | {'file': 'fiber_xstate.c', 'line': 553, 'expr': 'b.e[i] == ERROR_INVALID_PARAMETER', 'msg': 'flags=0x4: GetLastError 0 want 87'}
+      | {'file': 'fiber_xstate.c', 'line': 554, 'expr': 'b.r[i] == FALSE', 'msg': 'thread became a fiber after rejected flags 0x4'}
+  x64/fiber_xstate/fiber_create_ex_bad_flags
+      reason: Wine: CreateFiberEx does not reject unknown dwFlags bits
+      | {'file': 'fiber_xstate.c', 'line': 643, 'expr': 'b.p[k * 20 + i] == NULL', 'msg': 'CreateFiberEx(flags=0x2) succeeded (thread)'}
+      | {'file': 'fiber_xstate.c', 'line': 644, 'expr': 'b.e[k * 20 + i] == ERROR_INVALID_PARAMETER', 'msg': 'CreateFiberEx(flags=0x2): GetLastError 0 want 87'}
+      | {'file': 'fiber_xstate.c', 'line': 643, 'expr': 'b.p[k * 20 + i] == NULL', 'msg': 'CreateFiberEx(flags=0x4) succeeded (thread)'}
+      | {'file': 'fiber_xstate.c', 'line': 644, 'expr': 'b.e[k * 20 + i] == ERROR_INVALID_PARAMETER', 'msg': 'CreateFiberEx(flags=0x4): GetLastError 0 want 87'}
+      | {'file': 'fiber_xstate.c', 'line': 643, 'expr': 'b.p[k * 20 + i] == NULL', 'msg': 'CreateFiberEx(flags=0x80000000) succeeded (thread)'}
+      | {'file': 'fiber_xstate.c', 'line': 644, 'expr': 'b.e[k * 20 + i] == ERROR_INVALID_PARAMETER', 'msg': 'CreateFiberEx(flags=0x80000000): GetLastError 0 want 87'}
+  x64/fiber_xstate/fiber_fp_full_mode_mix_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x7fc0 expected per fiber, wrong after 5000 of 5000 switches (last seen 0xbf80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x0e3f expected per fiber, wrong after 5000 of 5000 switches (last seen 0x007f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 5000 of 5000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0xbf80 expected per fiber, wrong after 4999 of 4999 switches (last seen 0x7fc0)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x003f expected per fiber, wrong after 4999 of 4999 switches (last seen 0x0e7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 4999 of 4999 times"}
+  x64/fiber_xstate/fiber_fp_mixed_flags_a_flagged
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_fp_mixed_flags_b_flagged
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_fp_plain_convert_thread_to_fiber
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x7f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x0e3f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x067f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x3f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x7f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x063f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x0e7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_fp_state_follows_fiber_across_threads
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1496, 'expr': '(c.mx_in[1] & MXC_CTRL) == 0x5F80', 'msg': 'fiber MXCSR on thread 2: 0x3f80 want 0x5F80'}
+      | {'file': 'fiber_xstate.c', 'line': 1497, 'expr': '(c.cw_in[1] & CW_CTRL) == (0x0A7F & CW_CTRL)', 'msg': 'fiber x87 CW on thread 2: 0x067f want 0x0A7F'}
+      | {'file': 'fiber_xstate.c', 'line': 1498, 'expr': '(c.mx_t[0] & MXC_CTRL) == 0x7F80', 'msg': 'thread 1 MXCSR after switch back 0x5f80'}
+      | {'file': 'fiber_xstate.c', 'line': 1500, 'expr': '(c.cw_t[0] & CW_CTRL) == (0x0E7F & CW_CTRL)', 'msg': 'thread 1 x87 CW after switch back 0x0a7f'}
+  x64/fiber_xstate/fiber_in_threadpool_callback
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_many_1024_ring
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1459, 'expr': 'r.bad_mx == 0', 'msg': 'per-fiber MXCSR wrong 4096 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1460, 'expr': 'r.bad_cw == 0', 'msg': 'per-fiber x87 CW wrong 4096 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1461, 'expr': 'r.main_bad == 0', 'msg': 'main fiber FP control wrong 4096 times'}
+  x64/fiber_xstate/fiber_migrate_threads_1000
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1323, 'expr': 'm.bad_mx == 0', 'msg': 'fiber MXCSR control lost across threads 750 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1324, 'expr': 'm.bad_cw == 0', 'msg': 'fiber x87 CW lost across threads 750 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1325, 'expr': 'm.bad_tmx == 0', 'msg': 'thread primary fiber MXCSR wrong after switch back 250 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1326, 'expr': 'm.bad_tcw == 0', 'msg': 'thread primary fiber x87 CW wrong after switch back 250 times'}
+  x64/fiber_xstate/fiber_mxcsr_ftz_daz_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x9fc0)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x9fc0 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x1f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_mxcsr_ftz_daz_per_fiber_noflag
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x9fc0)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x9fc0 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x1f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_mxcsr_mask_bits_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x1e80)'}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x1e80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x1f80)'}
+  x64/fiber_xstate/fiber_mxcsr_rc_all_pairs_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x3f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x1f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times"}
+  x64/fiber_xstate/fiber_mxcsr_rc_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_mxcsr_rc_per_fiber_noflag
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_mxcsr_unmasked_trap_noflag
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 2349, 'expr': 'a == 0', 'msg': "fiber A (all masked) took 200 divide-by-zero traps: fiber B's unmasked MXCSR leaked"}
+      | {'file': 'fiber_xstate.c', 'line': 2350, 'expr': 'b == TRAP_N - 1', 'msg': 'fiber B (ZM unmasked) took 0 traps, want 199'}
+  x64/fiber_xstate/fiber_mxcsr_unmasked_trap_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 2349, 'expr': 'a == 0', 'msg': "fiber A (all masked) took 200 divide-by-zero traps: fiber B's unmasked MXCSR leaked"}
+      | {'file': 'fiber_xstate.c', 'line': 2350, 'expr': 'b == TRAP_N - 1', 'msg': 'fiber B (ZM unmasked) took 0 traps, want 199'}
+  x64/fiber_xstate/fiber_ping_pong_100000_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 100000 of 100000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 100000 of 100000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 99999 of 99999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 99999 of 99999 switches (last seen 0x067f)'}
+  x64/fiber_xstate/fiber_stack_guarantee_per_fiber
+      reason: Wine: SetThreadStackGuarantee value is not per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1972, 'expr': 's.a1 == s.a0', 'msg': 'fiber A guarantee changed from 0 to 49152 by fiber B'}
+      | {'file': 'fiber_xstate.c', 'line': 1973, 'expr': 's.a2 == s.a0', 'msg': 'fiber A guarantee 49152 after second switch, was 0'}
+      | {'file': 'fiber_xstate.c', 'line': 1975, 'expr': 's.b_other_thread == s.b1', 'msg': 'fiber B guarantee on another thread 0, was 49152'}
+  x64/fiber_xstate/fiber_threads_16x_ping_pong
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1370, 'expr': 'd[i].mx_bad[s] == 0', 'msg': 'thread 0 fiber A: MXCSR wrong 5000 times (last 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 1371, 'expr': 'd[i].cw_bad[s] == 0', 'msg': 'thread 0 fiber A: x87 CW wrong 5000 times (last 0x087f)'}
+      | {'file': 'fiber_xstate.c', 'line': 1370, 'expr': 'd[i].mx_bad[s] == 0', 'msg': 'thread 0 fiber B: MXCSR wrong 4999 times (last 0x1f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 1371, 'expr': 'd[i].cw_bad[s] == 0', 'msg': 'thread 0 fiber B: x87 CW wrong 4999 times (last 0x027f)'}
+      | {'file': 'fiber_xstate.c', 'line': 1370, 'expr': 'd[i].mx_bad[s] == 0', 'msg': 'thread 1 fiber A: MXCSR wrong 5000 times (last 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 1371, 'expr': 'd[i].cw_bad[s] == 0', 'msg': 'thread 1 fiber A: x87 CW wrong 5000 times (last 0x0c7f)'}
+  x64/fiber_xstate/fiber_x87_cw_pc_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x003f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x037f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x033f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x007f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_x87_cw_per_fiber_noflag
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x043f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0b7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0b3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x047f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fiber_xstate/fiber_x87_cw_rc_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x64/fp_environment/ctx_continue_reserved_mxcsr_bits_sanitized
+      reason: Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0x64fb63f0 exc 0x00000000)
+  x64/fp_environment/ctx_setthreadcontext_reserved_mxcsr_bits_sanitized
+      reason: Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0xc000001d exc 0xc000001d)
+  x64/fp_environment/sse_unmasked_denormal_operand
+      reason: Wine 11.0 reports DE as 0xc0000093 (Windows: 0xc000008d or INVALID_OPERATION)
+  x64/fp_environment/x87_unmasked_denormal_operand
+      reason: Wine 11.0 reports x87 DE as 0xc0000093 (Windows [K2]: 0xc000008d or INVALID_OPERATION)
+  x64/xstate_stress/churn_new_threads_under_stress
+      reason: Wine: GetThreadContext of a thread running host-side syscall code returned a non-PE IP with that code's FP environment in 2 captures; those were not checked, hold-loop oracle unaffected
+  x64/xstate_windows/copy_into_smaller_compacted_dest
+      reason: known Wine gap: CopyContext into a compacted destination without room for AVX succeeds
+      | {'file': 'xstate_windows.c', 'line': 1676, 'expr': '!ok', 'msg': 'copying AVX state into a compacted context whose chunk has no AVX room must fail'}
+      | {'file': 'xstate_windows.c', 'line': 1677, 'expr': 'GetLastError() == ERROR_MORE_DATA', 'msg': 'error 3735928559 want 234'}
+  x64/xstate_windows/copy_invalid_flags_reserved_bits
+      reason: known Wine gap: CopyContext does not validate reserved ContextFlags bits
+      | {'file': 'xstate_windows.c', 'line': 1640, 'expr': '!ok', 'msg': 'flags 0x100020 accepted'}
+      | {'file': 'xstate_windows.c', 'line': 1641, 'expr': 'GetLastError() == ERROR_INVALID_PARAMETER', 'msg': 'flags 0x100020: error 3735928559 want 87'}
+      | {'file': 'xstate_windows.c', 'line': 1640, 'expr': '!ok', 'msg': 'flags 0x2010001f accepted'}
+      | {'file': 'xstate_windows.c', 'line': 1641, 'expr': 'GetLastError() == ERROR_INVALID_PARAMETER', 'msg': 'flags 0x2010001f: error 3735928559 want 87'}
+      | {'file': 'xstate_windows.c', 'line': 1645, 'expr': '!X.CopyContext(d.ctx, XA_ALL, s.ctx)', 'msg': ''}
+      | {'file': 'xstate_windows.c', 'line': 1646, 'expr': 'GetLastError() == ERROR_INVALID_PARAMETER', 'msg': 'got 0xdeadbeef (3735928559) want 0x57 (87)'}
+  x64/xstate_windows/getmask_no_arch_flags_error_code
+      reason: known Wine gap: GetXStateFeaturesMask fails without SetLastError
+      | {'file': 'xstate_windows.c', 'line': 1315, 'expr': 'err == ERROR_NOT_SUPPORTED', 'msg': 'error 3735928559 want ERROR_NOT_SUPPORTED (50, STATUS_NOT_SUPPORTED)'}
+  x64/xstate_windows/locate_feature63_compaction_bit
+      reason: known Wine gap: LocateXStateFeature(63) treats the XCOMP_BV compaction bit as a feature
+      | {'file': 'xstate_windows.c', 'line': 1149, 'expr': 'p == NULL', 'msg': 'feature 63 located at 0000000000f01000 (buffer [0000000000f00991,+1647))'}
+  x64/xstate_windows/setmask_extended_on_plain_context_error_code
+      reason: known Wine gap: SetXStateFeaturesMask fails without SetLastError
+      | {'file': 'xstate_windows.c', 'line': 1416, 'expr': 'GetLastError() == ERROR_INVALID_PARAMETER', 'msg': 'error 3735928559 want 87 (STATUS_INVALID_PARAMETER)'}
+  x64/xstate_windows/setmask_no_arch_flags_error_code
+      reason: known Wine gap: SetXStateFeaturesMask fails without SetLastError
+      | {'file': 'xstate_windows.c', 'line': 1437, 'expr': 'GetLastError() == ERROR_NOT_SUPPORTED', 'msg': 'error 3735928559 want 50 (STATUS_NOT_SUPPORTED)'}
+  x64/xstate_windows/thread_bogus_context_ex_rejected
+      reason: known Wine gap: Get/SetThreadContext do not validate the CONTEXT_EX layout or XSTATE chunk alignment
+      | {'file': 'xstate_windows.c', 'line': 2261, 'expr': 't_child_find(r, "V1_RET=", v, sizeof v) && strcmp(v, "0") == 0', 'msg': 'GetThreadContext with zeroed CONTEXT_EX succeeded'}
+      | {'file': 'xstate_windows.c', 'line': 2263, 'expr': 't_child_find(r, "V2_RET=", v, sizeof v) && strcmp(v, "0") == 0', 'msg': 'GetThreadContext with a misaligned XSTATE chunk succeeded'}
+      | {'file': 'xstate_windows.c', 'line': 2265, 'expr': 't_child_find(r, "V1_ERR=", v, sizeof v) && strcmp(v, "87") == 0', 'msg': 'zeroed CONTEXT_EX: error 0 want 87'}
+      | {'file': 'xstate_windows.c', 'line': 2266, 'expr': 't_child_find(r, "V2_ERR=", v, sizeof v) && strcmp(v, "998") == 0', 'msg': 'misaligned chunk: error 0 want 998 (STATUS_DATATYPE_MISALIGNMENT)'}
+  x64/ymm_registers/ymm_special_apc_interrupts_spin
+      reason: Wine: special user APC not delivered to a running thread
+      | {'file': 'ymm_registers.c', 'line': 1692, 'expr': 'g_apc_ran == queued', 'msg': 'special user APC ran 0 of 1 times within 3 s each'}
+  x64/zmm_registers/zmm_api_locate_not_enabled_id
+      reason: Wine 11.0: LocateXStateFeature returns a pointer for a feature id that is not enabled
+      | {'file': 'zmm_registers.c', 'line': 520, 'expr': 'p == NULL', 'msg': 'LocateXStateFeature(63)=00006fffff05fb40 (length 0) although feature 63 is not enabled (enabled 0x7)'}
+  x64/zmm_registers/zmm_api_set_mask_without_xstate_chunk
+      reason: Wine 11.0: SetXStateFeaturesMask fails without setting ERROR_INVALID_PARAMETER (last error 0)
+      | {'file': 'zmm_registers.c', 'line': 565, 'expr': 'err == ERROR_INVALID_PARAMETER', 'msg': 'got 0x0 (0) want 0x57 (87)'}
+  x86/alignment/context_misaligned_getset_thread_context
+      reason: wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+      | {'file': 'alignment.c', 'line': 2334, 'expr': 'ok_', 'msg': 'GetThreadContext(CONTEXT at +1, not 4-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2346, 'expr': 'ok_', 'msg': 'SetThreadContext(CONTEXT at +1, not 4-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2334, 'expr': 'ok_', 'msg': 'GetThreadContext(CONTEXT at +2, not 4-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+      | {'file': 'alignment.c', 'line': 2346, 'expr': 'ok_', 'msg': 'SetThreadContext(CONTEXT at +2, not 4-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998)'}
+  x86/context_bench/ctx_fiber_switch_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'context_bench.c', 'line': 345, 'expr': 't.x.main_bad == 0', 'msg': '517888 of the timed round trips came back with a foreign MXCSR on the main fiber (want 0x1f80 control bits)'}
+      | {'file': 'context_bench.c', 'line': 346, 'expr': 't.x.other_bad == 0', 'msg': '517888 resumptions of the other fiber saw a foreign MXCSR (want 0xbf80)'}
+  x86/context_xstate/copy_context_invalid_flags
+      reason: wine 11.0: CopyContext does not validate ContextFlags
+      | {'file': 'context_xstate.c', 'line': 1254, 'expr': 'ok_', 'msg': 'CopyContext(undefined flag bit) r=1 GLE 0 want FALSE / ERROR_INVALID_PARAMETER'}
+  x86/context_xstate/err_xstate_chunk_too_short
+      reason: wine 11.0: GetThreadContext ignores CONTEXT_EX.XState.Length
+      | {'file': 'context_xstate.c', 'line': 2712, 'expr': 'ok_', 'msg': 'GetThreadContext wrote the AVX area beyond CONTEXT_EX.XState.Length'}
+  x86/context_xstate/get_mask_plain_contexts
+      reason: wine 11.0: GetXStateFeaturesMask fails without a last error
+      | {'file': 'context_xstate.c', 'line': 1227, 'expr': 'ok_', 'msg': 'GLE 0 want ERROR_NOT_SUPPORTED'}
+      | {'file': 'context_xstate.c', 'line': 1232, 'expr': 'ok_', 'msg': 'GLE 0 want ERROR_NOT_SUPPORTED'}
+  x86/context_xstate/getctx_control_only_leaves_rest
+      reason: wine 11.0: x86 CONTEXT_CONTROL does not carry Ebp
+      | {'file': 'context_xstate.c', 'line': 1394, 'expr': 'ok_', 'msg': 'Ebp 0xa5a5a5a5 want 0x2a1f3795'}
+  x86/context_xstate/locate_enabled_and_unsupported_features
+      reason: wine 11.0: LocateXStateFeature locates features that are not enabled
+      | {'file': 'context_xstate.c', 'line': 1124, 'expr': 'ok_', 'msg': 'feature 63 not enabled (0x7) but located at 012a0440'}
+  x86/context_xstate/set_mask_without_xstate_chunk
+      reason: wine 11.0: SetXStateFeaturesMask fails without a last error
+      | {'file': 'context_xstate.c', 'line': 1198, 'expr': 'ok_', 'msg': 'GLE 0 want ERROR_INVALID_PARAMETER'}
+  x86/context_xstate/setctx_eflags_sanitized
+      reason: wine 11.0: GetThreadContext reports unsanitized EFlags stored by SetThreadContext
+      | {'file': 'context_xstate.c', 'line': 2016, 'expr': 'ok_', 'msg': 'EFlags 0x3446: IOPL raised through SetThreadContext'}
+      | {'file': 'context_xstate.c', 'line': 2017, 'expr': 'ok_', 'msg': 'EFlags 0x3446: IF cleared through SetThreadContext'}
+  x86/context_xstate/setctx_fxsave_reserved_bytes_ignored
+      reason: wine 11.0: reserved FXSAVE bytes of a CONTEXT reach the kernel's sigreturn frame (YMM state dropped)
+      | {'file': 'context_xstate.c', 'line': 2151, 'expr': 'ok_', 'msg': 'YMM upper halves changed by a set whose only difference is reserved FXSAVE bytes'}
+  x86/context_xstate/setctx_integer_observed
+      reason: wine 11.0: x86 CONTEXT_INTEGER set changes Ebp (a CONTEXT_CONTROL register)
+      | {'file': 'context_xstate.c', 'line': 1852, 'expr': 'ok_', 'msg': 'ebp observed 0x0 want 0xfdd37cf8'}
+  x86/context_xstate/setctx_mxcsr_reserved_bits
+      reason: wine 11.0: reserved MXCSR bits from a CONTEXT are not masked (worker died, exception 0xc000001d)
+  x86/exception_xstate/child_int2c_assertion_failure
+      reason: Wine gap: 32-bit INT 2Ch raises STATUS_ACCESS_VIOLATION instead of STATUS_ASSERTION_FAILURE
+      | {'file': 'exception_xstate.c', 'line': 1483, 'expr': 'int2c', 'msg': 'child: exception_xstate.c:907: code == e->code || alt (VEH: ExceptionCode 0xc0000005, expected 0xc0000420)'}
+  x86/exception_xstate/child_stack_overflow_context
+      reason: Wine gap: STATUS_STACK_OVERFLOW delivered without the guaranteed stack; handler cannot run
+  x86/exception_xstate/fp_sse_inexact_unmasked
+      reason: Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+      | {'file': 'exception_xstate.c', 'line': 907, 'expr': 'code == e->code || alt', 'msg': 'VEH: ExceptionCode 0xc00002b5, expected 0xc00002b4'}
+  x86/exception_xstate/fp_sse_overflow_unmasked
+      reason: Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+      | {'file': 'exception_xstate.c', 'line': 907, 'expr': 'code == e->code || alt', 'msg': 'VEH: ExceptionCode 0xc00002b5, expected 0xc00002b4'}
+  x86/exception_xstate/fp_sse_underflow_unmasked
+      reason: Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+      | {'file': 'exception_xstate.c', 'line': 907, 'expr': 'code == e->code || alt', 'msg': 'VEH: ExceptionCode 0xc00002b5, expected 0xc00002b4'}
+  x86/exception_xstate/vch_called_after_veh_continue
+      reason: Wine gap: vectored continue handlers are registered but never called by the dispatcher
+      | {'file': 'exception_xstate.c', 'line': 2104, 'expr': 'ok', 'msg': 'VEH(continue) then continue handler: handler order [3 ] want [3 9 ]'}
+  x86/exception_xstate/vch_context_edit_takes_effect
+      reason: Wine gap: vectored continue handlers are registered but never called by the dispatcher
+      | {'file': 'exception_xstate.c', 'line': 2171, 'expr': 's->nested_calls == 1', 'msg': 'continue handler ran 0 times after the VEH continued'}
+  x86/feature_faults/gp_int_80_not_a_system_call
+      reason: INT 80h executed without a fault under Wine (the Linux kernel handled the gate), result 0x14d8ad
+      | {'file': 'feature_faults.c', 'line': 746, 'expr': 'r->fault', 'msg': 'gp_int_80: executed without raising an exception (expected STATUS_ACCESS_VIOLATION)'}
+  x86/feature_faults/priv_clts
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_clts: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_invd
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_invd: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_invlpg
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_invlpg: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_lgdt
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_lgdt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_lidt
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_lidt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_lldt
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_lldt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_lmsw
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_lmsw: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_ltr
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_ltr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_rdmsr
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_rdmsr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_sysexit
+      reason: Wine does not translate SYSEXIT faults to STATUS_PRIVILEGED_INSTRUCTION
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_sysexit: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_wbinvd
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_wbinvd: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/priv_wrmsr
+      reason: Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'priv_wrmsr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION'}
+  x86/feature_faults/sse_unmasked_overflow
+      reason: Wine translates #XM differently from Windows
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'sseu_overflow: exception 0xc00002b5 (STATUS_FLOAT_MULTIPLE_TRAPS), expected STATUS_FLOAT_MULTIPLE_FAULTS'}
+  x86/feature_faults/sse_unmasked_precision
+      reason: Wine translates #XM differently from Windows
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'sseu_precision: exception 0xc00002b5 (STATUS_FLOAT_MULTIPLE_TRAPS), expected STATUS_FLOAT_MULTIPLE_FAULTS'}
+  x86/feature_faults/sse_unmasked_underflow
+      reason: Wine translates #XM differently from Windows
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'sseu_underflow: exception 0xc00002b5 (STATUS_FLOAT_MULTIPLE_TRAPS), expected STATUS_FLOAT_MULTIPLE_FAULTS'}
+  x86/feature_faults/trap_div_quotient_overflow
+      reason: Wine reports every #DE as STATUS_INTEGER_DIVIDE_BY_ZERO
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'trap_div_overflow: exception 0xc0000094 (STATUS_INTEGER_DIVIDE_BY_ZERO), expected STATUS_INTEGER_OVERFLOW'}
+  x86/feature_faults/trap_idiv_int_min_by_minus1
+      reason: Wine reports every #DE as STATUS_INTEGER_DIVIDE_BY_ZERO
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'trap_idiv_overflow: exception 0xc0000094 (STATUS_INTEGER_DIVIDE_BY_ZERO), expected STATUS_INTEGER_OVERFLOW'}
+  x86/feature_faults/trap_int2c_assertion
+      reason: Wine does not implement the int 2Ch assertion gate
+      | {'file': 'feature_faults.c', 'line': 756, 'expr': 'ok', 'msg': 'trap_int2c: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_ASSERTION_FAILURE'}
+  x86/fiber_xstate/fiber_api_initial_not_fiber
+      reason: Wine: ConvertFiberToThread succeeds on a thread that is not a fiber
+      | {'file': 'fiber_xstate.c', 'line': 442, 'expr': 'b.r[1] == FALSE', 'msg': 'ConvertFiberToThread on a non-fiber thread returned 1'}
+      | {'file': 'fiber_xstate.c', 'line': 443, 'expr': 'b.e[1] == ERROR_ALREADY_THREAD', 'msg': 'GetLastError 0 want ERROR_ALREADY_THREAD (1281)'}
+  x86/fiber_xstate/fiber_convert_basic
+      reason: Wine: ConvertFiberToThread succeeds on a thread that is not a fiber
+      | {'file': 'fiber_xstate.c', 'line': 469, 'expr': 'b.r[6] == FALSE', 'msg': 'got 0x1 (1) want 0x0 (0)'}
+      | {'file': 'fiber_xstate.c', 'line': 470, 'expr': 'b.e[6] == ERROR_ALREADY_THREAD', 'msg': 'got 0x0 (0) want 0x501 (1281)'}
+  x86/fiber_xstate/fiber_convert_ex_bad_flags
+      reason: Wine: ConvertThreadToFiberEx does not reject unknown dwFlags bits
+      | {'file': 'fiber_xstate.c', 'line': 552, 'expr': 'b.p[i] == NULL', 'msg': 'ConvertThreadToFiberEx(flags=0x2) succeeded'}
+      | {'file': 'fiber_xstate.c', 'line': 553, 'expr': 'b.e[i] == ERROR_INVALID_PARAMETER', 'msg': 'flags=0x2: GetLastError 0 want 87'}
+      | {'file': 'fiber_xstate.c', 'line': 554, 'expr': 'b.r[i] == FALSE', 'msg': 'thread became a fiber after rejected flags 0x2'}
+      | {'file': 'fiber_xstate.c', 'line': 552, 'expr': 'b.p[i] == NULL', 'msg': 'ConvertThreadToFiberEx(flags=0x4) succeeded'}
+      | {'file': 'fiber_xstate.c', 'line': 553, 'expr': 'b.e[i] == ERROR_INVALID_PARAMETER', 'msg': 'flags=0x4: GetLastError 0 want 87'}
+      | {'file': 'fiber_xstate.c', 'line': 554, 'expr': 'b.r[i] == FALSE', 'msg': 'thread became a fiber after rejected flags 0x4'}
+  x86/fiber_xstate/fiber_create_ex_bad_flags
+      reason: Wine: CreateFiberEx does not reject unknown dwFlags bits
+      | {'file': 'fiber_xstate.c', 'line': 643, 'expr': 'b.p[k * 20 + i] == NULL', 'msg': 'CreateFiberEx(flags=0x2) succeeded (thread)'}
+      | {'file': 'fiber_xstate.c', 'line': 644, 'expr': 'b.e[k * 20 + i] == ERROR_INVALID_PARAMETER', 'msg': 'CreateFiberEx(flags=0x2): GetLastError 0 want 87'}
+      | {'file': 'fiber_xstate.c', 'line': 643, 'expr': 'b.p[k * 20 + i] == NULL', 'msg': 'CreateFiberEx(flags=0x4) succeeded (thread)'}
+      | {'file': 'fiber_xstate.c', 'line': 644, 'expr': 'b.e[k * 20 + i] == ERROR_INVALID_PARAMETER', 'msg': 'CreateFiberEx(flags=0x4): GetLastError 0 want 87'}
+      | {'file': 'fiber_xstate.c', 'line': 643, 'expr': 'b.p[k * 20 + i] == NULL', 'msg': 'CreateFiberEx(flags=0x80000000) succeeded (thread)'}
+      | {'file': 'fiber_xstate.c', 'line': 644, 'expr': 'b.e[k * 20 + i] == ERROR_INVALID_PARAMETER', 'msg': 'CreateFiberEx(flags=0x80000000): GetLastError 0 want 87'}
+  x86/fiber_xstate/fiber_fp_full_mode_mix_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x7fc0 expected per fiber, wrong after 5000 of 5000 switches (last seen 0xbf80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x0e3f expected per fiber, wrong after 5000 of 5000 switches (last seen 0x007f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 5000 of 5000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0xbf80 expected per fiber, wrong after 4999 of 4999 switches (last seen 0x7fc0)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x003f expected per fiber, wrong after 4999 of 4999 switches (last seen 0x0e7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 4999 of 4999 times"}
+  x86/fiber_xstate/fiber_fp_mixed_flags_a_flagged
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+  x86/fiber_xstate/fiber_fp_mixed_flags_b_flagged
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x86/fiber_xstate/fiber_fp_plain_convert_thread_to_fiber
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x3f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x7f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x063f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x0e7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x86/fiber_xstate/fiber_fp_state_follows_fiber_across_threads
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1496, 'expr': '(c.mx_in[1] & MXC_CTRL) == 0x5F80', 'msg': 'fiber MXCSR on thread 2: 0x3f80 want 0x5F80'}
+      | {'file': 'fiber_xstate.c', 'line': 1497, 'expr': '(c.cw_in[1] & CW_CTRL) == (0x0A7F & CW_CTRL)', 'msg': 'fiber x87 CW on thread 2: 0x067f want 0x0A7F'}
+      | {'file': 'fiber_xstate.c', 'line': 1498, 'expr': '(c.mx_t[0] & MXC_CTRL) == 0x7F80', 'msg': 'thread 1 MXCSR after switch back 0x5f80'}
+      | {'file': 'fiber_xstate.c', 'line': 1500, 'expr': '(c.cw_t[0] & CW_CTRL) == (0x0E7F & CW_CTRL)', 'msg': 'thread 1 x87 CW after switch back 0x0a7f'}
+  x86/fiber_xstate/fiber_in_threadpool_callback
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x86/fiber_xstate/fiber_many_1024_ring
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1459, 'expr': 'r.bad_mx == 0', 'msg': 'per-fiber MXCSR wrong 4096 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1460, 'expr': 'r.bad_cw == 0', 'msg': 'per-fiber x87 CW wrong 4096 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1461, 'expr': 'r.main_bad == 0', 'msg': 'main fiber FP control wrong 4096 times'}
+  x86/fiber_xstate/fiber_migrate_threads_1000
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1323, 'expr': 'm.bad_mx == 0', 'msg': 'fiber MXCSR control lost across threads 750 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1324, 'expr': 'm.bad_cw == 0', 'msg': 'fiber x87 CW lost across threads 750 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1325, 'expr': 'm.bad_tmx == 0', 'msg': 'thread primary fiber MXCSR wrong after switch back 250 times'}
+      | {'file': 'fiber_xstate.c', 'line': 1326, 'expr': 'm.bad_tcw == 0', 'msg': 'thread primary fiber x87 CW wrong after switch back 250 times'}
+  x86/fiber_xstate/fiber_mxcsr_ftz_daz_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x9fc0)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x9fc0 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x1f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x86/fiber_xstate/fiber_mxcsr_mask_bits_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x1e80)'}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x1e80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x1f80)'}
+  x86/fiber_xstate/fiber_mxcsr_rc_all_pairs_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x3f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x1f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times"}
+  x86/fiber_xstate/fiber_mxcsr_rc_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x86/fiber_xstate/fiber_mxcsr_unmasked_trap_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 2349, 'expr': 'a == 0', 'msg': "fiber A (all masked) took 200 divide-by-zero traps: fiber B's unmasked MXCSR leaked"}
+      | {'file': 'fiber_xstate.c', 'line': 2350, 'expr': 'b == TRAP_N - 1', 'msg': 'fiber B (ZM unmasked) took 0 traps, want 199'}
+  x86/fiber_xstate/fiber_ping_pong_100000_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 100000 of 100000 switches (last seen 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 100000 of 100000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 370, 'expr': 'd->mx_bad[s] == 0', 'msg': 'fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 99999 of 99999 switches (last seen 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 99999 of 99999 switches (last seen 0x067f)'}
+  x86/fiber_xstate/fiber_stack_guarantee_per_fiber
+      reason: Wine: SetThreadStackGuarantee value is not per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1972, 'expr': 's.a1 == s.a0', 'msg': 'fiber A guarantee changed from 0 to 49152 by fiber B'}
+      | {'file': 'fiber_xstate.c', 'line': 1973, 'expr': 's.a2 == s.a0', 'msg': 'fiber A guarantee 49152 after second switch, was 0'}
+      | {'file': 'fiber_xstate.c', 'line': 1975, 'expr': 's.b_other_thread == s.b1', 'msg': 'fiber B guarantee on another thread 0, was 49152'}
+  x86/fiber_xstate/fiber_threads_16x_ping_pong
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 1370, 'expr': 'd[i].mx_bad[s] == 0', 'msg': 'thread 0 fiber A: MXCSR wrong 5000 times (last 0x3f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 1371, 'expr': 'd[i].cw_bad[s] == 0', 'msg': 'thread 0 fiber A: x87 CW wrong 5000 times (last 0x087f)'}
+      | {'file': 'fiber_xstate.c', 'line': 1370, 'expr': 'd[i].mx_bad[s] == 0', 'msg': 'thread 0 fiber B: MXCSR wrong 4999 times (last 0x1f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 1371, 'expr': 'd[i].cw_bad[s] == 0', 'msg': 'thread 0 fiber B: x87 CW wrong 4999 times (last 0x027f)'}
+      | {'file': 'fiber_xstate.c', 'line': 1370, 'expr': 'd[i].mx_bad[s] == 0', 'msg': 'thread 1 fiber A: MXCSR wrong 5000 times (last 0x5f80)'}
+      | {'file': 'fiber_xstate.c', 'line': 1371, 'expr': 'd[i].cw_bad[s] == 0', 'msg': 'thread 1 fiber A: x87 CW wrong 5000 times (last 0x0c7f)'}
+  x86/fiber_xstate/fiber_x87_cw_pc_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x003f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x037f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x033f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x007f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x86/fiber_xstate/fiber_x87_cw_rc_per_fiber_float_switch
+      reason: Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times"}
+      | {'file': 'fiber_xstate.c', 'line': 377, 'expr': 'd->cw_bad[s] == 0', 'msg': 'fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f)'}
+      | {'file': 'fiber_xstate.c', 'line': 384, 'expr': 'd->sig_bad[s] == 0', 'msg': "fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times"}
+  x86/fp_environment/ctx_continue_reserved_mxcsr_bits_sanitized
+      reason: Wine 11.0: a CONTEXT MXCSR with reserved bits hangs the process (exit 0xdead0001 exc 0x00000000)
+  x86/fp_environment/ctx_setthreadcontext_reserved_mxcsr_bits_sanitized
+      reason: Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0xc000001d exc 0xc000001d)
+  x86/xstate_stress/churn_new_threads_under_stress
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 4246 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_apc_injection
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 5016 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_everything_2x_cpus
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 2726 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_getctx_mixed_ops_all_yields
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 2161 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_getctx_mmx_hold
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 90 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_getctx_x87_hold
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 79 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_getctx_xmm_hold
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 100 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_getctx_xstate_mixed_kinds
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 3355 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_getctx_xstate_xmm_uppers_clean
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 2203 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_getctx_xstate_ymm_hold
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 117 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_oracle_during_yielding_calls
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 7221 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_setctx_unchanged_mixed_all
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 3955 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_setctx_unchanged_x87_mmx
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 7069 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_setctx_unchanged_xmm
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 7578 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_setctx_unchanged_ymm_xstate
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 7167 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_victim_affinity_hops
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 338 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/ctl_victim_priority_changes
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 70 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/perf_stress_rates_plain_capture
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 241 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/perf_stress_rates_xstate_capture
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 261 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/preempt_one_cpu_long_holds_captured
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 3 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_stress/tmr_everything_with_controller
+      reason: Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, MXCSR=0) in 2346 captures (+0 with a host-code IP); those were not checked, hold-loop oracle unaffected
+  x86/xstate_windows/copy_into_smaller_compacted_dest
+      reason: known Wine gap: CopyContext into a compacted destination without room for AVX succeeds
+      | {'file': 'xstate_windows.c', 'line': 1676, 'expr': '!ok', 'msg': 'copying AVX state into a compacted context whose chunk has no AVX room must fail'}
+      | {'file': 'xstate_windows.c', 'line': 1677, 'expr': 'GetLastError() == ERROR_MORE_DATA', 'msg': 'error 3735928559 want 234'}
+  x86/xstate_windows/copy_invalid_flags_reserved_bits
+      reason: known Wine gap: CopyContext does not validate reserved ContextFlags bits
+      | {'file': 'xstate_windows.c', 'line': 1640, 'expr': '!ok', 'msg': 'flags 0x10080 accepted'}
+      | {'file': 'xstate_windows.c', 'line': 1641, 'expr': 'GetLastError() == ERROR_INVALID_PARAMETER', 'msg': 'flags 0x10080: error 3735928559 want 87'}
+      | {'file': 'xstate_windows.c', 'line': 1640, 'expr': '!ok', 'msg': 'flags 0x2001003f accepted'}
+      | {'file': 'xstate_windows.c', 'line': 1641, 'expr': 'GetLastError() == ERROR_INVALID_PARAMETER', 'msg': 'flags 0x2001003f: error 3735928559 want 87'}
+      | {'file': 'xstate_windows.c', 'line': 1645, 'expr': '!X.CopyContext(d.ctx, XA_ALL, s.ctx)', 'msg': ''}
+      | {'file': 'xstate_windows.c', 'line': 1646, 'expr': 'GetLastError() == ERROR_INVALID_PARAMETER', 'msg': 'got 0xdeadbeef (3735928559) want 0x57 (87)'}
+  x86/xstate_windows/copy_x86_legacy_length_grows
+      reason: known Wine gap: CopyContext does not grow the i386 destination CONTEXT_EX.Legacy.Length
+      | {'file': 'xstate_windows.c', 'line': 1736, 'expr': 'xex(d.ctx)->Legacy.Length == 0x2CC', 'msg': 'dest Legacy.Length 0xcc want 0x2CC'}
+  x86/xstate_windows/getmask_no_arch_flags_error_code
+      reason: known Wine gap: GetXStateFeaturesMask fails without SetLastError
+      | {'file': 'xstate_windows.c', 'line': 1315, 'expr': 'err == ERROR_NOT_SUPPORTED', 'msg': 'error 3735928559 want ERROR_NOT_SUPPORTED (50, STATUS_NOT_SUPPORTED)'}
+  x86/xstate_windows/locate_feature63_compaction_bit
+      reason: known Wine gap: LocateXStateFeature(63) treats the XCOMP_BV compaction bit as a feature
+      | {'file': 'xstate_windows.c', 'line': 1149, 'expr': 'p == NULL', 'msg': 'feature 63 located at 016a1000 (buffer [016a0b9d,+1123))'}
+  x86/xstate_windows/rtl_copy_extended_context_legacy_too_small
+      reason: known Wine gap: RtlCopyExtendedContext does not compare the Legacy chunks
+      | {'file': 'xstate_windows.c', 'line': 1748, 'expr': '(ULONG)X.RtlCopyExtendedContext(xex(d.ctx), XA_ALL | XA_XSTATE, xex(s.ctx)) == (ULONG)X_STATUS_INVALID_PARAMETER', 'msg': 'got 0x0 (0) want 0xc000000d (3221225485)'}
+  x86/xstate_windows/setmask_extended_on_plain_context_error_code
+      reason: known Wine gap: SetXStateFeaturesMask fails without SetLastError
+      | {'file': 'xstate_windows.c', 'line': 1416, 'expr': 'GetLastError() == ERROR_INVALID_PARAMETER', 'msg': 'error 3735928559 want 87 (STATUS_INVALID_PARAMETER)'}
+  x86/xstate_windows/setmask_no_arch_flags_error_code
+      reason: known Wine gap: SetXStateFeaturesMask fails without SetLastError
+      | {'file': 'xstate_windows.c', 'line': 1437, 'expr': 'GetLastError() == ERROR_NOT_SUPPORTED', 'msg': 'error 3735928559 want 50 (STATUS_NOT_SUPPORTED)'}
+  x86/xstate_windows/setmask_x86_legacy_length_grows
+      reason: known Wine gap: SetXStateFeaturesMask does not grow the i386 CONTEXT_EX.Legacy.Length
+      | {'file': 'xstate_windows.c', 'line': 1368, 'expr': 'xex(x.ctx)->Legacy.Length == 0x2CC', 'msg': 'Legacy.Length 0xcc want 0x2CC after legacy bits were set'}
+  x86/zmm_registers/zmm_api_locate_not_enabled_id
+      reason: Wine 11.0: LocateXStateFeature returns a pointer for a feature id that is not enabled
+      | {'file': 'zmm_registers.c', 'line': 520, 'expr': 'p == NULL', 'msg': 'LocateXStateFeature(63)=7bf73580 (length 0) although feature 63 is not enabled (enabled 0x7)'}
+  x86/zmm_registers/zmm_api_set_mask_without_xstate_chunk
+      reason: Wine 11.0: SetXStateFeaturesMask fails without setting ERROR_INVALID_PARAMETER (last error 0)
+      | {'file': 'zmm_registers.c', 'line': 565, 'expr': 'err == ERROR_INVALID_PARAMETER', 'msg': 'got 0x0 (0) want 0x57 (87)'}
+
+RESULT failing_cases=0 non_ok_exes=0 xfail=178 xfail_outside_wine=0

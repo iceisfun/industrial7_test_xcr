@@ -1,0 +1,400 @@
+wineserver: using server-side synchronization.
+ENV   exe=zmm_registers arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   zmm_gate_cpuid_subfeatures
+  INFO avx512_hw = (none)
+  INFO avx512_usable = (none)
+PASS  zmm_gate_cpuid_subfeatures (0.2 ms)
+RUN   zmm_gate_eligibility
+  INFO avx512_eligible = 0
+  INFO reason = AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+  INFO xcr0 = 0x207
+PASS  zmm_gate_eligibility (0.2 ms)
+RUN   zmm_gate_xcr0_avx512_bits
+  INFO xcr0_avx512_bits = 0x0
+PASS  zmm_gate_xcr0_avx512_bits (0.1 ms)
+RUN   zmm_gate_xcr0_within_supported
+PASS  zmm_gate_xcr0_within_supported (0.0 ms)
+RUN   zmm_gate_avx512f_has_xsave_components
+  SKIP AVX512F not advertised
+SKIP  zmm_gate_avx512f_has_xsave_components (0.1 ms): AVX512F not advertised
+RUN   zmm_gate_leaf_d_avx512_components
+  SKIP CPUID.(0Dh,0) does not enumerate AVX-512 components
+SKIP  zmm_gate_leaf_d_avx512_components (0.1 ms): CPUID.(0Dh,0) does not enumerate AVX-512 components
+RUN   zmm_gate_xsave_size_enabled
+  SKIP AVX-512 state not enabled in XCR0=0x207
+SKIP  zmm_gate_xsave_size_enabled (0.1 ms): AVX-512 state not enabled in XCR0=0x207
+RUN   zmm_api_xstate_constants
+PASS  zmm_api_xstate_constants (0.0 ms)
+RUN   zmm_api_enabled_features_avx512
+  INFO api_enabled_features = 0x7
+PASS  zmm_api_enabled_features_avx512 (0.1 ms)
+RUN   zmm_api_processor_feature_avx512
+  INFO pf_avx512f = 0
+PASS  zmm_api_processor_feature_avx512 (0.0 ms)
+RUN   zmm_api_initialize_context_length
+  INFO context_length = 1123
+PASS  zmm_api_initialize_context_length (0.1 ms)
+RUN   zmm_api_set_mask_filters_disabled
+  INFO mask_after_set = 0x7
+PASS  zmm_api_set_mask_filters_disabled (0.1 ms)
+RUN   zmm_api_locate_avx512_features
+  NOTE AVX-512 not enabled: verified LocateXStateFeature(5..7) == NULL
+PASS  zmm_api_locate_avx512_features (0.2 ms)
+RUN   zmm_api_locate_invalid_ids
+PASS  zmm_api_locate_invalid_ids (0.0 ms)
+RUN   zmm_api_locate_not_enabled_id
+  EXPECT-FAIL Wine 11.0: LocateXStateFeature returns a pointer for a feature id that is not enabled
+  FAIL zmm_registers.c:520: p == NULL (LocateXStateFeature(63)=7bf73580 (length 0) although feature 63 is not enabled (enabled 0x7))
+  INFO ids_checked = 5
+XFAIL zmm_api_locate_not_enabled_id (0.5 ms): Wine 11.0: LocateXStateFeature returns a pointer for a feature id that is not enabled
+RUN   zmm_api_rtl_enabled_extended_features
+  INFO rtl_all = 0x7
+PASS  zmm_api_rtl_enabled_extended_features (0.0 ms)
+RUN   zmm_api_set_mask_without_xstate_chunk
+  EXPECT-FAIL Wine 11.0: SetXStateFeaturesMask fails without setting ERROR_INVALID_PARAMETER (last error 0)
+  FAIL zmm_registers.c:565: err == ERROR_INVALID_PARAMETER (got 0x0 (0) want 0x57 (87))
+XFAIL zmm_api_set_mask_without_xstate_chunk (0.4 ms): Wine 11.0: SetXStateFeaturesMask fails without setting ERROR_INVALID_PARAMETER (last error 0)
+RUN   zmm_api_fresh_context_mask_empty
+  INFO fresh_mask = 0x3
+PASS  zmm_api_fresh_context_mask_empty (0.1 ms)
+RUN   zmm_api_copy_context_avx512
+  SKIP AVX-512 state not enabled (GetEnabledXStateFeatures=0x7)
+SKIP  zmm_api_copy_context_avx512 (0.1 ms): AVX-512 state not enabled (GetEnabledXStateFeatures=0x7)
+RUN   zmm_gate_uniform_across_cpus
+  INFO cpus_checked = 28
+  INFO cpuid_avx512f_mismatches = 0
+PASS  zmm_gate_uniform_across_cpus (24.1 ms)
+RUN   zmm_fault_evex_ud_when_unusable
+  INFO ineligible_reason = AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+PASS  zmm_fault_evex_ud_when_unusable (19.7 ms)
+RUN   zmm_fault_kmov_ud_when_unusable
+  INFO ineligible_reason = AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+PASS  zmm_fault_kmov_ud_when_unusable (19.5 ms)
+RUN   zmm_fault_xsetbv_user_mode
+  INFO xsetbv_exception = 0xc0000005
+PASS  zmm_fault_xsetbv_user_mode (17.1 ms)
+RUN   zmm_regs_roundtrip_patterns
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_roundtrip_patterns (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_roundtrip_special_values
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_roundtrip_special_values (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_hi16_independent_x64
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_hi16_independent_x64 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_vzeroupper
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_vzeroupper (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_vzeroall
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_vzeroall (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_vex128_zeroes_upper
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_vex128_zeroes_upper (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_vex128_arith_zeroes_upper
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_vex128_arith_zeroes_upper (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_vex256_zeroes_upper
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_vex256_zeroes_upper (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_legacy_sse_keeps_upper
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_legacy_sse_keeps_upper (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_evex128_zeroes_upper
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_evex128_zeroes_upper (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_regs_evex256_zeroes_upper
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_regs_evex256_zeroes_upper (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_xinuse_reports_avx512_state
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_xinuse_reports_avx512_state (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_xsave_avx512_layout
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_xsave_avx512_layout (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_xrstor_avx512_roundtrip
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_xrstor_avx512_roundtrip (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_xrstor_init_avx512_components
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_xrstor_init_avx512_components (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_xrstor_rfbm_excludes_avx512
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_xrstor_rfbm_excludes_avx512 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_xsavec_avx512_compacted
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_xsavec_avx512_compacted (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_kreg_logic_w
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_kreg_logic_w (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_kreg_logic_q_bw
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_kreg_logic_q_bw (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_kreg_logic_dq
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_kreg_logic_dq (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_kreg_gpr_moves_bw
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_kreg_gpr_moves_bw (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_kreg_k0_means_unmasked
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_kreg_k0_means_unmasked (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_merge_dword
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_merge_dword (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_zero_dword
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_zero_dword (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_merge_zero_qword
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_merge_zero_qword (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_byte_bw
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_byte_bw (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_word_bw
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_word_bw (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_moves
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_moves (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_blendm
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_blendm (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_fp_exceptions_suppressed
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_fp_exceptions_suppressed (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_mask_fp_exceptions_reported
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_mask_fp_exceptions_reported (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_bcst_integer
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_bcst_integer (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_bcst_float
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_bcst_float (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_round_embedded_modes_ps
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_round_embedded_modes_ps (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_round_embedded_pd
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_round_embedded_pd (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_round_sae_compare
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_round_sae_compare (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_ternlog_all_256_truth_tables
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_ternlog_all_256_truth_tables (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_ternlog_masked_and_broadcast
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_ternlog_masked_and_broadcast (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_cmp_integer_predicates
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_cmp_integer_predicates (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_cmp_float_32_predicates
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_cmp_float_32_predicates (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_cmp_vptestm
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_cmp_vptestm (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_cd_vpconflict
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_cd_vpconflict (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_cd_vplzcnt_and_broadcastm
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_cd_vplzcnt_and_broadcastm (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_compress_reg
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_compress_reg (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_expand_reg
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_expand_reg (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_compress_expand_bytes_vbmi2
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_compress_expand_bytes_vbmi2 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_compress_expand_memory
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_compress_expand_memory (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_gather_dword_qword
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_gather_dword_qword (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_scatter_dword_qword
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_scatter_dword_qword (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_perm_vpermd_vpermt2d_valign
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_perm_vpermd_vpermt2d_valign (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_perm_vpermb_vbmi
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_perm_vpermb_vbmi (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_perm_vpermw_bw
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_perm_vpermw_bw (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_int_avx512f_semantics
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_int_avx512f_semantics (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_int_vpmov_narrowing
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_int_vpmov_narrowing (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_dq_mullq_cvt_movmask
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_dq_mullq_cvt_movmask (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fp_fma_rndscale_getexp_scalef
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fp_fma_rndscale_getexp_scalef (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fp_rcp14_rsqrt14_accuracy
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fp_rcp14_rsqrt14_accuracy (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_cvt_unsigned_dword
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_cvt_unsigned_dword (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_dq_vfpclassps
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_dq_vfpclassps (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_bw_vpmovb2m_vpmovm2b
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_bw_vpmovb2m_vpmovm2b (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_ext_ifma52
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_ext_ifma52 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_ext_vnni
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_ext_vnni (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_ext_vpopcnt
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_ext_vpopcnt (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_ext_vbmi2_double_shift
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_ext_vbmi2_double_shift (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_vl_masked_narrow_ops
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_vl_masked_narrow_ops (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_vl_hi16_registers_x64
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_vl_hi16_registers_x64 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_suppression_masked_load
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_suppression_masked_load (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_suppression_masked_store
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_suppression_masked_store (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_suppression_bytes_bw
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_suppression_bytes_bw (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_suppression_gather_scatter
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_suppression_gather_scatter (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_suppression_compress_expand
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_suppression_compress_expand (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_active_lane_faults
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_active_lane_faults (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_gather_active_lane_faults
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_gather_active_lane_faults (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_misaligned_vmovdqa64
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_misaligned_vmovdqa64 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_suppression_leading_guard
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_suppression_leading_guard (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fault_unmasked_fp_exceptions
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fault_unmasked_fp_exceptions (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_sleep0
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_sleep0 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_sleep1
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_sleep1 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_switch_to_thread
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_switch_to_thread (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_wait_signaled
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_wait_signaled (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_wait_timeout
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_wait_timeout (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_mutex_contention
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_mutex_contention (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_threadpool
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_threadpool (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_apc
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_apc (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_other_thread_uses_zmm
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_other_thread_uses_zmm (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_nested
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_nested (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_raise_exception
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_raise_exception (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_virtual_memory
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_virtual_memory (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_file_io
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_file_io (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cb_load_library
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cb_load_library (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_oversubscribed_threads
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_oversubscribed_threads (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_same_cpu_threads
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_same_cpu_threads (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_256_threads
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_256_threads (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_cpu_migration
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_cpu_migration (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_thread_churn
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_thread_churn (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_suspend_resume
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_suspend_resume (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_set_context_without_xstate
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_set_context_without_xstate (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_preserve_set_context_legacy_fp
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_preserve_set_context_legacy_fp (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_isolation_fresh_thread_no_leak
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_isolation_fresh_thread_no_leak (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_exception_ud_continue
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_exception_ud_continue (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_exception_av_continue
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_exception_av_continue (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_exception_div0_continue
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_exception_div0_continue (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_exception_int3_continue
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_exception_int3_continue (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_exception_context_reports_avx512
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_exception_context_reports_avx512 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_exception_context_modify_avx512
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_exception_context_modify_avx512 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_context_get_xstate_avx512
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_context_get_xstate_avx512 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_context_set_xstate_avx512
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_context_set_xstate_avx512 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SUMMARY exe=zmm_registers arch=x86 total=130 pass=17 fail=0 crash=0 skip=111 xfail=2 perf=0 checks=97 checks_failed=2 exit=0

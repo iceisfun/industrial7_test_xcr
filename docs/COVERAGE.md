@@ -219,7 +219,12 @@ against the decomp or documentation cited in the source.
 
 1. **Nothing has been validated on real Windows.** Every hard check derived from a decomp or the
    documentation has only ever run under Wine. Run scripts/run_all.ps1 on Windows 10 22H2 and Windows 11
-   24H2 (x64 + WOW64), keep the baselines, and triage every check that differs.
+   24H2 (x64 + WOW64), keep the baselines, and triage every check that differs. The tooling is in
+   place: `run_all.ps1 -Baseline auto` records a run under results/baselines/<os>-<cpu>/,
+   `compare_results.py --triage` lists every FAIL/CRASH/XFAIL and checks the "Expected on Windows"
+   rows above (machine-readable in results/baselines/expect_windows.json), and
+   `compare_results.py --baseline` diffs a run against the closest committed baseline. Only the
+   Wine plumbing baseline is committed so far; no Windows host was reachable from the build machine.
 2. **214 AVX-512 cases (x64) have never executed.** zmm_registers has 111 of them, simd_memory 24,
    simd_bench 16 and alignment 13. The disabled/hidden-feature #UD paths also never ran. Use an emulator
    (Intel SDE) or a lab host with AVX-512.

@@ -68,29 +68,37 @@ A Windows-native build with clang-cl is possible through `CMakeLists.txt` (best 
 Windows: copy `build\` (or just the exes) and `scripts\`, then run
 
 ```
-powershell -ExecutionPolicy Bypass -File scripts\run_all.ps1 [-ExeDir build\x64] [-OutDir results] [-TimeoutSec 600]
+powershell -ExecutionPolicy Bypass -File scripts\run_all.ps1 [-Arch all|x64|x86] [-ExeDir build\x64] [-OutDir results]
+           [-TimeoutSec 600] [-Only <substr>] [-Baseline auto|<name>] [-Compare auto|<dir>] [-Note "..."]
 ```
 
 The script writes `results\<arch>\<name>.json` (JSON lines), `results\<arch>\<name>.txt` (console
-output) and `results\<arch>\run.json` (exit codes, status, duration and environment).
+output), `results\<arch>\run.json` (exit codes, status, duration, exe sha256 and environment) and
+`results\host.json` (OS build/UBR/DisplayVersion, CPU, hypervisor, git revision). The x86 exes run as
+WOW64 processes on 64-bit Windows. `-Baseline auto` writes to `results\baselines\<os>-<cpu>\`, the
+committed reference runs (see [results/baselines/README.md](results/baselines/README.md)).
 
 Linux and Wine (plumbing validation only; Windows is the authority):
 
 ```
-scripts/run_all.sh [--arch x64|x86|all] [--out results] [--timeout 600]
+scripts/run_all.sh [--arch x64|x86|all] [--out results | --baseline auto|<name>] [--timeout 600] [--only <substr>]
 tools/wine_run.sh build/x64/<name>.exe [--filter=...]       # headless, throw-away prefix, hard timeout
 make wine-run                                               # all exes, sequentially, summary lines
 ```
 
-Compare two environments:
+Compare and triage:
 
 ```
 python3 scripts/compare_results.py results_win11 results_other [--perf-threshold=0.10] [--json=diff.json]
+python3 scripts/compare_results.py --baseline results          # against the closest committed baseline
+python3 scripts/compare_results.py --triage results            # FAIL/CRASH/XFAIL list + expected-on-Windows rows
+python3 scripts/compare_results.py --list-baselines
 ```
 
-The comparison reports environment differences, exe status changes, functional mismatches,
-capability (SKIP vs run) differences, missing cases and PERF deltas. Its exit status is 1 when there
-are functional mismatches.
+The comparison reports environment differences, exe status changes, functional mismatches (tagged
+REGRESSION / FIXED / XFAIL-FLIP / CHANGED), capability (SKIP vs run) differences, missing cases and
+PERF deltas. Its exit status is 1 when there are functional mismatches other than PASS<->XFAIL flips
+(`--strict` counts those too) or an exe that was OK is no longer OK.
 
 ## Benchmarks
 

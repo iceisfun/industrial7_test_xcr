@@ -1,5 +1,6 @@
 build/
-results/
+results/*
+!results/baselines/
 *.o
 *.exe
 __pycache__/

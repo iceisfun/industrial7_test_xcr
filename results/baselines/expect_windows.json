@@ -1,0 +1,25 @@
+{
+ "about": "Expected results on real Windows for cases that have never run anywhere else (docs/COVERAGE.md, 'Cases with no evidence on any system'). compare_results.py --triage applies these rows to a run whose env is not Wine; a row matches when exe, case, arch (optional) and the OS build range [min_build, max_build] (optional) match. 'expect' lists the accepted results. Rows are checked in order and the first match wins.",
+ "rules": [
+  {"exe": "exception_xstate", "case": "cap_rtlcapturecontext2_xstate_x64",     "arch": "x64", "min_build": 19041, "expect": ["PASS"]},
+  {"exe": "exception_xstate", "case": "cap_rtlcapturecontext2_vs_reference_x64", "arch": "x64", "min_build": 19041, "expect": ["PASS"]},
+  {"exe": "exception_xstate", "case": "cap_rtlrestorecontext_ymm_x64",          "arch": "x64", "min_build": 19041, "expect": ["PASS"]},
+  {"exe": "exception_xstate", "case": "cap_ntcontinue_ymm_x64",                 "arch": "x64", "min_build": 19041, "expect": ["PASS"]},
+  {"exe": "simd_bench",       "case": "ctx_rtlcapturecontext2_xstate",          "arch": "x64", "min_build": 19041, "expect": ["PERF"]},
+  {"exe": "context_bench",    "case": "ctx_rtlcapturecontext2_xstate",          "arch": "x64", "min_build": 19041, "expect": ["PERF"]},
+  {"exe": "xstate_windows",   "case": "thread_enabled_features_win11",          "min_build": 22000, "expect": ["PASS"]},
+  {"exe": "xstate_windows",   "case": "thread_enabled_features_win11",          "max_build": 21999, "expect": ["SKIP"]},
+  {"exe": "xcr0_probe",       "case": "api_thread_enabled_xstate_features",     "min_build": 22000, "expect": ["PASS"]},
+  {"exe": "xcr0_probe",       "case": "api_thread_enabled_xstate_features",     "max_build": 21999, "expect": ["SKIP"]},
+  {"exe": "simd_dispatch",    "case": "detect_vs_GetThreadEnabledXStateFeatures", "min_build": 22000, "expect": ["PASS"]},
+  {"exe": "simd_dispatch",    "case": "detect_vs_GetThreadEnabledXStateFeatures", "max_build": 21999, "expect": ["SKIP"]},
+  {"exe": "xstate_windows",   "case": "enable_optional_features_child",         "min_build": 22000, "expect": ["PASS"]},
+  {"exe": "xstate_windows",   "case": "enable_optional_features_child",         "max_build": 21999, "expect": ["SKIP"]},
+  {"exe": "thread_xstate",    "case": "special_user_apc_async_interrupt",       "arch": "x64", "min_build": 22000, "expect": ["PASS"]},
+  {"exe": "thread_xstate",    "case": "special_user_apc_async_interrupt",       "arch": "x64", "max_build": 21999, "expect": ["SKIP"]},
+  {"exe": "thread_xstate",    "case": "special_user_apc_async_interrupt",       "arch": "x86", "expect": ["SKIP"]},
+  {"exe": "exception_xstate", "case": "vch_called_after_veh_continue",          "expect": ["PASS"]},
+  {"exe": "exception_xstate", "case": "vch_context_edit_takes_effect",          "expect": ["PASS"]},
+  {"exe": "xcr0_probe",       "case": "xcr0_identical_across_processor_groups", "expect": ["PASS", "SKIP"]}
+ ]
+}

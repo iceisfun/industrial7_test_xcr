@@ -1,0 +1,1188 @@
+wineserver: using server-side synchronization.
+ENV   exe=thread_xstate arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   selftest_leak_decoder
+  INFO daz_supported = 1
+PASS  selftest_leak_decoder (0.1 ms)
+RUN   init_new_thread_fp_env_default
+  INFO threads = 16
+  INFO entry_mxcsr = 0x1f80
+  INFO entry_fcw = 0x027f
+  INFO entry_ftw = 0xffff
+  INFO entry_mxcsr_flags_set = 0
+  INFO entry_zero_regs = 96/128
+  INFO entry_upper_nonzero_regs = 0
+PASS  init_new_thread_fp_env_default (4.8 ms)
+RUN   init_new_thread_fp_env_not_inherited
+  INFO threads = 15
+  INFO entry_mxcsr = 0x1f80
+  INFO entry_fcw = 0x027f
+  INFO entry_ftw = 0xffff
+  INFO entry_mxcsr_flags_set = 0
+  INFO entry_zero_regs = 90/120
+  INFO entry_upper_nonzero_regs = 0
+PASS  init_new_thread_fp_env_not_inherited (4.2 ms)
+RUN   init_new_thread_regs_no_leak_from_spinners
+  INFO holders = 32
+  INFO threads = 200
+  INFO entry_mxcsr = 0x1f80
+  INFO entry_fcw = 0x027f
+  INFO entry_ftw = 0xffff
+  INFO entry_mxcsr_flags_set = 0
+  INFO entry_zero_regs = 1200/1600
+  INFO entry_upper_nonzero_regs = 0
+PASS  init_new_thread_regs_no_leak_from_spinners (512.8 ms)
+RUN   init_new_thread_after_dirty_exit
+  INFO threads = 64
+  INFO entry_mxcsr = 0x1f80
+  INFO entry_fcw = 0x027f
+  INFO entry_ftw = 0xffff
+  INFO entry_mxcsr_flags_set = 0
+  INFO entry_zero_regs = 384/512
+  INFO entry_upper_nonzero_regs = 0
+PASS  init_new_thread_after_dirty_exit (43.3 ms)
+RUN   init_new_thread_after_terminate_spinning
+  INFO threads = 32
+  INFO entry_mxcsr = 0x1f80
+  INFO entry_fcw = 0x027f
+  INFO entry_ftw = 0xffff
+  INFO entry_mxcsr_flags_set = 0
+  INFO entry_zero_regs = 192/256
+  INFO entry_upper_nonzero_regs = 0
+PASS  init_new_thread_after_terminate_spinning (123.5 ms)
+RUN   init_new_thread_create_remote_thread_self
+  INFO threads = 16
+  INFO entry_mxcsr = 0x1f80
+  INFO entry_fcw = 0x027f
+  INFO entry_ftw = 0xffff
+  INFO entry_mxcsr_flags_set = 0
+  INFO entry_zero_regs = 96/128
+  INFO entry_upper_nonzero_regs = 0
+PASS  init_new_thread_create_remote_thread_self (4.8 ms)
+RUN   special_user_apc_async_interrupt
+  SKIP QueueUserAPC2(SPECIAL_USER_APC) rejected (err 50, ERROR_NOT_SUPPORTED): special user APCs need a native x64 process on Windows 11 (build 22000) or Server 2022 (build 20348); special_user_apc_emulated_context_hijack covers the restore path
+SKIP  special_user_apc_async_interrupt (3.6 ms): QueueUserAPC2(SPECIAL_USER_APC) rejected (err 50, ERROR_NOT_SUPPORTED): special user APCs need a native x64 process on Windows 11 (build 22000) or Server 2022 (build 20348); special_user_apc_emulated_context_hijack covers the restore path
+RUN   special_user_apc_emulated_context_hijack
+  INFO hijack_context = flags 0x1006f xstate_mask 0x4
+  INFO kind = ymm
+  INFO spinners = 8
+  INFO apcs_queued = 512
+  INFO apcs_run = 512
+  INFO spin_chunks = 5631
+  INFO extended_state_mismatches = 0 (upper YMM/ZMM, XMM16-31, k: not hard-checked)
+  INFO extended_state_holding_apc_values = 0
+PASS  special_user_apc_emulated_context_hijack (305.6 ms)
+RUN   churn_create_join_1000_serial
+  INFO threads = 1000
+  INFO entry_mxcsr = 0x1f80
+  INFO entry_fcw = 0x027f
+  INFO entry_ftw = 0xffff
+  INFO entry_mxcsr_flags_set = 0
+  INFO entry_zero_regs = 6000/8000
+  INFO entry_upper_nonzero_regs = 0
+  PERF threads_per_s = 5172.52 thread/s
+PERF  churn_create_join_1000_serial (194.8 ms)
+RUN   churn_create_join_1000_batch32
+  INFO threads = 1000
+  INFO entry_mxcsr = 0x1f80
+  INFO entry_fcw = 0x027f
+  INFO entry_ftw = 0xffff
+  INFO entry_mxcsr_flags_set = 0
+  INFO entry_zero_regs = 6000/8000
+  INFO entry_upper_nonzero_regs = 0
+  PERF threads_per_s = 8699.44 thread/s
+PERF  churn_create_join_1000_batch32 (115.9 ms)
+RUN   iso_sleep0_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 5348
+  INFO min_worker_iterations = 2669
+  INFO spin_chunks = 5348
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 21252.4 iter/s
+PERF  iso_sleep0_n2 (253.0 ms)
+RUN   iso_sleep0_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 87973
+  INFO min_worker_iterations = 3092
+  INFO spin_chunks = 87973
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 290294 iter/s
+PERF  iso_sleep0_n16 (305.5 ms)
+RUN   iso_sleep0_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 155245
+  INFO min_worker_iterations = 1108
+  INFO spin_chunks = 155245
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 381626 iter/s
+PERF  iso_sleep0_n64 (427.4 ms)
+RUN   iso_sleep0_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 190374
+  INFO min_worker_iterations = 129
+  INFO spin_chunks = 190374
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 369174 iter/s
+PERF  iso_sleep0_n256 (571.0 ms)
+RUN   iso_sleep0_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 264898
+  INFO min_worker_iterations = 25
+  INFO spin_chunks = 264898
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 350384 iter/s
+PERF  iso_sleep0_n1024 (869.6 ms)
+RUN   iso_switch_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = SwitchToThread
+  INFO cpus = 28
+  INFO iterations = 6605
+  INFO min_worker_iterations = 3252
+  INFO spin_chunks = 6605
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 26237.1 iter/s
+PERF  iso_switch_n2 (252.5 ms)
+RUN   iso_switch_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = SwitchToThread
+  INFO cpus = 28
+  INFO iterations = 85703
+  INFO min_worker_iterations = 3144
+  INFO spin_chunks = 85703
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 282520 iter/s
+PERF  iso_switch_n16 (305.3 ms)
+RUN   iso_switch_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = SwitchToThread
+  INFO cpus = 28
+  INFO iterations = 155767
+  INFO min_worker_iterations = 738
+  INFO spin_chunks = 155767
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 379143 iter/s
+PERF  iso_switch_n64 (414.7 ms)
+RUN   iso_switch_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = SwitchToThread
+  INFO cpus = 28
+  INFO iterations = 194886
+  INFO min_worker_iterations = 117
+  INFO spin_chunks = 194886
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 374659 iter/s
+PERF  iso_switch_n256 (531.4 ms)
+RUN   iso_switch_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = SwitchToThread
+  INFO cpus = 28
+  INFO iterations = 261969
+  INFO min_worker_iterations = 43
+  INFO spin_chunks = 261969
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 345161 iter/s
+PERF  iso_switch_n1024 (806.6 ms)
+RUN   iso_event_ring_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = event ring wait
+  INFO cpus = 28
+  INFO iterations = 4701
+  INFO min_worker_iterations = 2350
+  INFO spin_chunks = 4701
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 18804
+  PERF iterations_per_s = 18696 iter/s
+PERF  iso_event_ring_n2 (252.3 ms)
+RUN   iso_event_ring_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = event ring wait
+  INFO cpus = 28
+  INFO iterations = 26236
+  INFO min_worker_iterations = 1639
+  INFO spin_chunks = 26236
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 104944
+  PERF iterations_per_s = 86710.8 iter/s
+PERF  iso_event_ring_n16 (304.9 ms)
+RUN   iso_event_ring_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = event ring wait
+  INFO cpus = 28
+  INFO iterations = 62388
+  INFO min_worker_iterations = 974
+  INFO spin_chunks = 62388
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 249552
+  PERF iterations_per_s = 153913 iter/s
+PERF  iso_event_ring_n64 (411.8 ms)
+RUN   iso_event_ring_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = event ring wait
+  INFO cpus = 28
+  INFO iterations = 76290
+  INFO min_worker_iterations = 296
+  INFO spin_chunks = 76290
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 305160
+  PERF iterations_per_s = 148516 iter/s
+PERF  iso_event_ring_n256 (530.8 ms)
+RUN   iso_event_ring_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = event ring wait
+  INFO cpus = 28
+  INFO iterations = 62806
+  INFO min_worker_iterations = 59
+  INFO spin_chunks = 62806
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 251224
+  PERF iterations_per_s = 84432.6 iter/s
+PERF  iso_event_ring_n1024 (803.9 ms)
+RUN   iso_mutex_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = mutex wait
+  INFO cpus = 28
+  INFO iterations = 4794
+  INFO min_worker_iterations = 2318
+  INFO spin_chunks = 4794
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 19176
+  PERF iterations_per_s = 19050.4 iter/s
+PERF  iso_mutex_n2 (253.0 ms)
+RUN   iso_mutex_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = mutex wait
+  INFO cpus = 28
+  INFO iterations = 22762
+  INFO min_worker_iterations = 1351
+  INFO spin_chunks = 22762
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 91048
+  PERF iterations_per_s = 75186.8 iter/s
+PERF  iso_mutex_n16 (305.2 ms)
+RUN   iso_mutex_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = mutex wait
+  INFO cpus = 28
+  INFO iterations = 27147
+  INFO min_worker_iterations = 411
+  INFO spin_chunks = 27147
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 108588
+  PERF iterations_per_s = 66871.9 iter/s
+PERF  iso_mutex_n64 (412.1 ms)
+RUN   iso_mutex_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = mutex wait
+  INFO cpus = 28
+  INFO iterations = 33339
+  INFO min_worker_iterations = 127
+  INFO spin_chunks = 33339
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 133356
+  PERF iterations_per_s = 64347.5 iter/s
+PERF  iso_mutex_n256 (537.7 ms)
+RUN   iso_mutex_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = mutex wait
+  INFO cpus = 28
+  INFO iterations = 22265
+  INFO min_worker_iterations = 19
+  INFO spin_chunks = 22265
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 89060
+  PERF iterations_per_s = 29298.3 iter/s
+PERF  iso_mutex_n1024 (807.8 ms)
+RUN   iso_semaphore_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = semaphore wait
+  INFO cpus = 28
+  INFO iterations = 4861
+  INFO min_worker_iterations = 2379
+  INFO spin_chunks = 4861
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 19444
+  PERF iterations_per_s = 19331 iter/s
+PERF  iso_semaphore_n2 (252.9 ms)
+RUN   iso_semaphore_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = semaphore wait
+  INFO cpus = 28
+  INFO iterations = 46724
+  INFO min_worker_iterations = 2444
+  INFO spin_chunks = 46724
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 186896
+  PERF iterations_per_s = 154225 iter/s
+PERF  iso_semaphore_n16 (306.5 ms)
+RUN   iso_semaphore_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = semaphore wait
+  INFO cpus = 28
+  INFO iterations = 80802
+  INFO min_worker_iterations = 1214
+  INFO spin_chunks = 80802
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 323208
+  PERF iterations_per_s = 198387 iter/s
+PERF  iso_semaphore_n64 (413.7 ms)
+RUN   iso_semaphore_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = semaphore wait
+  INFO cpus = 28
+  INFO iterations = 86891
+  INFO min_worker_iterations = 264
+  INFO spin_chunks = 86891
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 347564
+  PERF iterations_per_s = 167530 iter/s
+PERF  iso_semaphore_n256 (534.7 ms)
+RUN   iso_semaphore_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = semaphore wait
+  INFO cpus = 28
+  INFO iterations = 87775
+  INFO min_worker_iterations = 1
+  INFO spin_chunks = 87775
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 351100
+  PERF iterations_per_s = 114354 iter/s
+PERF  iso_semaphore_n1024 (824.4 ms)
+RUN   iso_apc_n2
+  INFO apc_runs = 2593
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = SleepEx alertable + APC
+  INFO cpus = 28
+  INFO iterations = 2593
+  INFO min_worker_iterations = 1296
+  INFO spin_chunks = 2593
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 20739
+  PERF iterations_per_s = 8595.91 iter/s
+PERF  iso_apc_n2 (303.3 ms)
+RUN   iso_apc_n16
+  INFO apc_runs = 12787
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = SleepEx alertable + APC
+  INFO cpus = 28
+  INFO iterations = 12787
+  INFO min_worker_iterations = 797
+  INFO spin_chunks = 12787
+  INFO wait_timeouts = 13
+  INFO volatile_regs_changed_by_call = 102231
+  PERF iterations_per_s = 36339.4 iter/s
+PERF  iso_apc_n16 (353.8 ms)
+RUN   iso_apc_n64
+  INFO apc_runs = 57516
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = SleepEx alertable + APC
+  INFO cpus = 28
+  INFO iterations = 57516
+  INFO min_worker_iterations = 896
+  INFO spin_chunks = 57516
+  INFO wait_timeouts = 47
+  INFO volatile_regs_changed_by_call = 459893
+  PERF iterations_per_s = 126499 iter/s
+PERF  iso_apc_n64 (459.1 ms)
+RUN   iso_apc_n256
+  INFO apc_runs = 50667
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = SleepEx alertable + APC
+  INFO cpus = 28
+  INFO iterations = 50667
+  INFO min_worker_iterations = 190
+  INFO spin_chunks = 50667
+  INFO wait_timeouts = 240
+  INFO volatile_regs_changed_by_call = 404136
+  PERF iterations_per_s = 90367.5 iter/s
+PERF  iso_apc_n256 (582.9 ms)
+RUN   iso_apc_n1024
+  INFO apc_runs = 39402
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = SleepEx alertable + APC
+  INFO cpus = 28
+  INFO iterations = 39403
+  INFO min_worker_iterations = 2
+  INFO spin_chunks = 39403
+  INFO wait_timeouts = 2466
+  INFO volatile_regs_changed_by_call = 302894
+  PERF iterations_per_s = 50955.4 iter/s
+PERF  iso_apc_n1024 (841.7 ms)
+RUN   iso_condvar_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = SleepConditionVariableSRW
+  INFO cpus = 28
+  INFO iterations = 2666
+  INFO min_worker_iterations = 1333
+  INFO spin_chunks = 2666
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 10664
+  PERF iterations_per_s = 9820.43 iter/s
+PERF  iso_condvar_n2 (272.9 ms)
+RUN   iso_condvar_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = SleepConditionVariableSRW
+  INFO cpus = 28
+  INFO iterations = 15381
+  INFO min_worker_iterations = 940
+  INFO spin_chunks = 15381
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 61524
+  PERF iterations_per_s = 47724.3 iter/s
+PERF  iso_condvar_n16 (324.8 ms)
+RUN   iso_condvar_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = SleepConditionVariableSRW
+  INFO cpus = 28
+  INFO iterations = 20501
+  INFO min_worker_iterations = 290
+  INFO spin_chunks = 20501
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 82004
+  PERF iterations_per_s = 48273.7 iter/s
+PERF  iso_condvar_n64 (428.6 ms)
+RUN   iso_condvar_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = SleepConditionVariableSRW
+  INFO cpus = 28
+  INFO iterations = 21652
+  INFO min_worker_iterations = 69
+  INFO spin_chunks = 21652
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 86608
+  PERF iterations_per_s = 40883.2 iter/s
+PERF  iso_condvar_n256 (542.2 ms)
+RUN   iso_condvar_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = SleepConditionVariableSRW
+  INFO cpus = 28
+  INFO iterations = 16880
+  INFO min_worker_iterations = 10
+  INFO spin_chunks = 16880
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 67520
+  PERF iterations_per_s = 22355.4 iter/s
+PERF  iso_condvar_n1024 (806.8 ms)
+RUN   iso_srw_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = SRW lock
+  INFO cpus = 28
+  INFO iterations = 5100
+  INFO min_worker_iterations = 2536
+  INFO spin_chunks = 5100
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 20296
+  PERF iterations_per_s = 20269.6 iter/s
+PERF  iso_srw_n2 (252.4 ms)
+RUN   iso_srw_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = SRW lock
+  INFO cpus = 28
+  INFO iterations = 67550
+  INFO min_worker_iterations = 2781
+  INFO spin_chunks = 67550
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 259260
+  PERF iterations_per_s = 223109 iter/s
+PERF  iso_srw_n16 (304.8 ms)
+RUN   iso_srw_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = SRW lock
+  INFO cpus = 28
+  INFO iterations = 60604
+  INFO min_worker_iterations = 882
+  INFO spin_chunks = 60604
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 178184
+  PERF iterations_per_s = 149305 iter/s
+PERF  iso_srw_n64 (411.4 ms)
+RUN   iso_srw_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = SRW lock
+  INFO cpus = 28
+  INFO iterations = 48039
+  INFO min_worker_iterations = 140
+  INFO spin_chunks = 48039
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 145016
+  PERF iterations_per_s = 92326.9 iter/s
+PERF  iso_srw_n256 (535.3 ms)
+RUN   iso_srw_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = SRW lock
+  INFO cpus = 28
+  INFO iterations = 3884
+  INFO min_worker_iterations = 1
+  INFO spin_chunks = 3884
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 12332
+  PERF iterations_per_s = 4643.16 iter/s
+PERF  iso_srw_n1024 (896.3 ms)
+RUN   iso_critsec_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = critical section
+  INFO cpus = 28
+  INFO iterations = 77570
+  INFO min_worker_iterations = 3019
+  INFO spin_chunks = 77570
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 148069
+  PERF iterations_per_s = 256256 iter/s
+PERF  iso_critsec_n16 (304.8 ms)
+RUN   iso_critsec_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = critical section
+  INFO cpus = 28
+  INFO iterations = 91533
+  INFO min_worker_iterations = 301
+  INFO spin_chunks = 91533
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 365643
+  PERF iterations_per_s = 176394 iter/s
+PERF  iso_critsec_n256 (532.8 ms)
+RUN   iso_waitaddr_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = WaitOnAddress
+  INFO cpus = 28
+  INFO iterations = 69757
+  INFO min_worker_iterations = 2865
+  INFO spin_chunks = 69757
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 279028
+  PERF iterations_per_s = 216708 iter/s
+PERF  iso_waitaddr_n16 (323.3 ms)
+RUN   iso_waitaddr_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = WaitOnAddress
+  INFO cpus = 28
+  INFO iterations = 141425
+  INFO min_worker_iterations = 1
+  INFO spin_chunks = 141425
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 565700
+  PERF iterations_per_s = 267834 iter/s
+PERF  iso_waitaddr_n256 (539.3 ms)
+RUN   iso_pipe_ring_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = pipe ReadFile
+  INFO cpus = 28
+  INFO iterations = 4377
+  INFO min_worker_iterations = 2188
+  INFO spin_chunks = 4377
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 21885
+  PERF iterations_per_s = 17398 iter/s
+PERF  iso_pipe_ring_n2 (253.1 ms)
+RUN   iso_pipe_ring_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = pipe ReadFile
+  INFO cpus = 28
+  INFO iterations = 29437
+  INFO min_worker_iterations = 459
+  INFO spin_chunks = 29437
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 147185
+  PERF iterations_per_s = 72499.7 iter/s
+PERF  iso_pipe_ring_n64 (414.7 ms)
+RUN   iso_waitable_timer_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = waitable timer wait
+  INFO cpus = 28
+  INFO iterations = 4343
+  INFO min_worker_iterations = 269
+  INFO spin_chunks = 4343
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 17372
+  PERF iterations_per_s = 14321.1 iter/s
+PERF  iso_waitable_timer_n16 (305.8 ms)
+RUN   iso_wfmo_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = WaitForMultipleObjects
+  INFO cpus = 28
+  INFO iterations = 25759
+  INFO min_worker_iterations = 1609
+  INFO spin_chunks = 25759
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 103036
+  PERF iterations_per_s = 85115.2 iter/s
+PERF  iso_wfmo_n16 (305.0 ms)
+RUN   iso_wfmo_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = WaitForMultipleObjects
+  INFO cpus = 28
+  INFO iterations = 69301
+  INFO min_worker_iterations = 270
+  INFO spin_chunks = 69301
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 277204
+  PERF iterations_per_s = 134486 iter/s
+PERF  iso_wfmo_n256 (540.0 ms)
+RUN   iso_signal_and_wait_n2
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = SignalObjectAndWait
+  INFO cpus = 28
+  INFO iterations = 5632
+  INFO min_worker_iterations = 2816
+  INFO spin_chunks = 5632
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 16896
+  PERF iterations_per_s = 22383.5 iter/s
+PERF  iso_signal_and_wait_n2 (253.1 ms)
+RUN   iso_signal_and_wait_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = SignalObjectAndWait
+  INFO cpus = 28
+  INFO iterations = 73945
+  INFO min_worker_iterations = 1152
+  INFO spin_chunks = 73945
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 221835
+  PERF iterations_per_s = 182221 iter/s
+PERF  iso_signal_and_wait_n64 (413.3 ms)
+RUN   iso_preempt_pin_one_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 317
+  INFO min_worker_iterations = 7
+  INFO spin_chunks = 317
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 1047.05 iter/s
+PERF  iso_preempt_pin_one_n16 (304.9 ms)
+RUN   iso_preempt_pin_one_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 759
+  INFO min_worker_iterations = 1
+  INFO spin_chunks = 759
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 1442.53 iter/s
+PERF  iso_preempt_pin_one_n256 (540.9 ms)
+RUN   iso_preempt_unpinned_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 15322
+  INFO min_worker_iterations = 50
+  INFO spin_chunks = 15322
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 37178.6 iter/s
+PERF  iso_preempt_unpinned_n64 (416.1 ms)
+RUN   iso_preempt_unpinned_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 29220
+  INFO min_worker_iterations = 1
+  INFO spin_chunks = 29220
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 38293.2 iter/s
+PERF  iso_preempt_unpinned_n1024 (831.0 ms)
+RUN   iso_sleep0_pin_one_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 3140
+  INFO min_worker_iterations = 191
+  INFO spin_chunks = 3140
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 10372.5 iter/s
+PERF  iso_sleep0_pin_one_n16 (304.9 ms)
+RUN   iso_sleep0_pin_spread_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 145289
+  INFO min_worker_iterations = 1050
+  INFO spin_chunks = 145289
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 350962 iter/s
+PERF  iso_sleep0_pin_spread_n64 (422.0 ms)
+RUN   iso_switch_pin_one_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = SwitchToThread
+  INFO cpus = 28
+  INFO iterations = 4194
+  INFO min_worker_iterations = 50
+  INFO spin_chunks = 4194
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 10344.5 iter/s
+PERF  iso_switch_pin_one_n64 (412.0 ms)
+RUN   iso_event_ring_pin_one_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = event ring wait
+  INFO cpus = 28
+  INFO iterations = 2803
+  INFO min_worker_iterations = 175
+  INFO spin_chunks = 2803
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 11212
+  PERF iterations_per_s = 9259.08 iter/s
+PERF  iso_event_ring_pin_one_n16 (305.8 ms)
+RUN   iso_migrate_self_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = SetThreadAffinityMask migration
+  INFO cpus = 28
+  INFO iterations = 6843
+  INFO min_worker_iterations = 396
+  INFO spin_chunks = 6843
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 13686
+  PERF iterations_per_s = 22323.1 iter/s
+PERF  iso_migrate_self_n16 (309.5 ms)
+RUN   iso_migrate_self_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = SetThreadAffinityMask migration
+  INFO cpus = 28
+  INFO iterations = 31274
+  INFO min_worker_iterations = 445
+  INFO spin_chunks = 31274
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 62548
+  PERF iterations_per_s = 76922.2 iter/s
+PERF  iso_migrate_self_n64 (413.5 ms)
+RUN   iso_migrate_external_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 40445
+  INFO min_worker_iterations = 2264
+  INFO spin_chunks = 40445
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  INFO external_migrations = 3136
+  PERF iterations_per_s = 134403 iter/s
+PERF  iso_migrate_external_n16 (303.4 ms)
+RUN   iso_migrate_external_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 97387
+  INFO min_worker_iterations = 967
+  INFO spin_chunks = 97387
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  INFO external_migrations = 5696
+  PERF iterations_per_s = 237530 iter/s
+PERF  iso_migrate_external_n64 (416.0 ms)
+RUN   iso_suspend_resume_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 43754
+  INFO min_worker_iterations = 1876
+  INFO spin_chunks = 43754
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  INFO suspend_resume_ops = 13920
+  PERF iterations_per_s = 145327 iter/s
+PERF  iso_suspend_resume_n16 (302.9 ms)
+RUN   iso_suspend_resume_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 114895
+  INFO min_worker_iterations = 571
+  INFO spin_chunks = 114895
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  INFO suspend_resume_ops = 80
+  PERF iterations_per_s = 226732 iter/s
+PERF  iso_suspend_resume_n64 (510.8 ms)
+RUN   iso_suspend_getcontext_n16
+  INFO contexts_captured = 8720
+  INFO contexts_with_own_pattern = 8709
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 42733
+  INFO min_worker_iterations = 1675
+  INFO spin_chunks = 42733
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  INFO suspend_resume_ops = 8720
+  PERF iterations_per_s = 141793 iter/s
+PERF  iso_suspend_getcontext_n16 (303.4 ms)
+RUN   iso_suspend_getcontext_pin_one_n64
+  INFO contexts_captured = 32
+  INFO contexts_with_own_pattern = 11
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 4719
+  INFO min_worker_iterations = 1
+  INFO spin_chunks = 4719
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  INFO suspend_resume_ops = 32
+  PERF iterations_per_s = 6379.34 iter/s
+PERF  iso_suspend_getcontext_pin_one_n64 (743.8 ms)
+RUN   iso_suspend_getcontext_mixed_n64
+  INFO contexts_captured = 64
+  INFO contexts_with_own_pattern = 27
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 106763
+  INFO min_worker_iterations = 368
+  INFO spin_chunks = 106763
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  INFO suspend_resume_ops = 64
+  PERF iterations_per_s = 209264 iter/s
+PERF  iso_suspend_getcontext_mixed_n64 (514.8 ms)
+RUN   iso_preempt_mxcsr_flags_pin_one_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 1865
+  INFO min_worker_iterations = 37
+  INFO spin_chunks = 1865
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 6157.97 iter/s
+PERF  iso_preempt_mxcsr_flags_pin_one_n16 (305.2 ms)
+RUN   iso_preempt_mxcsr_flags_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 116493
+  INFO min_worker_iterations = 1
+  INFO spin_chunks = 116493
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 224501 iter/s
+PERF  iso_preempt_mxcsr_flags_n256 (536.4 ms)
+RUN   iso_apc_waitex_n2
+  INFO apc_runs = 2265
+  INFO workers = 2
+  INFO kind = ymm
+  INFO op = WaitForSingleObjectEx alertable + APC
+  INFO cpus = 28
+  INFO iterations = 2265
+  INFO min_worker_iterations = 1132
+  INFO spin_chunks = 2265
+  INFO wait_timeouts = 1
+  INFO volatile_regs_changed_by_call = 18116
+  PERF iterations_per_s = 7496.57 iter/s
+PERF  iso_apc_waitex_n2 (303.4 ms)
+RUN   iso_apc_waitex_n64
+  INFO apc_runs = 42212
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = WaitForSingleObjectEx alertable + APC
+  INFO cpus = 28
+  INFO iterations = 42212
+  INFO min_worker_iterations = 655
+  INFO spin_chunks = 42212
+  INFO wait_timeouts = 54
+  INFO volatile_regs_changed_by_call = 337480
+  PERF iterations_per_s = 92954.1 iter/s
+PERF  iso_apc_waitex_n64 (458.7 ms)
+RUN   iso_apc_waitex_n1024
+  INFO apc_runs = 42417
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = WaitForSingleObjectEx alertable + APC
+  INFO cpus = 28
+  INFO iterations = 42425
+  INFO min_worker_iterations = 11
+  INFO spin_chunks = 42425
+  INFO wait_timeouts = 2501
+  INFO volatile_regs_changed_by_call = 329396
+  PERF iterations_per_s = 55348.8 iter/s
+PERF  iso_apc_waitex_n1024 (817.0 ms)
+RUN   iso_priority_mix_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 153773
+  INFO min_worker_iterations = 1057
+  INFO spin_chunks = 153773
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 378563 iter/s
+PERF  iso_priority_mix_n64 (410.3 ms)
+RUN   iso_x87_stack_pin_one_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 1935
+  INFO min_worker_iterations = 39
+  INFO spin_chunks = 1935
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 6357.91 iter/s
+PERF  iso_x87_stack_pin_one_n16 (306.4 ms)
+RUN   iso_x87_stack_sleep0_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 186295
+  INFO min_worker_iterations = 183
+  INFO spin_chunks = 186295
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 362476 iter/s
+PERF  iso_x87_stack_sleep0_n256 (535.8 ms)
+RUN   iso_mmx_pin_one_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = preemption only
+  INFO cpus = 28
+  INFO iterations = 1920
+  INFO min_worker_iterations = 38
+  INFO spin_chunks = 1920
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 6346.6 iter/s
+PERF  iso_mmx_pin_one_n16 (305.2 ms)
+RUN   iso_mmx_switch_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = SwitchToThread
+  INFO cpus = 28
+  INFO iterations = 184080
+  INFO min_worker_iterations = 181
+  INFO spin_chunks = 184080
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 357750 iter/s
+PERF  iso_mmx_switch_n256 (535.6 ms)
+RUN   iso_sse_only_upper_lanes_pin_one_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = Sleep(0)
+  INFO cpus = 28
+  INFO iterations = 3050
+  INFO min_worker_iterations = 186
+  INFO spin_chunks = 3050
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 10070.9 iter/s
+PERF  iso_sse_only_upper_lanes_pin_one_n16 (305.5 ms)
+RUN   iso_mixed_regfiles_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = SwitchToThread
+  INFO cpus = 28
+  INFO iterations = 159931
+  INFO min_worker_iterations = 135
+  INFO spin_chunks = 159931
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 0
+  PERF iterations_per_s = 306833 iter/s
+PERF  iso_mixed_regfiles_n256 (541.6 ms)
+RUN   iso_mixed_regfiles_event_ring_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = event ring wait
+  INFO cpus = 28
+  INFO iterations = 55310
+  INFO min_worker_iterations = 863
+  INFO spin_chunks = 55310
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 110628
+  PERF iterations_per_s = 136253 iter/s
+PERF  iso_mixed_regfiles_event_ring_n64 (413.0 ms)
+RUN   barrier_syncbarrier_n16
+  INFO workers = 16
+  INFO kind = ymm
+  INFO op = EnterSynchronizationBarrier
+  INFO cpus = 28
+  INFO iterations = 4800
+  INFO min_worker_iterations = 300
+  INFO spin_chunks = 4800
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 1411
+  PERF iterations_per_s = 459023 iter/s
+PERF  barrier_syncbarrier_n16 (13.1 ms)
+RUN   barrier_syncbarrier_n64
+  INFO workers = 64
+  INFO kind = ymm
+  INFO op = EnterSynchronizationBarrier
+  INFO cpus = 28
+  INFO iterations = 7680
+  INFO min_worker_iterations = 120
+  INFO spin_chunks = 7680
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 15840
+  PERF iterations_per_s = 88524 iter/s
+PERF  barrier_syncbarrier_n64 (92.1 ms)
+RUN   barrier_custom_n256
+  INFO workers = 256
+  INFO kind = ymm
+  INFO op = SRW/condvar barrier
+  INFO cpus = 28
+  INFO iterations = 10240
+  INFO min_worker_iterations = 40
+  INFO spin_chunks = 10240
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 40960
+  PERF iterations_per_s = 78314.2 iter/s
+PERF  barrier_custom_n256 (149.6 ms)
+RUN   barrier_custom_n1024
+  INFO workers = 1024
+  INFO kind = ymm
+  INFO op = SRW/condvar barrier
+  INFO cpus = 28
+  INFO iterations = 12288
+  INFO min_worker_iterations = 12
+  INFO spin_chunks = 12288
+  INFO wait_timeouts = 0
+  INFO volatile_regs_changed_by_call = 49152
+  PERF iterations_per_s = 15050.2 iter/s
+PERF  barrier_custom_n1024 (873.1 ms)
+RUN   tp_work_default_pool
+  INFO kind = ymm
+  INFO callbacks = 2000
+  PERF callbacks_per_s = 44502.9 cb/s
+PERF  tp_work_default_pool (46.2 ms)
+RUN   tp_work_private_pool_max4
+  INFO kind = ymm
+  INFO callbacks = 1000
+  PERF callbacks_per_s = 39909.8 cb/s
+PERF  tp_work_private_pool_max4 (26.2 ms)
+RUN   tp_try_submit_callback
+  INFO kind = ymm
+  INFO callbacks = 1000
+  PERF callbacks_per_s = 36654.9 cb/s
+PERF  tp_try_submit_callback (28.1 ms)
+RUN   tp_queue_user_work_item
+  INFO kind = ymm
+  INFO callbacks = 1000
+  PERF callbacks_per_s = 33734 cb/s
+PERF  tp_queue_user_work_item (30.3 ms)
+RUN   tp_queue_user_work_item_long
+  INFO kind = ymm
+  INFO callbacks = 256
+  PERF callbacks_per_s = 41366.4 cb/s
+PERF  tp_queue_user_work_item_long (6.8 ms)
+RUN   tp_timer_periodic
+  INFO kind = ymm
+  INFO callbacks = 100
+  PERF callbacks_per_s = 998.063 cb/s
+PERF  tp_timer_periodic (101.0 ms)
+RUN   tp_wait_rearm
+  INFO kind = ymm
+  INFO callbacks = 200
+  PERF callbacks_per_s = 934.53 cb/s
+PERF  tp_wait_rearm (215.2 ms)
+RUN   tp_register_wait
+  INFO kind = ymm
+  INFO callbacks = 200
+  PERF callbacks_per_s = 944.524 cb/s
+PERF  tp_register_wait (212.8 ms)
+RUN   info_upper_lanes_across_sleep0
+  INFO kind = ymm
+  INFO upper_kept = 1600
+  INFO upper_zeroed = 0
+  INFO upper_other = 0
+PASS  info_upper_lanes_across_sleep0 (0.3 ms)
+RUN   info_apc_dirty_fp_env
+  INFO mxcsr_after_dirty_apc = 0x7f80 (APC value kept)
+  INFO fcw_after_dirty_apc = 0x0c7f (APC value kept)
+PASS  info_apc_dirty_fp_env (0.2 ms)
+SUMMARY exe=thread_xstate arch=x86 total=106 pass=10 fail=0 crash=0 skip=1 xfail=0 perf=95 checks=29030 checks_failed=0 exit=0

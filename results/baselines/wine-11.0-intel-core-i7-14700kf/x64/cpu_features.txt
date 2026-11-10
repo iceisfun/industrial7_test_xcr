@@ -1,0 +1,471 @@
+wineserver: using server-side synchronization.
+ENV   exe=cpu_features arch=x64 wow64=0 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+RUN   cpuid_eflags_id
+PASS  cpuid_eflags_id (0.0 ms)
+RUN   leaf0_vendor_and_max
+  INFO vendor = GenuineIntel
+  INFO max_basic = 0x20
+PASS  leaf0_vendor_and_max (0.2 ms)
+RUN   leaf_beyond_max_basic_info
+  INFO beyond_max = 00000000 00000001 00000000 00000000
+  INFO leaf_3fffffff = 00000000 00000001 00000000 00000000
+PASS  leaf_beyond_max_basic_info (0.2 ms)
+RUN   leaf1_signature_decode
+  INFO signature = 0x000b0671 family=0x6 model=0xb7 stepping=1 type=0
+PASS  leaf1_signature_decode (0.1 ms)
+RUN   leaf1_ebx_fields
+  INFO clflush_line = 64
+  INFO max_logical_ids = 128 (HTT=1)
+  INFO initial_apic_id = 48
+  INFO brand_index = 0
+PASS  leaf1_ebx_fields (0.2 ms)
+RUN   leaf1_mandatory_baseline
+PASS  leaf1_mandatory_baseline (0.0 ms)
+RUN   feature_implications_architectural
+PASS  feature_implications_architectural (0.0 ms)
+RUN   feature_implications_conventional
+  INFO unusual_combinations = 0
+PASS  feature_implications_conventional (0.1 ms)
+RUN   feature_table_and_gates
+  INFO features_hw = fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand fsgsbase bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha umip pku ospke waitpkg cet_ss gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid cet_ibt avx_vnni hreset xsaveopt xsavec xgetbv1 xsaves lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+  INFO features_usable = fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+  INFO counts = hw=71 usable=62
+PASS  feature_table_and_gates (1.8 ms)
+RUN   leaf2_descriptors
+  INFO descriptors = ff fe f0 
+PASS  leaf2_descriptors (0.1 ms)
+RUN   leaf4_cache_parameters
+  INFO data = L1 48 KB line 64 ways 12 sets 64 shared_by<=2
+  INFO instr = L1 32 KB line 64 ways 8 sets 64 shared_by<=2
+  INFO unified = L2 2048 KB line 64 ways 16 sets 2048 shared_by<=8
+  INFO unified = L3 33792 KB line 64 ways 11 sets 49152 shared_by<=128
+  INFO source = leaf4
+PASS  leaf4_cache_parameters (0.6 ms)
+RUN   cache_line_consistency
+  INFO l2_line_80000006 = 64
+  INFO l1d_line = 64
+PASS  cache_line_consistency (0.1 ms)
+RUN   logical_processor_counts
+  INFO topology = packages=1 cores=20 logical=28 smt=0 max_per_package=28
+PASS  logical_processor_counts (0.1 ms)
+RUN   leaf6_thermal_power_info
+  INFO leaf6 = eax=00dfcff7 ebx=00000002 ecx=00000401 edx=00060003
+  INFO turbo = 1
+  INFO arat = 1
+  INFO hwp = 1
+  INFO hw_feedback = 1
+  INFO thread_director = 1
+PASS  leaf6_thermal_power_info (0.3 ms)
+RUN   leaf7_subleaves
+  INFO max_subleaf = 2
+  INFO sub0 = 00000002 239c27eb 98c007bc fc18c410
+  INFO sub1 = 00400810 00000000 00000000 00040000
+  INFO sub2 = 00000000 00000000 00000000 0000009f
+PASS  leaf7_subleaves (0.3 ms)
+RUN   leaf0b_1f_topology
+  INFO leafb_level0 = type=1 shift=1 logical=2
+  INFO leafb_level1 = type=2 shift=7 logical=28
+  INFO leaf1f_level0 = type=1 shift=1 logical=2
+  INFO leaf1f_level1 = type=2 shift=7 logical=28
+PASS  leaf0b_1f_topology (0.5 ms)
+RUN   leaf14_15_16_1a_info
+  INFO pt_leaf14 = 00000001 0000005f 00000007 00000000
+  INFO tsc_ratio = den=2 num=178 crystal_hz=38400000
+  INFO tsc_hz = 3417600000
+  INFO freq_mhz = base=3400 max=5600 bus=100
+  INFO core_type = 0x40 native_model=0x1
+PASS  leaf14_15_16_1a_info (0.5 ms)
+RUN   leafd_main
+  INFO xcr0_supported = 0x207
+  INFO xss_supported = 0x19900
+  INFO sizes = enabled=2696 max=2696
+PASS  leafd_main (0.2 ms)
+RUN   leafd_subleaf1
+  INFO sub1_eax = 0x0000000f xsaveopt=1 xsavec=1 xgetbv1=1 xsaves=1 xfd=0
+  INFO inferred_xss = 0x8800 (first matching subset)
+  INFO compacted_size = ebx=1664 xcr0_only=840
+PASS  leafd_subleaf1 (0.4 ms)
+RUN   leafd_components
+  INFO comp2_avx = size=256 offset=576 user 
+  INFO comp8_pt = size=128 offset=0 supervisor 
+  INFO comp9_pkru = size=8 offset=2688 user 
+  INFO comp11_cet_u = size=16 offset=0 supervisor 
+  INFO comp12_cet_s = size=24 offset=0 supervisor 
+  INFO comp15_lbr = size=808 offset=0 supervisor 
+  INFO comp16_hwp = size=8 offset=0 supervisor 
+PASS  leafd_components (0.8 ms)
+RUN   leafd_invalid_subleaves_32_63
+PASS  leafd_invalid_subleaves_32_63 (0.0 ms)
+RUN   xcr0_architectural_rules
+  INFO xcr0 = 0x207
+  INFO GetEnabledXStateFeatures = 0x7
+  NOTE GetEnabledXStateFeatures 0x7 does not cover XCR0 0x207 (judged in xstate_windows)
+PASS  xcr0_architectural_rules (0.3 ms)
+RUN   osxsave_xgetbv_usable
+  INFO xinuse = 0x203
+PASS  osxsave_xgetbv_usable (7.1 ms)
+RUN   xgetbv_invalid_index_faults
+  INFO exception = XGETBV(ECX=0x7fffffff) exc=0xc0000005 exit=0xc0000005
+PASS  xgetbv_invalid_index_faults (10.0 ms)
+RUN   xsetbv_cpl3_faults
+  INFO exception = 0xc0000005
+  NOTE XSETBV #GP reported as STATUS_ACCESS_VIOLATION (Windows reports STATUS_PRIVILEGED_INSTRUCTION for privileged opcodes)
+PASS  xsetbv_cpl3_faults (9.7 ms)
+RUN   avx_state_gating
+  INFO ymm = enabled
+PASS  avx_state_gating (0.1 ms)
+RUN   ext_max_leaf
+  INFO max_ext = 0x80000008
+PASS  ext_max_leaf (0.1 ms)
+RUN   ext_80000001_features
+  INFO e1 = eax=00000000 ebx=00000000 ecx=00000121 edx=2c100800
+  INFO syscall_bit = 1 (Intel reports it only when CPUID executes in 64-bit mode)
+PASS  ext_80000001_features (0.3 ms)
+RUN   ext_brand_string
+  INFO brand = Intel(R) Core(TM) i7-14700KF
+  INFO reg_name = Intel(R) Core(TM) i7-14700KF
+  INFO reg_vendor = GenuineIntel
+  INFO reg_identifier = Intel64 Family 6 Model 183 Stepping 1
+  INFO reg_mhz = 3418
+PASS  ext_brand_string (0.5 ms)
+RUN   ext_80000008_address_sizes
+  INFO address_bits = physical=39 linear=48 guest_phys=0
+  INFO max_app_address = 0x7ffffffeffff
+PASS  ext_80000008_address_sizes (0.2 ms)
+RUN   ext_cache_tsc_leaves_info
+  INFO e5 = 00000000 00000000 00000000 00000000
+  INFO l2 = 2048 KB line 64
+  INFO invariant_tsc = 1
+PASS  ext_cache_tsc_leaves_info (0.2 ms)
+RUN   hypervisor_leaves_info
+  INFO hypervisor_bit = 0
+  INFO leaf40000000_without_hv = 00000000 00000001 00000000 00000000
+PASS  hypervisor_leaves_info (0.2 ms)
+RUN   cpuid_stable_repeated
+  INFO entries = 75
+PASS  cpuid_stable_repeated (4.5 ms)
+RUN   cpuid_consistent_across_threads
+  INFO threads = 16
+PASS  cpuid_consistent_across_threads (17.7 ms)
+RUN   cpuid_consistent_across_cpus
+  INFO tsc_aux_cpu0 = 0x0
+  INFO tsc_aux_cpu1 = 0x1
+  INFO tsc_aux_cpu2 = 0x2
+  INFO tsc_aux_cpu3 = 0x3
+  INFO cpus_checked = 28
+  INFO core_types = 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 20 20 20 20 20 20 20 20 20 20 20 20 
+PASS  cpuid_consistent_across_cpus (11.2 ms)
+RUN   exec_probes_on_every_cpu
+  INFO runs = 1288 probes on 28 CPUs
+PASS  exec_probes_on_every_cpu (20.4 ms)
+RUN   cpuid_same_in_child_process
+  INFO snapshot = l1c.l1d.l7b.l7c.l7d.l71a.ld0a.ld0b.ld0c.ld1a.e1c.e1d.xcr0.pf = 7ffafbbf.bfebfbff.239c27eb.98c007bc.fc18c410.00400810.00000207.00000a88.00000a88.0000000f.00000121.2c100800.0000000000000207.300005f310e27f4c
+PASS  cpuid_same_in_child_process (10.9 ms)
+RUN   cpuid_flat_leaves_ignore_ecx
+PASS  cpuid_flat_leaves_ignore_ecx (0.2 ms)
+RUN   leaf1d_1e_amx_tile_info
+  SKIP AMX-TILE not advertised
+SKIP  leaf1d_1e_amx_tile_info (0.1 ms): AMX-TILE not advertised
+RUN   leaf24_avx10_info
+  SKIP AVX10 not advertised
+SKIP  leaf24_avx10_info (0.1 ms): AVX10 not advertised
+RUN   mxcsr_mask_consistency
+  INFO mxcsr_mask = 0x0000ffff
+PASS  mxcsr_mask_consistency (0.1 ms)
+RUN   glpi_ex_topology_consistency
+  INFO glpi_ex = cores=20 packages=1 logical=28 efficiency_classes=2
+PASS  glpi_ex_topology_consistency (0.3 ms)
+RUN   pf_out_of_range_and_stable
+  INFO pf_present = 2 3 6 8 9 10 11 12 13 14 17 21 22 23 28 32 33 36 37 38 39 40 42 60 61 
+PASS  pf_out_of_range_and_stable (0.4 ms)
+RUN   pf_non_x86_constants_zero
+PASS  pf_non_x86_constants_zero (0.0 ms)
+RUN   pf00_precision_errata
+  INFO pf0 = 0
+PASS  pf00_precision_errata (0.1 ms)
+RUN   pf01_fp_emulated
+PASS  pf01_fp_emulated (0.0 ms)
+RUN   pf02_cmpxchg8b
+  INFO PF_COMPARE_EXCHANGE_DOUBLE = pf=1 cpu=1
+PASS  pf02_cmpxchg8b (0.2 ms)
+RUN   pf03_mmx
+  INFO PF_MMX_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf03_mmx (0.2 ms)
+RUN   pf06_xmmi_sse
+  INFO PF_XMMI_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf06_xmmi_sse (0.2 ms)
+RUN   pf07_3dnow
+  INFO PF_3DNOW_INSTRUCTIONS_AVAILABLE = pf=0 cpu=0
+PASS  pf07_3dnow (0.2 ms)
+RUN   pf08_rdtsc
+  INFO PF_RDTSC_INSTRUCTION_AVAILABLE = pf=1 cpu=1
+PASS  pf08_rdtsc (0.2 ms)
+RUN   pf09_pae
+  INFO PF_PAE_ENABLED = pf=1 cpu=1
+PASS  pf09_pae (0.1 ms)
+RUN   pf10_xmmi64_sse2
+  INFO PF_XMMI64_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf10_xmmi64_sse2 (0.1 ms)
+RUN   pf11_sse_daz
+  INFO PF_SSE_DAZ_MODE_AVAILABLE = pf=1 cpu=1
+PASS  pf11_sse_daz (0.1 ms)
+RUN   pf12_nx
+  INFO PF_NX_ENABLED = pf=1 cpu=1
+PASS  pf12_nx (0.1 ms)
+RUN   pf13_sse3
+  INFO PF_SSE3_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf13_sse3 (0.1 ms)
+RUN   pf14_cmpxchg16b
+  INFO PF_COMPARE_EXCHANGE128 = pf=1 cpu=1
+PASS  pf14_cmpxchg16b (0.1 ms)
+RUN   pf17_xsave
+  INFO pf17 = 1 osxsave=1
+PASS  pf17_xsave (0.1 ms)
+RUN   pf20_21_virt_info
+  INFO PF_SECOND_LEVEL_ADDRESS_TRANSLATION = 0
+  INFO PF_VIRT_FIRMWARE_ENABLED = 1
+  INFO PF_CHANNELS_ENABLED = 0
+PASS  pf20_21_virt_info (0.3 ms)
+RUN   pf22_rdwrfsgsbase
+  INFO PF_RDWRFSGSBASE_AVAILABLE = pf=1 cpu=1
+  INFO rdgsbase_child = exit=0x0 exc=0x0
+PASS  pf22_rdwrfsgsbase (11.9 ms)
+RUN   pf23_fastfail
+  INFO PF_FASTFAIL_AVAILABLE = 1
+PASS  pf23_fastfail (12.7 ms)
+RUN   pf28_rdrand
+  INFO PF_RDRAND_INSTRUCTION_AVAILABLE = pf=1 cpu=1
+PASS  pf28_rdrand (0.1 ms)
+RUN   pf32_rdtscp
+  INFO PF_RDTSCP_INSTRUCTION_AVAILABLE = pf=1 cpu=1
+PASS  pf32_rdtscp (0.2 ms)
+RUN   pf33_rdpid
+  INFO PF_RDPID_INSTRUCTION_AVAILABLE = pf=1 cpu=1
+PASS  pf33_rdpid (0.3 ms)
+RUN   pf35_monitorx
+  INFO PF_MONITORX_INSTRUCTION_AVAILABLE = pf=0 cpu=0
+PASS  pf35_monitorx (0.1 ms)
+RUN   pf36_ssse3
+  INFO PF_SSSE3_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf36_ssse3 (0.1 ms)
+RUN   pf37_sse41
+  INFO PF_SSE4_1_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf37_sse41 (0.1 ms)
+RUN   pf38_sse42
+  INFO PF_SSE4_2_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf38_sse42 (0.1 ms)
+RUN   pf39_avx
+  INFO PF_AVX_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf39_avx (0.1 ms)
+RUN   pf40_avx2
+  INFO PF_AVX2_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf40_avx2 (0.1 ms)
+RUN   pf41_avx512f
+  INFO PF_AVX512F_INSTRUCTIONS_AVAILABLE = pf=0 cpu=0
+PASS  pf41_avx512f (0.1 ms)
+RUN   pf42_erms
+  INFO PF_ERMS_AVAILABLE = pf=1 cpu=1
+PASS  pf42_erms (0.1 ms)
+RUN   pf60_bmi2
+  INFO PF_BMI2_INSTRUCTIONS_AVAILABLE = pf=1 cpu=1
+PASS  pf60_bmi2 (0.1 ms)
+RUN   pf61_movdir64b
+  INFO PF_MOVDIR64B_INSTRUCTION_AVAILABLE = pf=1 cpu=1
+PASS  pf61_movdir64b (0.1 ms)
+RUN   system_info_processor
+  INFO level_revision = level=6 revision=0xb701 type=8664
+  INFO native_arch = 9
+PASS  system_info_processor (0.2 ms)
+RUN   exec_fpu
+PASS  exec_fpu (0.0 ms)
+RUN   exec_tsc
+PASS  exec_tsc (0.0 ms)
+RUN   exec_cx8
+PASS  exec_cx8 (0.0 ms)
+RUN   exec_cmov
+PASS  exec_cmov (0.0 ms)
+RUN   exec_clflush
+PASS  exec_clflush (0.0 ms)
+RUN   exec_mmx
+PASS  exec_mmx (0.0 ms)
+RUN   exec_fxsr
+PASS  exec_fxsr (0.0 ms)
+RUN   exec_sse1
+PASS  exec_sse1 (0.0 ms)
+RUN   exec_sse2
+PASS  exec_sse2 (0.0 ms)
+RUN   exec_sse3
+PASS  exec_sse3 (0.0 ms)
+RUN   exec_ssse3
+PASS  exec_ssse3 (0.0 ms)
+RUN   exec_sse41
+PASS  exec_sse41 (0.0 ms)
+RUN   exec_sse42
+PASS  exec_sse42 (0.0 ms)
+RUN   exec_popcnt
+PASS  exec_popcnt (0.0 ms)
+RUN   exec_lzcnt
+PASS  exec_lzcnt (0.0 ms)
+RUN   exec_aes
+PASS  exec_aes (0.0 ms)
+RUN   exec_pclmulqdq
+PASS  exec_pclmulqdq (0.0 ms)
+RUN   exec_sha
+PASS  exec_sha (0.0 ms)
+RUN   exec_xsave
+PASS  exec_xsave (0.0 ms)
+RUN   exec_xsaveopt
+PASS  exec_xsaveopt (0.0 ms)
+RUN   exec_xsavec
+PASS  exec_xsavec (0.0 ms)
+RUN   exec_xgetbv1
+PASS  exec_xgetbv1 (0.0 ms)
+RUN   exec_avx1
+PASS  exec_avx1 (0.0 ms)
+RUN   exec_avx2
+PASS  exec_avx2 (0.0 ms)
+RUN   exec_fma
+PASS  exec_fma (0.0 ms)
+RUN   exec_f16c
+PASS  exec_f16c (0.0 ms)
+RUN   exec_bmi1
+PASS  exec_bmi1 (0.0 ms)
+RUN   exec_bmi2
+PASS  exec_bmi2 (0.0 ms)
+RUN   exec_adx
+PASS  exec_adx (0.0 ms)
+RUN   exec_movbe
+PASS  exec_movbe (0.0 ms)
+RUN   exec_rdrand
+PASS  exec_rdrand (0.0 ms)
+RUN   exec_rdseed
+PASS  exec_rdseed (0.0 ms)
+RUN   exec_rdtscp
+PASS  exec_rdtscp (0.0 ms)
+RUN   exec_rdpid
+PASS  exec_rdpid (0.0 ms)
+RUN   exec_cx16
+PASS  exec_cx16 (0.0 ms)
+RUN   exec_lahf_lm
+PASS  exec_lahf_lm (0.0 ms)
+RUN   exec_gfni
+PASS  exec_gfni (0.0 ms)
+RUN   exec_vaes
+PASS  exec_vaes (0.0 ms)
+RUN   exec_vpclmulqdq
+PASS  exec_vpclmulqdq (0.0 ms)
+RUN   exec_avx_vnni
+PASS  exec_avx_vnni (0.0 ms)
+RUN   exec_avx512f
+  SKIP CPUID does not advertise avx512f
+SKIP  exec_avx512f (0.1 ms): CPUID does not advertise avx512f
+RUN   exec_avx512bw
+  SKIP CPUID does not advertise avx512bw
+SKIP  exec_avx512bw (0.1 ms): CPUID does not advertise avx512bw
+RUN   exec_avx512dq
+  SKIP CPUID does not advertise avx512dq
+SKIP  exec_avx512dq (0.1 ms): CPUID does not advertise avx512dq
+RUN   exec_avx512vl
+  SKIP CPUID does not advertise avx512vl
+SKIP  exec_avx512vl (0.1 ms): CPUID does not advertise avx512vl
+RUN   exec_avx512cd
+  SKIP CPUID does not advertise avx512cd
+SKIP  exec_avx512cd (0.1 ms): CPUID does not advertise avx512cd
+RUN   exec_avx512vpopcntdq
+  SKIP CPUID does not advertise avx512vpopcntdq
+SKIP  exec_avx512vpopcntdq (0.1 ms): CPUID does not advertise avx512vpopcntdq
+RUN   exec_avx512vnni
+  SKIP CPUID does not advertise avx512vnni
+SKIP  exec_avx512vnni (0.1 ms): CPUID does not advertise avx512vnni
+RUN   exec_avx512vbmi
+  SKIP CPUID does not advertise avx512vbmi
+SKIP  exec_avx512vbmi (0.1 ms): CPUID does not advertise avx512vbmi
+RUN   exec_clflushopt
+PASS  exec_clflushopt (0.0 ms)
+RUN   exec_clwb
+PASS  exec_clwb (0.0 ms)
+RUN   exec_serialize
+PASS  exec_serialize (0.0 ms)
+RUN   exec_movdiri
+PASS  exec_movdiri (0.0 ms)
+RUN   exec_pku
+PASS  exec_pku (0.0 ms)
+RUN   exec_prefetchw
+PASS  exec_prefetchw (0.0 ms)
+RUN   exec_erms
+PASS  exec_erms (0.0 ms)
+RUN   exec_clzero
+  SKIP CPUID does not advertise clzero
+SKIP  exec_clzero (0.1 ms): CPUID does not advertise clzero
+RUN   exec_3dnow
+  SKIP CPUID does not advertise 3dnow
+SKIP  exec_3dnow (0.1 ms): CPUID does not advertise 3dnow
+RUN   exec_movdir64b
+PASS  exec_movdir64b (0.0 ms)
+RUN   exec_waitpkg
+PASS  exec_waitpkg (0.0 ms)
+RUN   exec_sse4a
+  SKIP CPUID does not advertise sse4a
+SKIP  exec_sse4a (0.1 ms): CPUID does not advertise sse4a
+RUN   exec_fma4
+  SKIP CPUID does not advertise fma4
+SKIP  exec_fma4 (0.1 ms): CPUID does not advertise fma4
+RUN   exec_xop
+  SKIP CPUID does not advertise xop
+SKIP  exec_xop (0.1 ms): CPUID does not advertise xop
+RUN   exec_tbm
+  SKIP CPUID does not advertise tbm
+SKIP  exec_tbm (0.1 ms): CPUID does not advertise tbm
+RUN   exec_avx512ifma
+  SKIP CPUID does not advertise avx512ifma
+SKIP  exec_avx512ifma (0.1 ms): CPUID does not advertise avx512ifma
+RUN   exec_avx512vbmi2
+  SKIP CPUID does not advertise avx512vbmi2
+SKIP  exec_avx512vbmi2 (0.1 ms): CPUID does not advertise avx512vbmi2
+RUN   exec_avx512bitalg
+  SKIP CPUID does not advertise avx512bitalg
+SKIP  exec_avx512bitalg (0.1 ms): CPUID does not advertise avx512bitalg
+RUN   exec_avx512bf16
+  SKIP CPUID does not advertise avx512bf16
+SKIP  exec_avx512bf16 (0.1 ms): CPUID does not advertise avx512bf16
+RUN   exec_avx512fp16
+  SKIP CPUID does not advertise avx512fp16
+SKIP  exec_avx512fp16 (0.1 ms): CPUID does not advertise avx512fp16
+RUN   exec_avx_ifma
+  SKIP CPUID does not advertise avx_ifma
+SKIP  exec_avx_ifma (0.1 ms): CPUID does not advertise avx_ifma
+RUN   exec_avx_vnni_int8
+  SKIP CPUID does not advertise avx_vnni_int8
+SKIP  exec_avx_vnni_int8 (0.1 ms): CPUID does not advertise avx_vnni_int8
+RUN   exec_cmpccxadd
+  SKIP CPUID does not advertise cmpccxadd
+SKIP  exec_cmpccxadd (0.1 ms): CPUID does not advertise cmpccxadd
+RUN   unadvertised_probe_survey
+  INFO unadvertised_avx512f = #UD
+  INFO unadvertised_avx512bw = #UD
+  INFO unadvertised_avx512dq = #UD
+  INFO unadvertised_avx512vl = #UD
+  INFO unadvertised_avx512cd = #UD
+  INFO unadvertised_avx512vpopcntdq = #UD
+  INFO unadvertised_avx512vnni = #UD
+  INFO unadvertised_avx512vbmi = #UD
+  INFO unadvertised_clzero = #UD
+  INFO unadvertised_3dnow = #UD
+  INFO unadvertised_sse4a = #UD
+  INFO unadvertised_fma4 = #UD
+  INFO unadvertised_xop = #UD
+  INFO unadvertised_tbm = #UD
+  INFO unadvertised_avx512ifma = #UD
+  INFO unadvertised_avx512vbmi2 = #UD
+  INFO unadvertised_avx512bitalg = #UD
+  INFO unadvertised_avx512bf16 = #UD
+  INFO unadvertised_avx512fp16 = #UD
+  INFO unadvertised_avx_ifma = #UD
+  INFO unadvertised_avx_vnni_int8 = #UD
+  INFO unadvertised_cmpccxadd = #UD
+  INFO survey = 22 probes: 22 #UD, 0 executed
+PASS  unadvertised_probe_survey (224.2 ms)
+SUMMARY exe=cpu_features arch=x64 total=147 pass=123 fail=0 crash=0 skip=24 xfail=0 perf=0 checks=2445 checks_failed=0 exit=0

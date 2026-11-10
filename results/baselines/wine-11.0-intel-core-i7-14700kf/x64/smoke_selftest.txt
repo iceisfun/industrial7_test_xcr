@@ -1,0 +1,48 @@
+wineserver: using server-side synchronization.
+ENV   exe=smoke_selftest arch=x64 wow64=0 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+RUN   harness_result_kinds
+PASS  harness_result_kinds (52.5 ms)
+RUN   harness_list_and_cli
+PASS  harness_list_and_cli (84.1 ms)
+RUN   child_exit_code
+PASS  child_exit_code (9.6 ms)
+RUN   child_output_capture
+PASS  child_output_capture (10.1 ms)
+RUN   child_access_violation
+PASS  child_access_violation (7.5 ms)
+RUN   child_illegal_instruction
+PASS  child_illegal_instruction (7.9 ms)
+RUN   child_timeout_kill
+PASS  child_timeout_kill (1504.2 ms)
+RUN   child_unknown_name
+PASS  child_unknown_name (11.9 ms)
+RUN   prng_and_pattern_reference
+PASS  prng_and_pattern_reference (0.0 ms)
+RUN   stats_and_timing
+PASS  stats_and_timing (20.2 ms)
+RUN   cpuid_gating_consistency
+  INFO cpuid_entries = 75
+PASS  cpuid_gating_consistency (0.1 ms)
+RUN   vregs_xmm_roundtrip
+PASS  vregs_xmm_roundtrip (0.0 ms)
+RUN   vregs_ymm_roundtrip
+PASS  vregs_ymm_roundtrip (0.0 ms)
+RUN   vregs_zmm_roundtrip
+  SKIP AVX-512F not usable
+SKIP  vregs_zmm_roundtrip (0.1 ms): AVX-512F not usable
+RUN   x87_mmx_roundtrip
+PASS  x87_mmx_roundtrip (0.0 ms)
+RUN   fxsave_xsave_wrappers
+PASS  fxsave_xsave_wrappers (0.0 ms)
+RUN   env_recorder
+  INFO GetEnabledXStateFeatures = 0x7
+  INFO wine = 11.0
+PASS  env_recorder (0.1 ms)
+RUN   util_helpers
+PASS  util_helpers (10.6 ms)
+RUN   harness_fatal_paths
+PASS  harness_fatal_paths (1064.1 ms)
+SUMMARY exe=smoke_selftest arch=x64 total=19 pass=18 fail=0 crash=0 skip=1 xfail=0 perf=0 checks=430 checks_failed=0 exit=0

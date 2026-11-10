@@ -1,0 +1,424 @@
+wineserver: using server-side synchronization.
+ENV   exe=ymm_registers arch=x64 wow64=0 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+RUN   ymm_gate_state
+  INFO cpuid_avx = 1
+  INFO cpuid_avx2 = 1
+  INFO osxsave = 1
+  INFO xcr0 = 0x207
+  INFO avx_xsave_offset = 576
+PASS  ymm_gate_state (0.4 ms)
+RUN   ymm_api_reporting
+  INFO GetEnabledXStateFeatures = 0x7
+  INFO pf_avx = 1
+  INFO pf_avx2 = 1
+PASS  ymm_api_reporting (0.3 ms)
+RUN   ymm_vex_faults_when_avx_disabled
+  SKIP AVX state is enabled here; the #UD path is only reachable when XCR0[2:1] != 11b or AVX is absent
+SKIP  ymm_vex_faults_when_avx_disabled (0.3 ms): AVX state is enabled here; the #UD path is only reachable when XCR0[2:1] != 11b or AVX is absent
+RUN   ymm_register_count
+PASS  ymm_register_count (0.0 ms)
+RUN   ymm_roundtrip_vmovdqu
+PASS  ymm_roundtrip_vmovdqu (0.0 ms)
+RUN   ymm_roundtrip_vmovdqa_aligned
+PASS  ymm_roundtrip_vmovdqa_aligned (0.0 ms)
+RUN   ymm_roundtrip_fp_moves
+PASS  ymm_roundtrip_fp_moves (0.0 ms)
+RUN   ymm_roundtrip_unaligned_offsets
+PASS  ymm_roundtrip_unaligned_offsets (0.1 ms)
+RUN   ymm_load_ending_at_guard_page
+PASS  ymm_load_ending_at_guard_page (0.0 ms)
+RUN   ymm_rotate_register_moves
+PASS  ymm_rotate_register_moves (0.0 ms)
+RUN   ymm_perreg_vxorps256_zeroes_only_target
+PASS  ymm_perreg_vxorps256_zeroes_only_target (0.0 ms)
+RUN   ymm_perreg_vex128_move_zeroes_upper
+PASS  ymm_perreg_vex128_move_zeroes_upper (0.0 ms)
+RUN   ymm_perreg_vex128_vpxor_zeroes_all
+PASS  ymm_perreg_vex128_vpxor_zeroes_all (0.0 ms)
+RUN   ymm_perreg_vex128_vpcmpeqd_ones_upper0
+PASS  ymm_perreg_vex128_vpcmpeqd_ones_upper0 (0.0 ms)
+RUN   ymm_perreg_legacy_movdqa_keeps_upper
+PASS  ymm_perreg_legacy_movdqa_keeps_upper (0.0 ms)
+RUN   ymm_perreg_legacy_pxor_keeps_upper
+PASS  ymm_perreg_legacy_pxor_keeps_upper (0.0 ms)
+RUN   ymm_perreg_legacy_pcmpeqd_keeps_upper
+PASS  ymm_perreg_legacy_pcmpeqd_keeps_upper (0.0 ms)
+RUN   ymm_perreg_vextractf128_reg_zeroes_upper
+PASS  ymm_perreg_vextractf128_reg_zeroes_upper (0.0 ms)
+RUN   ymm_legacy_sse_ops_preserve_upper
+  INFO upper_kept = 8
+  INFO upper_zero = 0
+PASS  ymm_legacy_sse_ops_preserve_upper (0.2 ms)
+RUN   ymm_vex128_ops_zero_upper
+  INFO upper_kept = 1
+  INFO upper_zero = 7
+PASS  ymm_vex128_ops_zero_upper (0.2 ms)
+RUN   ymm_legacy_sse_idioms_cvt_preserve_upper
+  INFO upper_kept = 8
+  INFO upper_zero = 0
+PASS  ymm_legacy_sse_idioms_cvt_preserve_upper (0.2 ms)
+RUN   ymm_vex128_idioms_cvt_zero_upper
+  INFO upper_kept = 0
+  INFO upper_zero = 8
+PASS  ymm_vex128_idioms_cvt_zero_upper (0.2 ms)
+RUN   ymm_legacy_sse_loads_preserve_upper
+  INFO upper_kept = 8
+  INFO upper_zero = 0
+PASS  ymm_legacy_sse_loads_preserve_upper (0.2 ms)
+RUN   ymm_vex128_loads_zero_upper
+  INFO upper_kept = 0
+  INFO upper_zero = 8
+PASS  ymm_vex128_loads_zero_upper (0.2 ms)
+RUN   ymm_gpr_to_xmm_moves
+PASS  ymm_gpr_to_xmm_moves (0.0 ms)
+RUN   ymm_x64_high_registers_ops
+PASS  ymm_x64_high_registers_ops (0.0 ms)
+RUN   ymm_store_forms_exact_footprint
+PASS  ymm_store_forms_exact_footprint (0.0 ms)
+RUN   ymm_vzeroupper_semantics
+PASS  ymm_vzeroupper_semantics (0.0 ms)
+RUN   ymm_vzeroall_semantics
+PASS  ymm_vzeroall_semantics (0.0 ms)
+RUN   ymm_vzeroupper_then_legacy_and_vex256
+PASS  ymm_vzeroupper_then_legacy_and_vex256 (0.0 ms)
+RUN   ymm_avx512vl_regs_16_31_untouched_by_vzeroupper
+  SKIP AVX512VL not usable: only 16 YMM registers
+SKIP  ymm_avx512vl_regs_16_31_untouched_by_vzeroupper (0.2 ms): AVX512VL not usable: only 16 YMM registers
+RUN   ymm_avx512vl_regs_16_31_untouched_by_vzeroall
+  SKIP AVX512VL not usable: only 16 YMM registers
+SKIP  ymm_avx512vl_regs_16_31_untouched_by_vzeroall (0.2 ms): AVX512VL not usable: only 16 YMM registers
+RUN   ymm_vperm2f128_all_imm
+PASS  ymm_vperm2f128_all_imm (0.0 ms)
+RUN   ymm_vperm2i128_all_imm
+PASS  ymm_vperm2i128_all_imm (0.0 ms)
+RUN   ymm_vinsertf128_vextractf128
+PASS  ymm_vinsertf128_vextractf128 (0.0 ms)
+RUN   ymm_vinserti128_vextracti128
+PASS  ymm_vinserti128_vextracti128 (0.0 ms)
+RUN   ymm_vpermilps_all_imm_in_lane
+PASS  ymm_vpermilps_all_imm_in_lane (0.0 ms)
+RUN   ymm_vshufps_all_imm_in_lane
+PASS  ymm_vshufps_all_imm_in_lane (0.0 ms)
+RUN   ymm_vblendps_all_imm
+PASS  ymm_vblendps_all_imm (0.0 ms)
+RUN   ymm_vpermilpd_vblendpd_all_imm
+PASS  ymm_vpermilpd_vblendpd_all_imm (0.0 ms)
+RUN   ymm_vpermq_all_imm_cross_lane
+PASS  ymm_vpermq_all_imm_cross_lane (0.0 ms)
+RUN   ymm_vpshufd_all_imm_in_lane
+PASS  ymm_vpshufd_all_imm_in_lane (0.0 ms)
+RUN   ymm_vpblendd_all_imm
+PASS  ymm_vpblendd_all_imm (0.0 ms)
+RUN   ymm_vpalignr_all_imm_in_lane
+PASS  ymm_vpalignr_all_imm_in_lane (0.0 ms)
+RUN   ymm_vpslldq_vpsrldq_in_lane
+PASS  ymm_vpslldq_vpsrldq_in_lane (0.0 ms)
+RUN   ymm_vpshufb_in_lane
+PASS  ymm_vpshufb_in_lane (0.0 ms)
+RUN   ymm_vpermd_vpermps_cross_lane
+PASS  ymm_vpermd_vpermps_cross_lane (0.0 ms)
+RUN   ymm_broadcasts_avx
+PASS  ymm_broadcasts_avx (0.0 ms)
+RUN   ymm_broadcasts_avx2
+PASS  ymm_broadcasts_avx2 (0.0 ms)
+RUN   ymm_bitwise_256
+PASS  ymm_bitwise_256 (0.0 ms)
+RUN   ymm_fp_arith_upper_lane_exact
+PASS  ymm_fp_arith_upper_lane_exact (0.0 ms)
+RUN   ymm_int_arith_lane_boundaries
+PASS  ymm_int_arith_lane_boundaries (0.0 ms)
+RUN   ymm_unpack_in_lane
+PASS  ymm_unpack_in_lane (0.0 ms)
+RUN   ymm_vptest_vmovmsk_see_upper_lane
+PASS  ymm_vptest_vmovmsk_see_upper_lane (0.0 ms)
+RUN   ymm_mix_vex256_legacy_chain
+PASS  ymm_mix_vex256_legacy_chain (0.0 ms)
+RUN   ymm_xsave_captures_both_lanes
+  INFO xstate_bv = 0x6
+PASS  ymm_xsave_captures_both_lanes (0.1 ms)
+RUN   ymm_xsave_after_vzeroupper
+  INFO xstate_bv_after_vzeroupper = 0x2
+  NOTE XSTATE_BV[2]=0 after VZEROUPPER: processor tracks the AVX component as initial
+PASS  ymm_xsave_after_vzeroupper (0.5 ms)
+RUN   ymm_xrstor_component_semantics
+PASS  ymm_xrstor_component_semantics (0.0 ms)
+RUN   ymm_xinuse_tracks_avx_state
+  INFO xinuse_dirty = 0x207
+  INFO xinuse_after_vzeroupper = 0x203
+  INFO xinuse_after_vzeroall = 0x201
+PASS  ymm_xinuse_tracks_avx_state (0.3 ms)
+RUN   ymm_fault_vmovdqa_misaligned16
+  INFO exc_code = 0xc0000005
+PASS  ymm_fault_vmovdqa_misaligned16 (28.7 ms)
+RUN   ymm_fault_vmovdqa_misaligned1
+  INFO exc_code = 0xc0000005
+PASS  ymm_fault_vmovdqa_misaligned1 (31.7 ms)
+RUN   ymm_fault_vmovntdq_misaligned
+  INFO exc_code = 0xc0000005
+PASS  ymm_fault_vmovntdq_misaligned (30.9 ms)
+RUN   ymm_fault_vex128_vmovaps_misaligned
+  INFO exc_code = 0xc0000005
+PASS  ymm_fault_vex128_vmovaps_misaligned (31.4 ms)
+RUN   ymm_fault_load_into_guard_page
+PASS  ymm_fault_load_into_guard_page (29.8 ms)
+RUN   ymm_vex_unaligned_memory_operands
+PASS  ymm_vex_unaligned_memory_operands (0.0 ms)
+RUN   ymm_exception_int3_continue_restores
+  INFO upper_halves_lost = 0
+  INFO ctx_xstate = 1
+  INFO ctx_hi_match = 16
+  INFO ctx_lo_match = 16
+PASS  ymm_exception_int3_continue_restores (28.8 ms)
+RUN   ymm_exception_ud2_continue_restores
+  INFO upper_halves_lost = 0
+  INFO ctx_xstate = 1
+  INFO ctx_hi_match = 16
+  INFO ctx_lo_match = 16
+PASS  ymm_exception_ud2_continue_restores (29.8 ms)
+RUN   ymm_exception_av_continue_restores
+  INFO upper_halves_lost = 0
+  INFO ctx_xstate = 1
+  INFO ctx_hi_match = 16
+  INFO ctx_lo_match = 16
+PASS  ymm_exception_av_continue_restores (37.1 ms)
+RUN   ymm_exception_div0_continue_restores
+  INFO upper_halves_lost = 0
+  INFO ctx_xstate = 1
+  INFO ctx_hi_match = 16
+  INFO ctx_lo_match = 16
+PASS  ymm_exception_div0_continue_restores (37.8 ms)
+RUN   ymm_preempt_spin_2_threads
+  INFO threads = 2
+  INFO ready = 2
+  INFO disturb_ops = 0
+PASS  ymm_preempt_spin_2_threads (162.9 ms)
+RUN   ymm_preempt_spin_16_threads
+  INFO threads = 16
+  INFO ready = 16
+  INFO disturb_ops = 0
+PASS  ymm_preempt_spin_16_threads (243.8 ms)
+RUN   ymm_preempt_spin_64_threads
+  INFO threads = 64
+  INFO ready = 64
+  INFO disturb_ops = 0
+PASS  ymm_preempt_spin_64_threads (346.3 ms)
+RUN   ymm_preempt_spin_256_threads
+  INFO threads = 256
+  INFO ready = 256
+  INFO disturb_ops = 0
+PASS  ymm_preempt_spin_256_threads (1366.3 ms)
+RUN   ymm_preempt_oversubscribed
+  INFO threads = 112
+  INFO ready = 112
+  INFO disturb_ops = 0
+PASS  ymm_preempt_oversubscribed (628.8 ms)
+RUN   ymm_suspend_resume_spinning
+  INFO threads = 4
+  INFO ready = 4
+  INFO disturb_ops = 188
+PASS  ymm_suspend_resume_spinning (311.4 ms)
+RUN   ymm_getcontext_spinning_no_xstate
+  INFO threads = 4
+  INFO ready = 4
+  INFO disturb_ops = 112
+PASS  ymm_getcontext_spinning_no_xstate (306.4 ms)
+RUN   ymm_setcontext_control_spinning
+  INFO threads = 4
+  INFO ready = 4
+  INFO disturb_ops = 148
+PASS  ymm_setcontext_control_spinning (312.5 ms)
+RUN   ymm_affinity_migration_spinning
+  INFO threads = 4
+  INFO ready = 4
+  INFO disturb_ops = 512
+PASS  ymm_affinity_migration_spinning (308.4 ms)
+RUN   ymm_priority_changes_spinning
+  INFO threads = 8
+  INFO ready = 8
+  INFO disturb_ops = 1088
+PASS  ymm_priority_changes_spinning (309.0 ms)
+RUN   ymm_isolation_churn_8_threads
+  INFO threads = 8
+  INFO ready = 8
+  INFO disturb_ops = 0
+  INFO churn_rounds = 21545
+PASS  ymm_isolation_churn_8_threads (306.8 ms)
+RUN   ymm_isolation_churn_64_threads
+  INFO threads = 64
+  INFO ready = 64
+  INFO disturb_ops = 0
+  INFO churn_rounds = 22028
+PASS  ymm_isolation_churn_64_threads (520.0 ms)
+RUN   ymm_isolation_churn_with_suspend
+  INFO threads = 8
+  INFO ready = 8
+  INFO disturb_ops = 1696
+  INFO churn_rounds = 16264
+PASS  ymm_isolation_churn_with_suspend (302.9 ms)
+RUN   ymm_clean_upper_threads_stay_clean
+  INFO threads = 84
+  INFO ready = 84
+  INFO disturb_ops = 0
+PASS  ymm_clean_upper_threads_stay_clean (581.9 ms)
+RUN   ymm_clean_upper_threads_suspend_context
+  INFO threads = 9
+  INFO ready = 9
+  INFO disturb_ops = 1161
+PASS  ymm_clean_upper_threads_suspend_context (304.3 ms)
+RUN   ymm_clean_upper_threads_migration
+  INFO threads = 6
+  INFO ready = 6
+  INFO disturb_ops = 1548
+PASS  ymm_clean_upper_threads_migration (305.5 ms)
+RUN   ymm_special_apc_interrupts_spin
+  INFO apc_queued = 1
+  INFO apc_ran = 0
+  EXPECT-FAIL Wine: special user APC not delivered to a running thread
+  FAIL ymm_registers.c:1692: g_apc_ran == queued (special user APC ran 0 of 1 times within 3 s each)
+XFAIL ymm_special_apc_interrupts_spin (3002.5 ms): Wine: special user APC not delivered to a running thread
+RUN   ymm_context_get_xstate_spinning
+  INFO ctx_len = 1647
+  INFO xstate_mask = 0x7
+  INFO avx_len = 256
+  INFO sse_len = 256
+PASS  ymm_context_get_xstate_spinning (21.8 ms)
+RUN   ymm_context_set_xstate_upper_spinning
+  INFO ctx_len = 1647
+  INFO xstate_mask = 0x7
+  INFO avx_len = 256
+  INFO sse_len = 256
+PASS  ymm_context_set_xstate_upper_spinning (21.8 ms)
+RUN   ymm_context_xstate_clean_upper_thread
+  INFO xstate_mask = 0x3
+  INFO xstate_mask_set = 0x3
+  INFO avx_bit_clear_for_clean_thread = 1
+PASS  ymm_context_xstate_clean_upper_thread (22.0 ms)
+RUN   ymm_context_set_xstate_mask_without_avx
+  INFO xstate_mask = 0x7
+  INFO xstate_mask_set = 0x3
+  INFO uppers_kept = 0
+  INFO uppers_initialised = 16
+  NOTE SetThreadContext with AVX cleared in the XSTATE mask initialised the upper lanes
+PASS  ymm_context_set_xstate_mask_without_avx (22.4 ms)
+RUN   ymm_new_thread_no_foreign_state
+  INFO probes = 8
+  INFO nonzero_upper_lanes_at_start = 0
+PASS  ymm_new_thread_no_foreign_state (3.9 ms)
+RUN   ymm_call_null_full_preserved
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 6/6
+PASS  ymm_call_null_full_preserved (0.3 ms)
+RUN   ymm_call_sleep0
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 6/6
+PASS  ymm_call_sleep0 (0.3 ms)
+RUN   ymm_call_sleep1
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 4/6
+PASS  ymm_call_sleep1 (5.5 ms)
+RUN   ymm_call_switchtothread
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 6/6
+PASS  ymm_call_switchtothread (0.3 ms)
+RUN   ymm_call_wait_signaled
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_wait_signaled (1.0 ms)
+RUN   ymm_call_wait_timeout
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_wait_timeout (20.6 ms)
+RUN   ymm_call_wait_multiple_timeout
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_wait_multiple_timeout (12.6 ms)
+RUN   ymm_call_event_pingpong_dirty_peer
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_event_pingpong_dirty_peer (1.3 ms)
+RUN   ymm_call_mutex_contention
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_mutex_contention (41.3 ms)
+RUN   ymm_call_ntyieldexecution
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 6/6
+PASS  ymm_call_ntyieldexecution (0.4 ms)
+RUN   ymm_call_ntdelayexecution
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 4/6
+PASS  ymm_call_ntdelayexecution (3.6 ms)
+RUN   ymm_call_virtualalloc
+  INFO upper_halves_preserved = 15/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_virtualalloc (0.5 ms)
+RUN   ymm_call_file_io
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 2/6
+PASS  ymm_call_file_io (0.4 ms)
+RUN   ymm_call_no_syscall_apis
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 6/6
+PASS  ymm_call_no_syscall_apis (0.3 ms)
+RUN   ymm_call_getcontext_self
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 4/6
+PASS  ymm_call_getcontext_self (0.3 ms)
+RUN   ymm_call_outputdebugstring
+  INFO upper_halves_preserved = 14/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_outputdebugstring (0.4 ms)
+RUN   ymm_call_threadpool_roundtrip
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 0/6
+PASS  ymm_call_threadpool_roundtrip (1.1 ms)
+RUN   ymm_call_user_apc_alertable
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_user_apc_alertable (0.5 ms)
+RUN   ymm_call_raiseexception_veh
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 3/6
+PASS  ymm_call_raiseexception_veh (0.3 ms)
+RUN   ymm_call_fiber_switch
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 0/6
+PASS  ymm_call_fiber_switch (0.4 ms)
+RUN   ymm_call_fiber_switch_float_flag
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 0/6
+PASS  ymm_call_fiber_switch_float_flag (0.3 ms)
+RUN   ymm_call_create_join_threads
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 0/6
+PASS  ymm_call_create_join_threads (1.1 ms)
+RUN   ymm_call_affinity_migration
+  INFO upper_halves_preserved = 16/16
+  INFO xmm0_5_preserved = 4/6
+PASS  ymm_call_affinity_migration (0.4 ms)
+RUN   ymm_call_window_message_callback
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 0/6
+  INFO window_messages = 14
+PASS  ymm_call_window_message_callback (168.7 ms)
+RUN   ymm_call_abi_legal_clobber
+  INFO upper_halves_preserved = 0/16
+  INFO xmm0_5_preserved = 0/6
+PASS  ymm_call_abi_legal_clobber (0.1 ms)
+RUN   ymm_sse_avx_transition_perf
+  PERF sse_clean_upper_ns_per_iter = 0.743793 ns/iter
+  PERF sse_dirty_upper_ns_per_iter = 0.762511 ns/iter
+  PERF alternate_vex256_sse_ns_per_iter = 145.648 ns/iter
+  PERF alternate_with_vzeroupper_ns_per_iter = 0.762206 ns/iter
+  INFO dirty_vs_clean_ratio = 1.03
+  INFO alternate_vs_vzeroupper_ratio = 191.09
+PERF  ymm_sse_avx_transition_perf (129.1 ms)
+RUN   ymm_load_store_alignment_perf
+  PERF aligned32_ns_per_4x32B = 0.376714 ns/iter
+  PERF aligned16_same_line_ns_per_4x32B = 0.376714 ns/iter
+  PERF split_cache_line_ns_per_4x32B = 0.739661 ns/iter
+PERF  ymm_load_store_alignment_perf (90.5 ms)
+SUMMARY exe=ymm_registers arch=x64 total=118 pass=112 fail=0 crash=0 skip=3 xfail=1 perf=2 checks=16908 checks_failed=1 exit=0

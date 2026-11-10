@@ -1,0 +1,233 @@
+wineserver: using server-side synchronization.
+ENV   exe=context_xstate arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   ctx_layout_abi
+PASS  ctx_layout_abi (0.0 ms)
+RUN   ctx_api_exports
+  INFO InitializeContext = yes
+  INFO InitializeContext2 = yes
+  INFO LocateXStateFeature = yes
+  INFO CopyContext = yes
+  INFO Wow64GetThreadContext = yes
+  INFO enabled_features = 0x7
+PASS  ctx_api_exports (0.5 ms)
+RUN   ctx_api_reports_usable_features
+PASS  ctx_api_reports_usable_features (0.0 ms)
+RUN   init_ctx_size_query
+  INFO len_std = 743
+PASS  init_ctx_size_query (0.1 ms)
+RUN   init_ctx_size_xstate
+  INFO len_xstate = 1123
+PASS  init_ctx_size_xstate (0.1 ms)
+RUN   init_ctx_undersized_by_one
+PASS  init_ctx_undersized_by_one (0.0 ms)
+RUN   init_ctx_alignment_sweep_guarded
+PASS  init_ctx_alignment_sweep_guarded (2.0 ms)
+RUN   init_ctx_flags_validation
+PASS  init_ctx_flags_validation (0.0 ms)
+RUN   init_ctx_contents
+PASS  init_ctx_contents (0.0 ms)
+RUN   init_ctx2_compaction_mask
+  INFO len2_all = 1123
+  INFO len2_avx = 1123
+  INFO len2_legacy = 867
+PASS  init_ctx2_compaction_mask (0.2 ms)
+RUN   locate_legacy_features
+PASS  locate_legacy_features (0.0 ms)
+RUN   locate_avx_feature
+PASS  locate_avx_feature (0.0 ms)
+RUN   locate_enabled_and_unsupported_features
+  EXPECT-FAIL wine 11.0: LocateXStateFeature locates features that are not enabled
+  FAIL context_xstate.c:1124: ok_ (feature 63 not enabled (0x7) but located at 012a0440)
+XFAIL locate_enabled_and_unsupported_features (0.4 ms): wine 11.0: LocateXStateFeature locates features that are not enabled
+RUN   locate_without_xstate_flag
+PASS  locate_without_xstate_flag (0.0 ms)
+RUN   set_mask_basic
+PASS  set_mask_basic (0.0 ms)
+RUN   set_mask_filters_unsupported_bits
+  INFO mask_after_all_ones = 0x7
+PASS  set_mask_filters_unsupported_bits (0.1 ms)
+RUN   set_mask_without_xstate_chunk
+  EXPECT-FAIL wine 11.0: SetXStateFeaturesMask fails without a last error
+  FAIL context_xstate.c:1198: ok_ (GLE 0 want ERROR_INVALID_PARAMETER)
+XFAIL set_mask_without_xstate_chunk (0.4 ms): wine 11.0: SetXStateFeaturesMask fails without a last error
+RUN   get_mask_plain_contexts
+  EXPECT-FAIL wine 11.0: GetXStateFeaturesMask fails without a last error
+  FAIL context_xstate.c:1227: ok_ (GLE 0 want ERROR_NOT_SUPPORTED)
+  EXPECT-FAIL wine 11.0: SetXStateFeaturesMask fails without a last error
+  FAIL context_xstate.c:1232: ok_ (GLE 0 want ERROR_NOT_SUPPORTED)
+XFAIL get_mask_plain_contexts (0.7 ms): wine 11.0: GetXStateFeaturesMask fails without a last error
+RUN   copy_context_invalid_flags
+  EXPECT-FAIL wine 11.0: CopyContext does not validate ContextFlags
+  FAIL context_xstate.c:1254: ok_ (CopyContext(undefined flag bit) r=1 GLE 0 want FALSE / ERROR_INVALID_PARAMETER)
+XFAIL copy_context_invalid_flags (0.5 ms): wine 11.0: CopyContext does not validate ContextFlags
+RUN   copy_context_partial_control
+PASS  copy_context_partial_control (0.0 ms)
+RUN   copy_context_xstate_into_plain
+PASS  copy_context_xstate_into_plain (0.0 ms)
+RUN   copy_context_xstate_contents
+PASS  copy_context_xstate_contents (0.0 ms)
+RUN   suspend_resume_counts
+PASS  suspend_resume_counts (1.3 ms)
+RUN   getctx_full_gprs_control
+  INFO segcs = 0x23
+  INFO eflags = 0x246
+PASS  getctx_full_gprs_control (1.6 ms)
+RUN   getctx_control_only_leaves_rest
+  EXPECT-FAIL wine 11.0: x86 CONTEXT_CONTROL does not carry Ebp
+  FAIL context_xstate.c:1394: ok_ (Ebp 0xa5a5a5a5 want 0x2a1f3795)
+  INFO flags_after = 0x10001
+XFAIL getctx_control_only_leaves_rest (2.1 ms): wine 11.0: x86 CONTEXT_CONTROL does not carry Ebp
+RUN   getctx_integer_only_leaves_rest
+PASS  getctx_integer_only_leaves_rest (1.3 ms)
+RUN   getctx_fp_only_leaves_rest
+PASS  getctx_fp_only_leaves_rest (1.3 ms)
+RUN   getctx_xmm_all_registers
+PASS  getctx_xmm_all_registers (1.2 ms)
+RUN   getctx_x87_stack_and_cw
+PASS  getctx_x87_stack_and_cw (1.3 ms)
+RUN   getctx_twice_identical
+PASS  getctx_twice_identical (1.4 ms)
+RUN   getctx_debug_registers_separate
+  INFO dr0_3 = 0 0 0 0
+  INFO dr6_dr7 = 0 0
+PASS  getctx_debug_registers_separate (1.5 ms)
+RUN   setctx_debug_registers_zero
+PASS  setctx_debug_registers_zero (14.9 ms)
+RUN   getctx_flags_zero_fills_nothing
+  INFO flags0_result = 1 gle=0 flags_after=0x0
+PASS  getctx_flags_zero_fills_nothing (1.6 ms)
+RUN   setctx_identity_roundtrip
+PASS  setctx_identity_roundtrip (1.4 ms)
+RUN   setctx_xmm_observed
+PASS  setctx_xmm_observed (1.4 ms)
+RUN   setctx_get_after_set_suspended
+PASS  setctx_get_after_set_suspended (1.4 ms)
+RUN   setctx_mxcsr_observed
+PASS  setctx_mxcsr_observed (5.2 ms)
+RUN   setctx_mxcsr_field_precedence_note
+  SKIP x86 CONTEXT has one MXCSR (ExtendedRegisters)
+SKIP  setctx_mxcsr_field_precedence_note (0.2 ms): x86 CONTEXT has one MXCSR (ExtendedRegisters)
+RUN   setctx_x87_cw_observed
+PASS  setctx_x87_cw_observed (1.4 ms)
+RUN   setctx_x87_stack_observed
+PASS  setctx_x87_stack_observed (1.3 ms)
+RUN   setctx_integer_observed
+  EXPECT-FAIL wine 11.0: x86 CONTEXT_INTEGER set changes Ebp (a CONTEXT_CONTROL register)
+  FAIL context_xstate.c:1852: ok_ (ebp observed 0x0 want 0xfdd37cf8)
+XFAIL setctx_integer_observed (2.1 ms): wine 11.0: x86 CONTEXT_INTEGER set changes Ebp (a CONTEXT_CONTROL register)
+RUN   setctx_control_rip_redirect
+PASS  setctx_control_rip_redirect (1.4 ms)
+RUN   setctx_rsp_rip_preserved_by_fp_set
+PASS  setctx_rsp_rip_preserved_by_fp_set (1.4 ms)
+RUN   getctx_segments_only
+  INFO segments = ds 2b es 2b fs 63 gs 6b
+PASS  getctx_segments_only (1.4 ms)
+RUN   getctx_x87_partial_stack
+PASS  getctx_x87_partial_stack (1.3 ms)
+RUN   setctx_eflags_sanitized
+  INFO eflags_after_set = 0x3446 (requested 0x3446)
+  EXPECT-FAIL wine 11.0: GetThreadContext reports unsanitized EFlags stored by SetThreadContext
+  FAIL context_xstate.c:2016: ok_ (EFlags 0x3446: IOPL raised through SetThreadContext)
+  EXPECT-FAIL wine 11.0: GetThreadContext reports unsanitized EFlags stored by SetThreadContext
+  FAIL context_xstate.c:2017: ok_ (EFlags 0x3446: IF cleared through SetThreadContext)
+  INFO eflags_observed = 0x602
+XFAIL setctx_eflags_sanitized (3.1 ms): wine 11.0: GetThreadContext reports unsanitized EFlags stored by SetThreadContext
+RUN   getctx_eflags_df_clear_baseline
+PASS  getctx_eflags_df_clear_baseline (1.4 ms)
+RUN   setctx_mxcsr_reserved_bits
+  XFAIL wine 11.0: reserved MXCSR bits from a CONTEXT are not masked (worker died, exception 0xc000001d)
+XFAIL setctx_mxcsr_reserved_bits (23.9 ms): wine 11.0: reserved MXCSR bits from a CONTEXT are not masked (worker died, exception 0xc000001d)
+RUN   setctx_fxsave_reserved_bytes_ignored
+  EXPECT-FAIL wine 11.0: reserved FXSAVE bytes of a CONTEXT reach the kernel's sigreturn frame (YMM state dropped)
+  FAIL context_xstate.c:2151: ok_ (YMM upper halves changed by a set whose only difference is reserved FXSAVE bytes)
+XFAIL setctx_fxsave_reserved_bytes_ignored (2.4 ms): wine 11.0: reserved FXSAVE bytes of a CONTEXT reach the kernel's sigreturn frame (YMM state dropped)
+RUN   xstate_getctx_ymm_upper
+  INFO mask_after_get = 0x7
+PASS  xstate_getctx_ymm_upper (1.5 ms)
+RUN   xstate_getctx_ymm_init_state
+  INFO mask_init_ymm = 0x3
+  INFO ymm_area_when_init = zeroed
+PASS  xstate_getctx_ymm_init_state (1.6 ms)
+RUN   xstate_getctx_mask_zero_request
+  INFO mask_after_zero_request = 0x7
+PASS  xstate_getctx_mask_zero_request (1.5 ms)
+RUN   xstate_setctx_ymm_observed
+PASS  xstate_setctx_ymm_observed (1.3 ms)
+RUN   xstate_setctx_upper_only_one_register
+PASS  xstate_setctx_upper_only_one_register (1.4 ms)
+RUN   xstate_setctx_legacy_only_keeps_upper
+PASS  xstate_setctx_legacy_only_keeps_upper (1.4 ms)
+RUN   xstate_setctx_mask_cleared_note
+  INFO cleared_mask_effect = init (zero)
+PASS  xstate_setctx_mask_cleared_note (1.5 ms)
+RUN   xstate_two_workers_isolated
+PASS  xstate_two_workers_isolated (2.7 ms)
+RUN   xstate_suspend_get_resume_loop
+  INFO iterations = 200
+PASS  xstate_suspend_get_resume_loop (7.3 ms)
+RUN   xstate_copycontext_from_thread
+PASS  xstate_copycontext_from_thread (1.3 ms)
+RUN   xstate_getctx_zmm
+  SKIP AVX-512F not usable (CPUID/XCR0)
+SKIP  xstate_getctx_zmm (0.2 ms): AVX-512F not usable (CPUID/XCR0)
+RUN   xstate_setctx_zmm_observed
+  SKIP AVX-512F not usable (CPUID/XCR0)
+SKIP  xstate_setctx_zmm_observed (0.2 ms): AVX-512F not usable (CPUID/XCR0)
+RUN   err_invalid_handles
+PASS  err_invalid_handles (0.1 ms)
+RUN   err_access_denied_get
+PASS  err_access_denied_get (1.3 ms)
+RUN   err_access_denied_set
+PASS  err_access_denied_set (1.3 ms)
+RUN   err_xstate_chunk_too_short
+  INFO context_ex = all -716/1088 legacy -716/716 xstate 52/320
+  INFO short_chunk_result = 1 gle=0
+  EXPECT-FAIL wine 11.0: GetThreadContext ignores CONTEXT_EX.XState.Length
+  FAIL context_xstate.c:2712: ok_ (GetThreadContext wrote the AVX area beyond CONTEXT_EX.XState.Length)
+XFAIL err_xstate_chunk_too_short (2.5 ms): wine 11.0: GetThreadContext ignores CONTEXT_EX.XState.Length
+RUN   err_getctx_null_context
+  INFO result = R=0 GLE=998
+PASS  err_getctx_null_context (15.7 ms)
+RUN   err_setctx_null_context
+  INFO result = R=0 GLE=998
+PASS  err_setctx_null_context (19.4 ms)
+RUN   err_getctx_plain_context_at_guard_page
+  INFO result = R=1 GLE=0
+PASS  err_getctx_plain_context_at_guard_page (14.8 ms)
+RUN   err_getctx_xstate_flag_without_chunk
+  INFO result = R=0 GLE=998
+PASS  err_getctx_xstate_flag_without_chunk (15.4 ms)
+RUN   getctx_current_thread_note
+  INFO self_get = 1 gle=0
+PASS  getctx_current_thread_note (0.1 ms)
+RUN   rtlcapture_control_integer
+  INFO flags = 0x10007
+  INFO x86_capture_style = caller frame
+PASS  rtlcapture_control_integer (0.3 ms)
+RUN   rtlcapture_fp_state
+  SKIP x86 RtlCaptureContext captures CONTEXT_CONTROL|INTEGER|SEGMENTS only
+SKIP  rtlcapture_fp_state (0.3 ms): x86 RtlCaptureContext captures CONTEXT_CONTROL|INTEGER|SEGMENTS only
+RUN   rtlcapture_repeatable_and_bounded
+PASS  rtlcapture_repeatable_and_bounded (0.1 ms)
+RUN   wow64_own_threads
+  INFO wow64 = 1
+  INFO wow64getthreadcontext_from_x86 = 1 gle=0
+PASS  wow64_own_threads (1.6 ms)
+RUN   wow64_cross_process_context
+  SKIP x64 build only (an x86 process cannot drive a WOW64 target through Wow64*ThreadContext)
+SKIP  wow64_cross_process_context (0.4 ms): x64 build only (an x86 process cannot drive a WOW64 target through Wow64*ThreadContext)
+RUN   perf_getctx_std
+  PERF getthreadcontext_std = 197751 ops/s
+  INFO us_per_call = 5.057
+PERF  perf_getctx_std (77.6 ms)
+RUN   perf_getctx_xstate
+  PERF getthreadcontext_xstate = 208206 ops/s
+  INFO us_per_call = 4.803
+PERF  perf_getctx_xstate (77.4 ms)
+RUN   perf_rtlcapturecontext
+  PERF rtlcapturecontext = 3.07149e+08 ops/s
+PERF  perf_rtlcapturecontext (75.1 ms)
+SUMMARY exe=context_xstate arch=x86 total=78 pass=60 fail=0 crash=0 skip=5 xfail=10 perf=3 checks=1807 checks_failed=11 exit=0

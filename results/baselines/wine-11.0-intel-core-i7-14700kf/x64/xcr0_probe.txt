@@ -1,0 +1,256 @@
+wineserver: using server-side synchronization.
+ENV   exe=xcr0_probe arch=x64 wow64=0 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+RUN   cpuid_osxsave_implies_xsave
+  INFO cpuid1_ecx = 0x7ffafbbf
+  INFO xsave_osxsave_avx = 1/1/1
+PASS  cpuid_osxsave_implies_xsave (0.1 ms)
+RUN   xgetbv0_executes_when_osxsave
+PASS  xgetbv0_executes_when_osxsave (8.0 ms)
+RUN   xgetbv0_ud_without_osxsave
+  SKIP OSXSAVE=1: XGETBV is legal here (the #UD rule cannot be exercised)
+SKIP  xgetbv0_ud_without_osxsave (0.3 ms): OSXSAVE=1: XGETBV is legal here (the #UD rule cannot be exercised)
+RUN   xgetbv0_repeatable
+PASS  xgetbv0_repeatable (1.1 ms)
+RUN   harness_cpu_info_matches_raw
+PASS  harness_cpu_info_matches_raw (0.0 ms)
+RUN   xcr0_x87_bit0_set
+  INFO xcr0 = 0x207 (x87,sse,avx,pkru)
+PASS  xcr0_x87_bit0_set (0.2 ms)
+RUN   xcr0_sse_bit1_set
+PASS  xcr0_sse_bit1_set (0.0 ms)
+RUN   xcr0_avx_requires_sse
+PASS  xcr0_avx_requires_sse (0.0 ms)
+RUN   xcr0_mpx_bits_pair
+PASS  xcr0_mpx_bits_pair (0.0 ms)
+RUN   xcr0_avx512_bits_all_or_none
+PASS  xcr0_avx512_bits_all_or_none (0.0 ms)
+RUN   xcr0_avx512_requires_avx
+PASS  xcr0_avx512_requires_avx (0.0 ms)
+RUN   xcr0_amx_bits_pair
+PASS  xcr0_amx_bits_pair (0.0 ms)
+RUN   xcr0_pt_bit8_clear
+PASS  xcr0_pt_bit8_clear (0.0 ms)
+RUN   xcr0_bit10_clear
+PASS  xcr0_bit10_clear (0.0 ms)
+RUN   xcr0_no_supervisor_components
+PASS  xcr0_no_supervisor_components (0.0 ms)
+RUN   xcr0_pkru_bit9
+  INFO pkru = xcr0[9]=1 pku=1 ospke=1
+PASS  xcr0_pkru_bit9 (0.2 ms)
+RUN   xcr0_bit63_and_unknown_bits
+PASS  xcr0_bit63_and_unknown_bits (0.0 ms)
+RUN   xcr0_subset_of_cpuid_supported
+  INFO xcr0_supported = 0x207
+PASS  xcr0_subset_of_cpuid_supported (0.1 ms)
+RUN   xcr0_avx_enabled_iff_supported_note
+  INFO supported_not_enabled = 0x0 (-)
+PASS  xcr0_avx_enabled_iff_supported_note (0.1 ms)
+RUN   cpuid_d0_supported_mask_shape
+PASS  cpuid_d0_supported_mask_shape (0.0 ms)
+RUN   cpuid_d1_xss_mask_shape
+  INFO xss_supported = 0x19900 (pt,cet_u,cet_s,lbr,hwp)
+PASS  cpuid_d1_xss_mask_shape (0.1 ms)
+RUN   xcr0_xss_masks_disjoint
+PASS  xcr0_xss_masks_disjoint (0.0 ms)
+RUN   cpuid_d_user_component_flags
+  INFO user_components = 2
+PASS  cpuid_d_user_component_flags (0.1 ms)
+RUN   cpuid_d_supervisor_component_flags
+PASS  cpuid_d_supervisor_component_flags (0.0 ms)
+RUN   cpuid_d_component_sizes_architectural
+  INFO avx_offset = 576
+PASS  cpuid_d_component_sizes_architectural (0.1 ms)
+RUN   cpuid_d_invalid_subleaves_zero
+  INFO invalid_subleaves = 55
+PASS  cpuid_d_invalid_subleaves_zero (0.1 ms)
+RUN   cpuid_d_enabled_offsets_nonoverlapping
+PASS  cpuid_d_enabled_offsets_nonoverlapping (0.0 ms)
+RUN   xsave_size_ebx_matches_xcr0
+  INFO xsave_size_xcr0 = 2696
+PASS  xsave_size_ebx_matches_xcr0 (0.1 ms)
+RUN   xsave_size_ecx_matches_supported
+  INFO xsave_size_max = 2696
+PASS  xsave_size_ecx_matches_supported (0.1 ms)
+RUN   xsaves_size_covers_xcr0
+  INFO xsave_size_compacted_xcr0_xss = 1664 (user-only compacted 840)
+PASS  xsaves_size_covers_xcr0 (0.1 ms)
+RUN   cpuid_d1_capability_bits
+  INFO d1_eax = 0x0000000f xsaveopt=1 xsavec=1 xgetbv1=1 xsaves=1 xfd=0
+PASS  cpuid_d1_capability_bits (0.1 ms)
+RUN   xsavec_xcomp_bv_equals_xcr0
+  INFO xcomp_bv = 0x8000000000000207 xstate_bv 0x203
+PASS  xsavec_xcomp_bv_equals_xcr0 (0.1 ms)
+RUN   xsave_header_within_xcr0
+  INFO xstate_bv = 0x203
+PASS  xsave_header_within_xcr0 (0.1 ms)
+RUN   xsaveopt_header_within_xcr0
+  INFO xstate_bv = 0x203
+PASS  xsaveopt_header_within_xcr0 (0.1 ms)
+RUN   xrstor_rejects_xstate_bv_outside_xcr0
+  INFO probes = 60 (XSTATE_BV bits clear in XCR0 (standard form))
+  INFO exception_code = 0xc0000005
+PASS  xrstor_rejects_xstate_bv_outside_xcr0 (10.7 ms)
+RUN   xrstor_compacted_rejects_xcomp_bv_outside_xcr0
+  INFO probes = 59 (XCOMP_BV[62:0] bits clear in XCR0 (compacted form))
+  INFO exception_code = 0xc0000005
+PASS  xrstor_compacted_rejects_xcomp_bv_outside_xcr0 (9.5 ms)
+RUN   xrstor_rejects_reserved_header_bytes
+  INFO probes = 4 (nonzero reserved XSAVE header bytes)
+  INFO exception_code = 0xc0000005
+PASS  xrstor_rejects_reserved_header_bytes (8.9 ms)
+RUN   xgetbv1_subset_of_xcr0
+  INFO xinuse_union = 0x203
+PASS  xgetbv1_subset_of_xcr0 (0.1 ms)
+RUN   xgetbv1_sse_inuse_after_xmm_write
+PASS  xgetbv1_sse_inuse_after_xmm_write (0.0 ms)
+RUN   xgetbv1_x87_inuse_after_fld
+PASS  xgetbv1_x87_inuse_after_fld (0.0 ms)
+RUN   xgetbv1_avx_inuse_after_ymm_write
+  INFO xinuse_avx = with upper=0x207 after vzeroupper=0x203
+  NOTE XINUSE[2] tracks VZEROUPPER (init optimization observed)
+PASS  xgetbv1_avx_inuse_after_ymm_write (0.3 ms)
+RUN   xgetbv1_opmask_inuse
+  SKIP AVX-512 not usable
+SKIP  xgetbv1_opmask_inuse (0.1 ms): AVX-512 not usable
+RUN   xgetbv1_zmm_hi256_inuse
+  SKIP AVX-512 not usable
+SKIP  xgetbv1_zmm_hi256_inuse (0.1 ms): AVX-512 not usable
+RUN   xgetbv1_hi16_zmm_inuse
+  SKIP AVX-512 not usable
+SKIP  xgetbv1_hi16_zmm_inuse (0.1 ms): AVX-512 not usable
+RUN   xgetbv1_pkru_info
+  INFO pkru = 0x55555554 xinuse[9]=1
+PASS  xgetbv1_pkru_info (0.1 ms)
+RUN   xgetbv1_gp_when_unsupported
+  SKIP XGETBV ECX=1 is supported (the #GP rule cannot be exercised)
+SKIP  xgetbv1_gp_when_unsupported (0.1 ms): XGETBV ECX=1 is supported (the #GP rule cannot be exercised)
+RUN   xgetbv_invalid_index_faults
+  INFO exception_code = 0xc0000005
+  INFO exception_params = n=2 [0x0, 0xffffffffffffffff]
+  NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
+PASS  xgetbv_invalid_index_faults (9.2 ms)
+RUN   xgetbv_index2_info
+  INFO xgetbv2 = faulted=1 code=0xc0000005 value=0xa5a5c0de5a5a1234
+PASS  xgetbv_index2_info (10.5 ms)
+RUN   xgetbv_lock_prefix_ud
+  INFO exception_code = 0xc000001d
+PASS  xgetbv_lock_prefix_ud (8.2 ms)
+RUN   xgetbv_64bit_operand_semantics
+PASS  xgetbv_64bit_operand_semantics (7.1 ms)
+RUN   xsetbv_same_value_faults
+  INFO exception_code = 0xc0000005
+  INFO exception_params = n=2 [0x0, 0xffffffffffffffff]
+  NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
+PASS  xsetbv_same_value_faults (12.7 ms)
+RUN   xsetbv_invalid_value_faults
+  INFO exception_code = 0xc0000005
+  INFO exception_params = n=2 [0x0, 0xffffffffffffffff]
+  NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
+PASS  xsetbv_invalid_value_faults (10.4 ms)
+RUN   xsetbv_xcr1_faults
+  INFO exception_code = 0xc0000005
+  INFO exception_params = n=2 [0x0, 0xffffffffffffffff]
+  NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
+PASS  xsetbv_xcr1_faults (8.7 ms)
+RUN   xcr0_unchanged_after_xsetbv_attempts
+PASS  xcr0_unchanged_after_xsetbv_attempts (18.4 ms)
+RUN   xcr0_identical_on_every_cpu
+  INFO cpus_checked = 28
+PASS  xcr0_identical_on_every_cpu (18.1 ms)
+RUN   xcr0_constant_across_many_threads
+  INFO threads = 128
+PASS  xcr0_constant_across_many_threads (11.2 ms)
+RUN   xcr0_constant_over_time
+  INFO window_ms = 58
+PASS  xcr0_constant_over_time (57.7 ms)
+RUN   xcr0_unchanged_after_exception_dispatch
+PASS  xcr0_unchanged_after_exception_dispatch (0.0 ms)
+RUN   xcr0_same_in_child_process
+PASS  xcr0_same_in_child_process (13.2 ms)
+RUN   xcr0_unchanged_under_thread_context_ops
+  INFO context_ops = cycles=200 get=200 set=200 worker_reads=249600
+PASS  xcr0_unchanged_under_thread_context_ops (8.4 ms)
+RUN   xcr0_identical_across_processor_groups
+  INFO groups = 1
+  SKIP single processor group (the per-CPU case covers it)
+SKIP  xcr0_identical_across_processor_groups (0.4 ms): single processor group (the per-CPU case covers it)
+RUN   xcr0_same_in_other_architecture_process
+  INFO process = arch=x64 wow64=0 native_machine=0x8664
+  INFO other_arch = x86
+PASS  xcr0_same_in_other_architecture_process (19.0 ms)
+RUN   avx_eligibility_rule
+  INFO avx = hw=1 osxsave=1 xcr0[2:1]=11 -> 1
+PASS  avx_eligibility_rule (0.1 ms)
+RUN   avx2_eligibility_rule
+PASS  avx2_eligibility_rule (0.0 ms)
+RUN   fma_f16c_eligibility_rule
+PASS  fma_f16c_eligibility_rule (0.0 ms)
+RUN   avx512_eligibility_rule
+  INFO avx512f = hw=0 xcr0[7:5]=000 xcr0[2:1]=11 -> 0
+PASS  avx512_eligibility_rule (0.1 ms)
+RUN   amx_eligibility_rule
+  SKIP no AMX on this CPU (eligibility rule checked, nothing to execute)
+SKIP  amx_eligibility_rule (0.1 ms): no AMX on this CPU (eligibility rule checked, nothing to execute)
+RUN   feature_gate_table_consistency
+  INFO features = 63
+PASS  feature_gate_table_consistency (0.0 ms)
+RUN   pku_ospke_consistency
+  INFO pku_ospke = 1/1
+PASS  pku_ospke_consistency (0.0 ms)
+RUN   avx_executes_when_eligible
+PASS  avx_executes_when_eligible (0.0 ms)
+RUN   avx2_executes_when_eligible
+PASS  avx2_executes_when_eligible (0.0 ms)
+RUN   fma_executes_when_eligible
+PASS  fma_executes_when_eligible (0.0 ms)
+RUN   avx512_executes_when_eligible
+  SKIP AVX-512F not eligible
+SKIP  avx512_executes_when_eligible (0.1 ms): AVX-512F not eligible
+RUN   avx_ud_when_ymm_state_disabled
+  SKIP YMM state enabled: the disabled-state #UD cannot be exercised
+SKIP  avx_ud_when_ymm_state_disabled (0.1 ms): YMM state enabled: the disabled-state #UD cannot be exercised
+RUN   avx512_ud_when_zmm_state_disabled
+  SKIP AVX-512F not advertised
+SKIP  avx512_ud_when_zmm_state_disabled (0.1 ms): AVX-512F not advertised
+RUN   api_get_enabled_xstate_features_present
+  INFO api_enabled = 0x7 (x87,sse,avx)
+PASS  api_get_enabled_xstate_features_present (0.1 ms)
+RUN   api_user_bits_subset_of_xcr0
+PASS  api_user_bits_subset_of_xcr0 (0.0 ms)
+RUN   api_reports_xcr0_documented_bits
+  NOTE XCR0 components not reported by the API: pkru
+PASS  api_reports_xcr0_documented_bits (0.1 ms)
+RUN   api_extra_bits_are_supervisor
+PASS  api_extra_bits_are_supervisor (0.0 ms)
+RUN   api_rtl_enabled_extended_features_mask_semantics
+  INFO rtl_all = 0x7
+PASS  api_rtl_enabled_extended_features_mask_semantics (0.0 ms)
+RUN   api_kernelbase_matches_rtl
+PASS  api_kernelbase_matches_rtl (0.0 ms)
+RUN   api_thread_enabled_xstate_features
+  SKIP GetThreadEnabledXStateFeatures not exported (Windows 11 API)
+SKIP  api_thread_enabled_xstate_features (0.1 ms): GetThreadEnabledXStateFeatures not exported (Windows 11 API)
+RUN   pf_xsave_enabled_matches_osxsave
+  INFO pf_xsave_enabled = 1 osxsave=1
+PASS  pf_xsave_enabled_matches_osxsave (0.1 ms)
+RUN   pf_avx_family_vs_xcr0
+  INFO pf_avx_avx2_avx512f = 1/1/0
+PASS  pf_avx_family_vs_xcr0 (0.1 ms)
+RUN   kuser_shared_xstate_info
+  INFO kusd_xstate = enabled=0x7 volatile=0x7 size=832 uv_supervisor=0x0
+  NOTE KUSER_SHARED_DATA XState.EnabledFeatures 0x7 != XCR0 0x207
+PASS  kuser_shared_xstate_info (0.3 ms)
+RUN   xcr0_summary_info
+  INFO cpu = GenuineIntel Intel(R) Core(TM) i7-14700KF fam 6 model 183
+  INFO os = 10.0.19045 wine=11.0 arch=x64 wow64=0
+  INFO xcr0 = 0x207 (x87,sse,avx,pkru)
+  INFO xcr0_supported = 0x207 (x87,sse,avx,pkru)
+  INFO xss_supported = 0x19900 (pt,cet_u,cet_s,lbr,hwp)
+  INFO sizes = ebx=2696 ecx=2696 d1.ebx=1664
+  INFO eligible = avx=1 avx2=1 fma=1 avx512f=0 amx=0
+  INFO xinuse = 0x203
+PASS  xcr0_summary_info (0.8 ms)
+SUMMARY exe=xcr0_probe arch=x64 total=86 pass=75 fail=0 crash=0 skip=11 xfail=0 perf=0 checks=885 checks_failed=0 exit=0

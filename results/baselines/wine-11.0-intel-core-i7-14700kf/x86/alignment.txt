@@ -1,0 +1,476 @@
+wineserver: using server-side synchronization.
+ENV   exe=alignment arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   env_page_size_and_granularity
+  INFO page_size = 4096
+  INFO allocation_granularity = 65536
+  INFO large_page_minimum = 2097152
+  INFO misalignsse_hw = 0
+PASS  env_page_size_and_granularity (0.5 ms)
+RUN   env_mxcsr_misaligned_sse_mode_off
+  INFO mxcsr = 0x00001f80
+  INFO mxcsr_mask = 0x0000ffff
+  INFO mm_supported = 0
+PASS  env_mxcsr_misaligned_sse_mode_off (0.4 ms)
+RUN   unaligned_sse_full_loads_all_offsets
+PASS  unaligned_sse_full_loads_all_offsets (0.0 ms)
+RUN   unaligned_sse_partial_loads_all_offsets
+PASS  unaligned_sse_partial_loads_all_offsets (0.1 ms)
+RUN   unaligned_gpr_loads_all_offsets
+PASS  unaligned_gpr_loads_all_offsets (0.0 ms)
+RUN   unaligned_avx_loads_all_offsets
+PASS  unaligned_avx_loads_all_offsets (0.0 ms)
+RUN   unaligned_avx512_loads_all_offsets
+  SKIP AVX-512F not usable
+SKIP  unaligned_avx512_loads_all_offsets (0.1 ms): AVX-512F not usable
+RUN   unaligned_sse_full_stores_all_offsets
+PASS  unaligned_sse_full_stores_all_offsets (0.0 ms)
+RUN   unaligned_sse_partial_stores_all_offsets
+PASS  unaligned_sse_partial_stores_all_offsets (0.1 ms)
+RUN   unaligned_gpr_and_movnti_stores_all_offsets
+PASS  unaligned_gpr_and_movnti_stores_all_offsets (0.0 ms)
+RUN   unaligned_avx_stores_all_offsets
+PASS  unaligned_avx_stores_all_offsets (0.0 ms)
+RUN   unaligned_avx512_stores_all_offsets
+  SKIP AVX-512F not usable
+SKIP  unaligned_avx512_stores_all_offsets (0.1 ms): AVX-512F not usable
+RUN   unaligned_mmx_x87_loads_stores_all_offsets
+PASS  unaligned_mmx_x87_loads_stores_all_offsets (0.0 ms)
+RUN   unaligned_x87_float_formats_all_offsets
+PASS  unaligned_x87_float_formats_all_offsets (0.0 ms)
+RUN   unaligned_sse_scalar_and_partial_memory_operands
+PASS  unaligned_sse_scalar_and_partial_memory_operands (0.1 ms)
+RUN   unaligned_vex_alu_memory_operands
+PASS  unaligned_vex_alu_memory_operands (0.1 ms)
+RUN   unaligned_evex_alu_memory_operands
+  SKIP AVX-512F not usable
+SKIP  unaligned_evex_alu_memory_operands (0.1 ms): AVX-512F not usable
+RUN   unaligned_known_answers
+PASS  unaligned_known_answers (0.0 ms)
+RUN   unaligned_avx2_gather_elements
+PASS  unaligned_avx2_gather_elements (0.0 ms)
+RUN   align_sse_movaps_load_needs_16
+  INFO al_movaps_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movaps_ld = faults at 45 of 49 offsets
+PASS  align_sse_movaps_load_needs_16 (48.0 ms)
+RUN   align_sse_movaps_store_needs_16
+  INFO al_movaps_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movaps_st = faults at 45 of 49 offsets
+PASS  align_sse_movaps_store_needs_16 (52.6 ms)
+RUN   align_sse2_movapd_load_needs_16
+  INFO al_movapd_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movapd_ld = faults at 30 of 33 offsets
+PASS  align_sse2_movapd_load_needs_16 (48.9 ms)
+RUN   align_sse2_movapd_store_needs_16
+  INFO al_movapd_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movapd_st = faults at 30 of 33 offsets
+PASS  align_sse2_movapd_store_needs_16 (40.1 ms)
+RUN   align_sse2_movdqa_load_needs_16
+  INFO al_movdqa_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movdqa_ld = faults at 45 of 49 offsets
+PASS  align_sse2_movdqa_load_needs_16 (51.7 ms)
+RUN   align_sse2_movdqa_store_needs_16
+  INFO al_movdqa_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movdqa_st = faults at 45 of 49 offsets
+PASS  align_sse2_movdqa_store_needs_16 (59.0 ms)
+RUN   align_sse_movntps_store_needs_16
+  INFO al_movntps_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movntps_st = faults at 30 of 33 offsets
+PASS  align_sse_movntps_store_needs_16 (44.7 ms)
+RUN   align_sse2_movntpd_store_needs_16
+  INFO al_movntpd_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movntpd_st = faults at 30 of 33 offsets
+PASS  align_sse2_movntpd_store_needs_16 (39.7 ms)
+RUN   align_sse2_movntdq_store_needs_16
+  INFO al_movntdq_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movntdq_st = faults at 30 of 33 offsets
+PASS  align_sse2_movntdq_store_needs_16 (40.9 ms)
+RUN   align_sse41_movntdqa_load_needs_16
+  INFO al_movntdqa_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_movntdqa_ld = faults at 30 of 33 offsets
+PASS  align_sse41_movntdqa_load_needs_16 (45.7 ms)
+RUN   align_sse2_paddd_m128_needs_16
+  INFO al_paddd_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_paddd_ld = faults at 30 of 33 offsets
+PASS  align_sse2_paddd_m128_needs_16 (45.5 ms)
+RUN   align_sse_addps_m128_needs_16
+  INFO al_addps_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_addps_ld = faults at 30 of 33 offsets
+PASS  align_sse_addps_m128_needs_16 (42.7 ms)
+RUN   align_ssse3_pshufb_m128_needs_16
+  INFO al_pshufb_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_pshufb_ld = faults at 30 of 33 offsets
+PASS  align_ssse3_pshufb_m128_needs_16 (41.5 ms)
+RUN   align_sse2_pcmpeqb_m128_needs_16
+  INFO al_pcmpeqb_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_pcmpeqb_ld = faults at 30 of 33 offsets
+PASS  align_sse2_pcmpeqb_m128_needs_16 (39.2 ms)
+RUN   noalign_sse_movups_movdqu_lddqu_never_fault
+  INFO al_movups_ld = faults at 0 of 65 offsets
+  INFO al_movdqu_ld = faults at 0 of 65 offsets
+  INFO al_movups_st = faults at 0 of 65 offsets
+  INFO al_movdqu_st = faults at 0 of 65 offsets
+  INFO al_lddqu_ld = faults at 0 of 65 offsets
+PASS  noalign_sse_movups_movdqu_lddqu_never_fault (257.8 ms)
+RUN   noalign_sse42_pcmpistri_m128_never_faults
+  INFO al_pcmpistri_ld = faults at 0 of 33 offsets
+PASS  noalign_sse42_pcmpistri_m128_never_faults (30.3 ms)
+RUN   noalign_sse2_movq_movd_gpr_never_fault
+  INFO al_movq_ld = faults at 0 of 33 offsets
+  INFO al_movd_ld = faults at 0 of 33 offsets
+  INFO al_movq_st = faults at 0 of 33 offsets
+  INFO al_gpr_ld = faults at 0 of 33 offsets
+  INFO al_gpr_st = faults at 0 of 33 offsets
+PASS  noalign_sse2_movq_movd_gpr_never_fault (182.7 ms)
+RUN   align_avx_vmovaps_xmm_load_needs_16
+  INFO al_avx_vmovaps_x_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_avx_vmovaps_x_ld = faults at 45 of 49 offsets
+PASS  align_avx_vmovaps_xmm_load_needs_16 (50.5 ms)
+RUN   align_avx_vmovdqa_xmm_store_needs_16
+  INFO al_avx_vmovdqa_x_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_avx_vmovdqa_x_st = faults at 45 of 49 offsets
+PASS  align_avx_vmovdqa_xmm_store_needs_16 (58.0 ms)
+RUN   align_avx_vmovdqa_ymm_load_needs_32
+  INFO al_avx_vmovdqa_y_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_avx_vmovdqa_y_ld = faults at 62 of 65 offsets
+PASS  align_avx_vmovdqa_ymm_load_needs_32 (83.1 ms)
+RUN   align_avx_vmovaps_ymm_store_needs_32
+  INFO al_avx_vmovaps_y_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_avx_vmovaps_y_st = faults at 62 of 65 offsets
+PASS  align_avx_vmovaps_ymm_store_needs_32 (73.3 ms)
+RUN   align_avx_vmovntdq_ymm_store_needs_32
+  INFO al_avx_vmovntdq_y_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_avx_vmovntdq_y_st = faults at 62 of 65 offsets
+PASS  align_avx_vmovntdq_ymm_store_needs_32 (84.3 ms)
+RUN   align_avx_vmovntps_ymm_store_needs_32
+  INFO al_avx_vmovntps_y_st_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_avx_vmovntps_y_st = faults at 62 of 65 offsets
+PASS  align_avx_vmovntps_ymm_store_needs_32 (72.0 ms)
+RUN   align_avx2_vmovntdqa_ymm_load_needs_32
+  INFO al_avx2_vmovntdqa_y_ld_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_avx2_vmovntdqa_y_ld = faults at 62 of 65 offsets
+PASS  align_avx2_vmovntdqa_ymm_load_needs_32 (89.4 ms)
+RUN   noalign_avx_vmovdqu_ymm_never_faults
+  INFO al_avx_vmovdqu_y_ld = faults at 0 of 65 offsets
+  INFO al_avx_vmovdqu_y_st = faults at 0 of 65 offsets
+PASS  noalign_avx_vmovdqu_ymm_never_faults (108.1 ms)
+RUN   noalign_vex_alu_m128_m256_never_fault
+  INFO al_avx_vpaddd_x_ld = faults at 0 of 33 offsets
+  INFO al_avx_vpxor_x_ld = faults at 0 of 33 offsets
+  INFO al_avx_vaddps_y_ld = faults at 0 of 65 offsets
+  INFO al_avx2_vpaddd_y_ld = faults at 0 of 65 offsets
+PASS  noalign_vex_alu_m128_m256_never_fault (179.5 ms)
+RUN   align_avx512_vmovdqa64_zmm_load_needs_64
+  SKIP avx512f not usable on this CPU/OS
+SKIP  align_avx512_vmovdqa64_zmm_load_needs_64 (0.1 ms): avx512f not usable on this CPU/OS
+RUN   align_avx512_vmovdqa64_zmm_store_needs_64
+  SKIP avx512f not usable on this CPU/OS
+SKIP  align_avx512_vmovdqa64_zmm_store_needs_64 (0.1 ms): avx512f not usable on this CPU/OS
+RUN   align_avx512_vmovntdq_zmm_store_needs_64
+  SKIP avx512f not usable on this CPU/OS
+SKIP  align_avx512_vmovntdq_zmm_store_needs_64 (0.1 ms): avx512f not usable on this CPU/OS
+RUN   noalign_avx512_vmovdqu64_and_alu_never_fault
+  SKIP avx512f not usable on this CPU/OS
+SKIP  noalign_avx512_vmovdqu64_and_alu_never_fault (0.1 ms): avx512f not usable on this CPU/OS
+RUN   align_fxsave_needs_16
+  INFO al_fxsave_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_fxsave = faults at 45 of 49 offsets
+PASS  align_fxsave_needs_16 (66.2 ms)
+RUN   align_fxrstor_needs_16
+  INFO al_fxrstor_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_fxrstor = faults at 45 of 49 offsets
+PASS  align_fxrstor_needs_16 (63.2 ms)
+RUN   align_xsave_needs_64
+  INFO al_xsave_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_xsave = faults at 126 of 129 offsets
+PASS  align_xsave_needs_64 (125.4 ms)
+RUN   align_xrstor_needs_64
+  INFO al_xrstor_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_xrstor = faults at 126 of 129 offsets
+PASS  align_xrstor_needs_64 (102.5 ms)
+RUN   align_xsaveopt_needs_64
+  INFO al_xsaveopt_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_xsaveopt = faults at 126 of 129 offsets
+PASS  align_xsaveopt_needs_64 (115.7 ms)
+RUN   align_xsavec_needs_64
+  INFO al_xsavec_exception = code=0xc0000005 np=2 info0=0x0 info1=0xffffffff
+  INFO al_xsavec = faults at 126 of 129 offsets
+PASS  align_xsavec_needs_64 (133.2 ms)
+RUN   align_cmpxchg16b_needs_16
+  SKIP CMPXCHG16B exists only in 64-bit mode
+SKIP  align_cmpxchg16b_needs_16 (0.1 ms): CMPXCHG16B exists only in 64-bit mode
+RUN   align_fault_unhandled_reports_instruction
+  INFO exception_code = 0xc0000005
+  INFO exit_code = 0xc0000005
+PASS  align_fault_unhandled_reports_instruction (14.4 ms)
+RUN   page_fault_unhandled_reports_access_violation
+PASS  page_fault_unhandled_reports_access_violation (18.8 ms)
+RUN   straddle_committed_gpr_loads_stores
+PASS  straddle_committed_gpr_loads_stores (0.1 ms)
+RUN   straddle_committed_sse_loads_stores
+PASS  straddle_committed_sse_loads_stores (0.1 ms)
+RUN   straddle_committed_avx_loads_stores
+PASS  straddle_committed_avx_loads_stores (0.1 ms)
+RUN   straddle_committed_avx512_loads_stores
+  SKIP AVX-512F not usable
+SKIP  straddle_committed_avx512_loads_stores (0.1 ms): AVX-512F not usable
+RUN   straddle_separately_committed_pages
+PASS  straddle_separately_committed_pages (0.1 ms)
+RUN   straddle_adjacent_reservations_64k_boundary
+PASS  straddle_adjacent_reservations_64k_boundary (0.1 ms)
+RUN   cacheline_split_loads_stores_all_widths
+PASS  cacheline_split_loads_stores_all_widths (0.1 ms)
+RUN   page_end_exact_accesses_do_not_fault
+PASS  page_end_exact_accesses_do_not_fault (0.1 ms)
+RUN   page_start_after_noaccess_page_accesses_do_not_fault
+PASS  page_start_after_noaccess_page_accesses_do_not_fault (0.0 ms)
+RUN   boundary_noaccess_sse_load_faults_precisely
+  INFO al_movdqu_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -15)
+PASS  boundary_noaccess_sse_load_faults_precisely (26.4 ms)
+RUN   boundary_noaccess_sse_store_faults
+  INFO al_movdqu_st/noaccess = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -15)
+PASS  boundary_noaccess_sse_store_faults (32.1 ms)
+RUN   boundary_noaccess_lddqu_load_faults
+  INFO al_lddqu_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -15)
+PASS  boundary_noaccess_lddqu_load_faults (36.4 ms)
+RUN   boundary_noaccess_movq_movd_tiny_loads
+  INFO al_movq_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -7)
+  INFO al_movd_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -3)
+  INFO al_movq_st/noaccess = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -7)
+PASS  boundary_noaccess_movq_movd_tiny_loads (77.5 ms)
+RUN   boundary_noaccess_gpr_load_store
+  INFO al_gpr_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -3)
+  INFO al_gpr_st/noaccess = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -3)
+PASS  boundary_noaccess_gpr_load_store (43.1 ms)
+RUN   boundary_noaccess_pcmpistri_load
+  INFO al_pcmpistri_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -15)
+PASS  boundary_noaccess_pcmpistri_load (26.8 ms)
+RUN   boundary_noaccess_avx_ymm_load_faults
+  INFO al_avx_vmovdqu_y_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -31)
+PASS  boundary_noaccess_avx_ymm_load_faults (41.2 ms)
+RUN   boundary_noaccess_avx_ymm_store_faults
+  INFO al_avx_vmovdqu_y_st/noaccess = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -31)
+PASS  boundary_noaccess_avx_ymm_store_faults (38.7 ms)
+RUN   boundary_noaccess_avx_alu_ymm_load_faults
+  INFO al_avx_vaddps_y_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -31)
+PASS  boundary_noaccess_avx_alu_ymm_load_faults (42.2 ms)
+RUN   boundary_noaccess_avx512_zmm_load_faults
+  SKIP avx512f not usable on this CPU/OS
+SKIP  boundary_noaccess_avx512_zmm_load_faults (0.1 ms): avx512f not usable on this CPU/OS
+RUN   boundary_noaccess_avx512_zmm_store_faults
+  SKIP avx512f not usable on this CPU/OS
+SKIP  boundary_noaccess_avx512_zmm_store_faults (0.1 ms): avx512f not usable on this CPU/OS
+RUN   boundary_readonly_loads_ok_stores_fault
+  INFO al_movdqu_st/readonly = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -15)
+  INFO al_gpr_st/readonly = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -3)
+  INFO al_avx_vmovdqu_y_st/readonly = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -31)
+PASS  boundary_readonly_loads_ok_stores_fault (143.2 ms)
+RUN   boundary_reserved_uncommitted_page_faults
+  INFO al_movdqu_ld/reserve = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -15)
+  INFO al_movdqu_st/reserve = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -15)
+  INFO al_avx_vmovdqu_y_ld/reserve = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -31)
+PASS  boundary_reserved_uncommitted_page_faults (85.9 ms)
+RUN   boundary_guard_page_one_shot
+  INFO al_movdqu_ld/guard = code=0x80000001 np=2 info0=0x0 info1-boundary=0 (off -15)
+  INFO al_movdqu_st/guard = code=0x80000001 np=2 info0=0x1 info1-boundary=0 (off -15)
+  INFO al_gpr_ld/guard = code=0x80000001 np=2 info0=0x0 info1-boundary=0 (off -3)
+  INFO al_avx_vmovdqu_y_ld/guard = code=0x80000001 np=2 info0=0x0 info1-boundary=0 (off -31)
+PASS  boundary_guard_page_one_shot (110.1 ms)
+RUN   boundary_noaccess_mmx_movq_load_store
+  INFO al_mmx_movq_ld/noaccess = code=0xc0000005 np=2 info0=0x0 info1-boundary=0 (off -7)
+  INFO al_mmx_movq_st/noaccess = code=0xc0000005 np=2 info0=0x1 info1-boundary=0 (off -7)
+PASS  boundary_noaccess_mmx_movq_load_store (46.8 ms)
+RUN   boundary_noaccess_below_sse_gpr
+  INFO al_movdqu_ld/noaccess_lo = code=0xc0000005 np=2 info0=0x0 info1-boundary=-20 (off -20)
+  INFO al_movdqu_st/noaccess_lo = code=0xc0000005 np=2 info0=0x1 info1-boundary=-20 (off -20)
+  INFO al_gpr_ld/noaccess_lo = code=0xc0000005 np=2 info0=0x0 info1-boundary=-8 (off -8)
+  INFO al_gpr_st/noaccess_lo = code=0xc0000005 np=2 info0=0x1 info1-boundary=-8 (off -8)
+  INFO al_movq_ld/noaccess_lo = code=0xc0000005 np=2 info0=0x0 info1-boundary=-12 (off -12)
+PASS  boundary_noaccess_below_sse_gpr (113.9 ms)
+RUN   boundary_noaccess_below_avx_ymm
+  INFO al_avx_vmovdqu_y_ld/noaccess_lo = code=0xc0000005 np=2 info0=0x0 info1-boundary=-36 (off -36)
+  INFO al_avx_vmovdqu_y_st/noaccess_lo = code=0xc0000005 np=2 info0=0x1 info1-boundary=-36 (off -36)
+  INFO al_avx_vaddps_y_ld/noaccess_lo = code=0xc0000005 np=2 info0=0x0 info1-boundary=-36 (off -36)
+PASS  boundary_noaccess_below_avx_ymm (129.4 ms)
+RUN   boundary_noaccess_below_avx512_zmm
+  SKIP AVX-512F not usable
+SKIP  boundary_noaccess_below_avx512_zmm (0.1 ms): AVX-512F not usable
+RUN   boundary_noaccess_fxsave_area
+  INFO al_fxsave/noaccess = code=0xc0000005 np=2 info0=0x1 info1-boundary=15 (off -496)
+  INFO al_fxsave/noaccess_untouched_bytes_straddle = 14 of 14 offsets faulted (only bytes the instruction need not access were inaccessible)
+PASS  boundary_noaccess_fxsave_area (45.5 ms)
+RUN   boundary_noaccess_xsave_area
+  INFO al_xsave/noaccess = code=0xc0000005 np=2 info0=0x1 info1-boundary=63 (off -512)
+PASS  boundary_noaccess_xsave_area (21.6 ms)
+RUN   boundary_noaccess_xsavec_area
+  INFO al_xsavec/noaccess = code=0xc0000005 np=2 info0=0x1 info1-boundary=63 (off -512)
+PASS  boundary_noaccess_xsavec_area (28.2 ms)
+RUN   masked_avx_vmaskmovps_load_page_end
+PASS  masked_avx_vmaskmovps_load_page_end (17.6 ms)
+RUN   masked_avx_vmaskmovps_store_page_end
+PASS  masked_avx_vmaskmovps_store_page_end (23.8 ms)
+RUN   masked_avx2_vpmaskmovd_load_page_end
+PASS  masked_avx2_vpmaskmovd_load_page_end (19.4 ms)
+RUN   masked_avx2_vpmaskmovd_store_page_end
+PASS  masked_avx2_vpmaskmovd_store_page_end (17.9 ms)
+RUN   masked_avx2_gather_fault_restart
+PASS  masked_avx2_gather_fault_restart (18.2 ms)
+RUN   masked_avx512_vmovdqu32_load_page_end
+  SKIP AVX-512F not usable
+SKIP  masked_avx512_vmovdqu32_load_page_end (0.1 ms): AVX-512F not usable
+RUN   masked_avx512_vmovdqu32_store_page_end
+  SKIP AVX-512F not usable
+SKIP  masked_avx512_vmovdqu32_store_page_end (0.1 ms): AVX-512F not usable
+RUN   rep_movsb_across_page_boundaries
+PASS  rep_movsb_across_page_boundaries (1.9 ms)
+RUN   rep_movsb_backward_df_across_boundary
+PASS  rep_movsb_backward_df_across_boundary (0.1 ms)
+RUN   rep_movsd_stosb_unaligned_across_boundary
+PASS  rep_movsd_stosb_unaligned_across_boundary (0.2 ms)
+RUN   rep_movsb_source_ending_at_noaccess_does_not_fault
+PASS  rep_movsb_source_ending_at_noaccess_does_not_fault (0.2 ms)
+RUN   rep_movsb_fault_on_destination_restart
+PASS  rep_movsb_fault_on_destination_restart (21.7 ms)
+RUN   rep_movsb_fault_on_source_restart
+PASS  rep_movsb_fault_on_source_restart (20.3 ms)
+RUN   atomic_lock_on_misaligned_within_cacheline
+PASS  atomic_lock_on_misaligned_within_cacheline (3.4 ms)
+RUN   atomic_split_lock_across_cacheline_info
+  INFO split_lock = ok 29 ms
+PASS  atomic_split_lock_across_cacheline_info (28.7 ms)
+RUN   eflags_ac_alignment_check_info
+  INFO ac_probe = f=0 code=00000000
+PASS  eflags_ac_alignment_check_info (19.3 ms)
+RUN   stack_alignment_direct_call
+  INFO esp_mod16 = 12
+PASS  stack_alignment_direct_call (0.1 ms)
+RUN   stack_alignment_thread_start
+  INFO thread_start_stack0 = sp%16=4
+  INFO thread_start_stack65536 = sp%16=4
+  INFO thread_start_stack65544 = sp%16=4
+  INFO thread_start_stack200004 = sp%16=4
+PASS  stack_alignment_thread_start (1.4 ms)
+RUN   stack_alignment_apc
+  INFO apc = sp%16=0
+PASS  stack_alignment_apc (0.1 ms)
+RUN   stack_alignment_vectored_handler
+  INFO vectored_handler = sp%16=12
+PASS  stack_alignment_vectored_handler (0.1 ms)
+RUN   stack_alignment_fiber_start
+  INFO fiber_start = sp%16=12
+PASS  stack_alignment_fiber_start (0.1 ms)
+RUN   stack_alignment_threadpool_callback
+  INFO threadpool_callback = sp%16=12
+PASS  stack_alignment_threadpool_callback (10.4 ms)
+RUN   stack_alignment_timer_queue_callback
+  INFO timer_queue_callback = sp%16=12
+PASS  stack_alignment_timer_queue_callback (1.5 ms)
+RUN   stack_alignment_registered_wait_callback
+  INFO registered_wait_callback = sp%16=12
+PASS  stack_alignment_registered_wait_callback (0.4 ms)
+RUN   stack_alignment_kernel32_enum_callback
+  INFO enum_codepages_callback = sp%16=8
+PASS  stack_alignment_kernel32_enum_callback (0.1 ms)
+RUN   stack_alignment_fls_callback
+  INFO fls_callback = sp%16=8
+PASS  stack_alignment_fls_callback (0.1 ms)
+RUN   stack_alignment_tls_callback
+  INFO tls_sp_mod16_histogram = 0:9 4:14 
+PASS  stack_alignment_tls_callback (0.3 ms)
+RUN   context_misaligned_getset_thread_context
+  INFO get_offset_0 = ok=1 error=0
+  INFO set_offset_0 = ok=1 error=0
+  INFO get_offset_1 = ok=1 error=0
+  EXPECT-FAIL wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+  FAIL alignment.c:2334: ok_ (GetThreadContext(CONTEXT at +1, not 4-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998))
+  INFO set_offset_1 = ok=1 error=0
+  EXPECT-FAIL wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+  FAIL alignment.c:2346: ok_ (SetThreadContext(CONTEXT at +1, not 4-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998))
+  INFO get_offset_2 = ok=1 error=0
+  EXPECT-FAIL wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+  FAIL alignment.c:2334: ok_ (GetThreadContext(CONTEXT at +2, not 4-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998))
+  INFO set_offset_2 = ok=1 error=0
+  EXPECT-FAIL wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+  FAIL alignment.c:2346: ok_ (SetThreadContext(CONTEXT at +2, not 4-aligned): ok=1 error=0, want FALSE / ERROR_NOACCESS (998))
+  INFO get_offset_4 = ok=1 error=0
+  INFO set_offset_4 = ok=1 error=0
+  INFO get_offset_8 = ok=1 error=0
+  INFO set_offset_8 = ok=1 error=0
+  INFO get_offset_12 = ok=1 error=0
+  INFO set_offset_12 = ok=1 error=0
+  INFO get_offset_16 = ok=1 error=0
+  INFO set_offset_16 = ok=1 error=0
+  INFO get_offset_32 = ok=1 error=0
+  INFO set_offset_32 = ok=1 error=0
+XFAIL context_misaligned_getset_thread_context (40.7 ms): wine 11.0: accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)
+RUN   context_misaligned_xstate_chunk_getset
+  INFO xstate_get_shift_0 = ok=1 error=0
+  INFO xstate_set_shift_0 = ok=1 error=0
+  INFO xstate_get_shift_64 = ok=1 error=0
+  INFO xstate_set_shift_64 = ok=1 error=0
+  INFO xstate_get_shift_4 = ok=1 error=0
+  INFO xstate_set_shift_4 = ok=1 error=0
+  INFO xstate_get_shift_8 = ok=1 error=0
+  INFO xstate_set_shift_8 = ok=1 error=0
+  INFO xstate_get_shift_16 = ok=1 error=0
+  INFO xstate_set_shift_16 = ok=1 error=0
+  INFO xstate_get_shift_32 = ok=1 error=0
+  INFO xstate_set_shift_32 = ok=1 error=0
+  INFO xstate_get_shift_48 = ok=1 error=0
+  INFO xstate_set_shift_48 = ok=1 error=0
+PASS  context_misaligned_xstate_chunk_getset (45.2 ms)
+RUN   context_misaligned_rtlcapturecontext
+  INFO capture_offset_0 = 0x10007 0 1
+  INFO capture_offset_4 = 0x10007 0 1
+  INFO capture_offset_8 = 0x10007 0 1
+  INFO capture_offset_1 = 0x10007 0 1
+PASS  context_misaligned_rtlcapturecontext (55.8 ms)
+RUN   context_misaligned_ntcontinue
+  INFO ntcontinue_offset_0 = resumed
+  INFO ntcontinue_offset_4 = resumed
+  INFO ntcontinue_offset_1 = resumed
+PASS  context_misaligned_ntcontinue (42.4 ms)
+RUN   context_initialize_misaligned_buffer_xstate_chunk
+  INFO context_not_at_round_up = 0 of 64
+  INFO getthreadcontext_failures = 0 of 64
+PASS  context_initialize_misaligned_buffer_xstate_chunk (11.0 ms)
+RUN   context_copycontext_misaligned_dest_xstate
+PASS  context_copycontext_misaligned_dest_xstate (0.1 ms)
+RUN   static_data_alignment_honoured_by_loader
+PASS  static_data_alignment_honoured_by_loader (0.0 ms)
+RUN   heap_alloc_memory_allocation_alignment
+  INFO MEMORY_ALLOCATION_ALIGNMENT = 8
+  INFO process_heap = 1200 blocks, 765 16-aligned
+  INFO private_heap = 1200 blocks, 523 16-aligned
+  INFO private_heap_noserialize = 1200 blocks, 988 16-aligned
+PASS  heap_alloc_memory_allocation_alignment (5.5 ms)
+RUN   heap_lfh_bucket_alignment
+PASS  heap_lfh_bucket_alignment (0.2 ms)
+RUN   crt_malloc_fundamental_alignment
+PASS  crt_malloc_fundamental_alignment (0.0 ms)
+RUN   crt_aligned_malloc_power_of_two
+  INFO combinations = 51
+PASS  crt_aligned_malloc_power_of_two (0.2 ms)
+RUN   crt_aligned_offset_malloc
+PASS  crt_aligned_offset_malloc (0.0 ms)
+RUN   crt_aligned_malloc_rejects_non_power_of_two
+PASS  crt_aligned_malloc_rejects_non_power_of_two (16.5 ms)
+RUN   virtualalloc_reservation_granularity
+PASS  virtualalloc_reservation_granularity (0.2 ms)
+RUN   virtualalloc_explicit_address_rounding
+PASS  virtualalloc_explicit_address_rounding (0.0 ms)
+RUN   virtualalloc2_alignment_requirement
+  INFO bad_alignment_error = 87
+PASS  virtualalloc2_alignment_requirement (0.1 ms)
+RUN   mapviewoffile_offset_and_base_alignment
+  INFO unaligned_base_error = 1132
+PASS  mapviewoffile_offset_and_base_alignment (0.3 ms)
+RUN   initialize_context_buffer_alignment
+  INFO flags = 0x1007f
+  INFO xstate_features = 0x7
+  INFO length = 1123
+  INFO xstate_header_64_aligned = 64 of 64
+PASS  initialize_context_buffer_alignment (0.3 ms)
+SUMMARY exe=alignment arch=x86 total=133 pass=118 fail=0 crash=0 skip=14 xfail=1 perf=0 checks=25910 checks_failed=4 exit=0

@@ -1,0 +1,922 @@
+wineserver: using server-side synchronization.
+ENV   exe=feature_faults arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   ud_ud2
+  NOTE probe=ud_ud2 fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_ud2 (22.9 ms)
+RUN   ud_ud1
+  NOTE probe=ud_ud1 fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_ud1 (23.3 ms)
+RUN   ud_ud0
+  NOTE probe=ud_ud0 fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_ud0 (26.4 ms)
+RUN   ud_rsm_outside_smm
+  NOTE probe=ud_rsm fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_rsm_outside_smm (17.4 ms)
+RUN   ud_lock_add_reg_dest
+  NOTE probe=ud_lock_add_reg fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_lock_add_reg_dest (18.7 ms)
+RUN   ud_lock_nop
+  NOTE probe=ud_lock_nop fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_lock_nop (17.8 ms)
+RUN   ud_lock_cmpxchg_reg_dest
+  NOTE probe=ud_lock_cmpxchg_reg fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_lock_cmpxchg_reg_dest (17.1 ms)
+RUN   ud_lock_mov_mem
+  NOTE probe=ud_lock_mov_mem fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_lock_mov_mem (16.2 ms)
+RUN   lock_add_mem_is_legal
+  NOTE probe=ok_lock_add_mem fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+PASS  lock_add_mem_is_legal (17.0 ms)
+RUN   ud_lea_register_source
+  NOTE probe=ud_lea_reg fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_lea_register_source (18.3 ms)
+RUN   ud_cmpxchg8b_register
+  NOTE probe=ud_cmpxchg8b_reg fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_cmpxchg8b_register (21.8 ms)
+RUN   ud_movntdq_register
+  NOTE probe=ud_movntdq_reg fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_movntdq_register (17.4 ms)
+RUN   ud_vex_after_66_prefix
+  NOTE probe=ud_vex_66_prefix fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_vex_after_66_prefix (17.4 ms)
+RUN   ud_vex_after_f3_prefix
+  NOTE probe=ud_vex_f3_prefix fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_vex_after_f3_prefix (20.0 ms)
+RUN   ud_vex_after_lock_prefix
+  NOTE probe=ud_vex_lock_prefix fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_vex_after_lock_prefix (17.9 ms)
+RUN   ud_vex_vmovd_l1
+  NOTE probe=ud_vex_l1_vmovd fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_vex_vmovd_l1 (17.1 ms)
+RUN   ud_vex_vmovdqa_vvvv
+  NOTE probe=ud_vex_vvvv_vmovdqa fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_vex_vmovdqa_vvvv (23.1 ms)
+RUN   ud_vex_kmovw_l1
+  NOTE probe=ud_vex_kmovw_l1 fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_vex_kmovw_l1 (18.4 ms)
+RUN   ud_evex_reserved_ll11
+  NOTE probe=ud_evex_ll11 fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_evex_reserved_ll11 (22.4 ms)
+RUN   ud_movbe_register_form
+  NOTE probe=ud_movbe_reg fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  ud_movbe_register_form (23.5 ms)
+RUN   ud_vex_after_rex_prefix
+  SKIP x64 only (0x40 is INC EAX in 32-bit mode)
+SKIP  ud_vex_after_rex_prefix (0.2 ms): x64 only (0x40 is INC EAX in 32-bit mode)
+RUN   ud_x64_invalid_opcodes
+  SKIP x64 only: DAA/AAA/AAM/PUSHA/INTO/PUSH ES/JMP FAR are valid in 32-bit mode
+SKIP  ud_x64_invalid_opcodes (0.2 ms): x64 only: DAA/AAA/AAM/PUSHA/INTO/PUSH ES/JMP FAR are valid in 32-bit mode
+RUN   feat_avx_vaddps_ymm
+  SKIP AVX is usable here: the instruction is legal
+SKIP  feat_avx_vaddps_ymm (0.1 ms): AVX is usable here: the instruction is legal
+RUN   feat_avx_vzeroupper
+  SKIP AVX is usable here: the instruction is legal
+SKIP  feat_avx_vzeroupper (0.1 ms): AVX is usable here: the instruction is legal
+RUN   feat_avx2_vpaddd_ymm
+  SKIP AVX2 is usable here: the instruction is legal
+SKIP  feat_avx2_vpaddd_ymm (0.1 ms): AVX2 is usable here: the instruction is legal
+RUN   feat_fma_vfmadd213ps
+  SKIP FMA is usable here: the instruction is legal
+SKIP  feat_fma_vfmadd213ps (0.1 ms): FMA is usable here: the instruction is legal
+RUN   feat_f16c_vcvtph2ps
+  SKIP F16C is usable here: the instruction is legal
+SKIP  feat_f16c_vcvtph2ps (0.1 ms): F16C is usable here: the instruction is legal
+RUN   feat_avx512f_vaddps_zmm
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_avx512f_vaddps_zmm fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_avx512f_vaddps_zmm (22.2 ms)
+RUN   feat_avx512f_kmovw
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_avx512f_kmovw_kreg fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_avx512f_kmovw (17.0 ms)
+RUN   feat_avx512vl_vpternlogd_xmm
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_avx512vl_vpternlogd fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_avx512vl_vpternlogd_xmm (20.6 ms)
+RUN   feat_avx512bw_vpaddb_zmm
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_avx512bw_vpaddb_zmm fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_avx512bw_vpaddb_zmm (21.5 ms)
+RUN   feat_avx512dq_vpmullq_zmm
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_avx512dq_vpmullq_zmm fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_avx512dq_vpmullq_zmm (22.0 ms)
+RUN   feat_avx512cd_vplzcntd_zmm
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_avx512cd_vplzcntd_zmm fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_avx512cd_vplzcntd_zmm (15.9 ms)
+RUN   feat_avx512vnni_vpdpbusd
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_avx512vnni_vpdpbusd fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_avx512vnni_vpdpbusd (22.4 ms)
+RUN   feat_avx512fp16_vaddph
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_avx512fp16_vaddph fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_avx512fp16_vaddph (23.4 ms)
+RUN   feat_amx_tilerelease
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_amx_tilerelease fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_amx_tilerelease (17.8 ms)
+RUN   feat_amx_tilezero
+  INFO mode = absent (and XCR0 state off)
+  NOTE probe=feat_amx_tilezero fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_amx_tilezero (20.8 ms)
+RUN   feat_bmi1_andn
+  SKIP BMI1 is usable here: the instruction is legal
+SKIP  feat_bmi1_andn (0.2 ms): BMI1 is usable here: the instruction is legal
+RUN   feat_bmi2_pdep
+  SKIP BMI2 is usable here: the instruction is legal
+SKIP  feat_bmi2_pdep (0.2 ms): BMI2 is usable here: the instruction is legal
+RUN   feat_vaes_ymm
+  SKIP VAES (VEX.256) is usable here: the instruction is legal
+SKIP  feat_vaes_ymm (0.3 ms): VAES (VEX.256) is usable here: the instruction is legal
+RUN   feat_vpclmulqdq_ymm
+  SKIP VPCLMULQDQ (VEX.256) is usable here: the instruction is legal
+SKIP  feat_vpclmulqdq_ymm (0.3 ms): VPCLMULQDQ (VEX.256) is usable here: the instruction is legal
+RUN   feat_avx_vnni_vpdpbusd
+  SKIP AVX-VNNI is usable here: the instruction is legal
+SKIP  feat_avx_vnni_vpdpbusd (0.2 ms): AVX-VNNI is usable here: the instruction is legal
+RUN   feat_fma4_vfmaddps
+  INFO mode = absent
+  NOTE probe=feat_fma4_vfmaddps fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_fma4_vfmaddps (18.3 ms)
+RUN   feat_xop_vpcmov
+  INFO mode = absent
+  NOTE probe=feat_xop_vex_vpcmov fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_xop_vpcmov (18.9 ms)
+RUN   feat_adx_adcx
+  SKIP ADX is usable here: the instruction is legal
+SKIP  feat_adx_adcx (0.1 ms): ADX is usable here: the instruction is legal
+RUN   feat_aes_aesenc
+  SKIP AES-NI is usable here: the instruction is legal
+SKIP  feat_aes_aesenc (0.1 ms): AES-NI is usable here: the instruction is legal
+RUN   feat_pclmulqdq
+  SKIP PCLMULQDQ is usable here: the instruction is legal
+SKIP  feat_pclmulqdq (0.1 ms): PCLMULQDQ is usable here: the instruction is legal
+RUN   feat_sha1rnds4
+  SKIP SHA is usable here: the instruction is legal
+SKIP  feat_sha1rnds4 (0.1 ms): SHA is usable here: the instruction is legal
+RUN   feat_sha256rnds2
+  SKIP SHA is usable here: the instruction is legal
+SKIP  feat_sha256rnds2 (0.1 ms): SHA is usable here: the instruction is legal
+RUN   feat_gfni_gf2p8mulb
+  SKIP GFNI is usable here: the instruction is legal
+SKIP  feat_gfni_gf2p8mulb (0.1 ms): GFNI is usable here: the instruction is legal
+RUN   feat_sse42_crc32
+  SKIP SSE4.2 is usable here: the instruction is legal
+SKIP  feat_sse42_crc32 (0.1 ms): SSE4.2 is usable here: the instruction is legal
+RUN   feat_popcnt
+  SKIP POPCNT is usable here: the instruction is legal
+SKIP  feat_popcnt (0.1 ms): POPCNT is usable here: the instruction is legal
+RUN   feat_movbe
+  SKIP MOVBE is usable here: the instruction is legal
+SKIP  feat_movbe (0.1 ms): MOVBE is usable here: the instruction is legal
+RUN   feat_rdrand
+  SKIP RDRAND is usable here: the instruction is legal
+SKIP  feat_rdrand (0.1 ms): RDRAND is usable here: the instruction is legal
+RUN   feat_rdseed
+  SKIP RDSEED is usable here: the instruction is legal
+SKIP  feat_rdseed (0.1 ms): RDSEED is usable here: the instruction is legal
+RUN   feat_rdtscp_absent
+  SKIP RDTSCP is usable here: the instruction is legal
+SKIP  feat_rdtscp_absent (0.1 ms): RDTSCP is usable here: the instruction is legal
+RUN   feat_movdiri
+  SKIP MOVDIRI is usable here: the instruction is legal
+SKIP  feat_movdiri (0.1 ms): MOVDIRI is usable here: the instruction is legal
+RUN   feat_3dnow_femms
+  INFO mode = absent
+  NOTE probe=feat_3dnow_femms fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_3dnow_femms (21.8 ms)
+RUN   feat_sse4a_extrq
+  INFO mode = absent
+  NOTE probe=feat_sse4a_extrq fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  feat_sse4a_extrq (22.5 ms)
+RUN   feat_xsaveopt_absent
+  SKIP XSAVEOPT is usable here: the instruction is legal
+SKIP  feat_xsaveopt_absent (0.1 ms): XSAVEOPT is usable here: the instruction is legal
+RUN   feat_xsavec_absent
+  SKIP XSAVEC is usable here: the instruction is legal
+SKIP  feat_xsavec_absent (0.1 ms): XSAVEC is usable here: the instruction is legal
+RUN   feat_xgetbv_without_osxsave
+  SKIP CR4.OSXSAVE is set: XGETBV is legal
+SKIP  feat_xgetbv_without_osxsave (0.1 ms): CR4.OSXSAVE is set: XGETBV is legal
+RUN   feat_xsave_without_osxsave
+  SKIP CR4.OSXSAVE is set: XSAVE is legal
+SKIP  feat_xsave_without_osxsave (0.1 ms): CR4.OSXSAVE is set: XSAVE is legal
+RUN   lzcnt_or_bsr_semantics
+  NOTE probe=nf_lzcnt_or_bsr fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x1b out1=0x0 out2=0x0
+  INFO exception = none
+  INFO result = 27
+PASS  lzcnt_or_bsr_semantics (16.5 ms)
+RUN   tzcnt_or_bsf_semantics
+  NOTE probe=nf_tzcnt_or_bsf fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x20 out1=0x203 out2=0x0
+  INFO exception = none
+  INFO result = 32 flags=0x203
+PASS  tzcnt_or_bsf_semantics (17.7 ms)
+RUN   cldemote_is_a_hint_nop
+  NOTE probe=nf_cldemote_hint fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+  NOTE CLDEMOTE absent: 0F 1C /0 executes as a reserved-NOP hint, as defined
+PASS  cldemote_is_a_hint_nop (19.8 ms)
+RUN   endbr64_is_a_nop
+  NOTE probe=nf_endbr64 fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+PASS  endbr64_is_a_nop (21.7 ms)
+RUN   endbr32_is_a_nop
+  NOTE probe=nf_endbr32 fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+PASS  endbr32_is_a_nop (17.2 ms)
+RUN   pause_executes
+  NOTE probe=nf_pause fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+PASS  pause_executes (19.2 ms)
+RUN   prefetchw_never_faults
+  NOTE probe=nf_prefetchw fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+PASS  prefetchw_never_faults (19.5 ms)
+RUN   rdtsc_allowed_in_user_mode
+  NOTE probe=nf_rdtsc fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0xa711a8d0d4f14 out1=0x0 out2=0x0
+  INFO exception = none
+  INFO tsc = 0xa711a8d0d4f14
+PASS  rdtsc_allowed_in_user_mode (19.9 ms)
+RUN   rdtscp_allowed_in_user_mode
+  NOTE probe=nf_rdtscp fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0xa711a916b5ead out1=0x0 out2=0x0
+  INFO exception = none
+  INFO tsc_aux = 0x0
+PASS  rdtscp_allowed_in_user_mode (20.6 ms)
+RUN   rdpid_allowed_in_user_mode
+  NOTE probe=nf_rdpid fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0xc out1=0x0 out2=0x0
+  INFO exception = none
+  INFO tsc_aux = 0xc
+PASS  rdpid_allowed_in_user_mode (20.6 ms)
+RUN   xgetbv_ecx1_with_xgetbv1
+  NOTE probe=nf_xgetbv_ecx1 fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x203 out1=0x0 out2=0x0
+  INFO exception = none
+  INFO xinuse = 0x203
+PASS  xgetbv_ecx1_with_xgetbv1 (18.1 ms)
+RUN   priv_hlt
+  NOTE probe=priv_hlt fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_hlt (23.7 ms)
+RUN   priv_cli
+  NOTE probe=priv_cli fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_cli (24.5 ms)
+RUN   priv_sti
+  NOTE probe=priv_sti fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_sti (19.4 ms)
+RUN   priv_in_al_dx
+  NOTE probe=priv_in_dx fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_in_al_dx (23.3 ms)
+RUN   priv_out_dx_al
+  NOTE probe=priv_out_dx fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_out_dx_al (21.2 ms)
+RUN   priv_in_al_imm8
+  NOTE probe=priv_in_imm fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_in_al_imm8 (17.5 ms)
+RUN   priv_out_imm8_al
+  NOTE probe=priv_out_imm fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_out_imm8_al (22.1 ms)
+RUN   priv_insb
+  NOTE probe=priv_insb fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_insb (26.9 ms)
+RUN   priv_outsb
+  NOTE probe=priv_outsb fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_outsb (26.4 ms)
+RUN   priv_mov_from_cr0
+  NOTE probe=priv_mov_from_cr0 fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_mov_from_cr0 (23.0 ms)
+RUN   priv_mov_from_cr3
+  NOTE probe=priv_mov_from_cr3 fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_mov_from_cr3 (18.9 ms)
+RUN   priv_mov_from_cr4
+  NOTE probe=priv_mov_from_cr4 fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_mov_from_cr4 (20.8 ms)
+RUN   priv_mov_from_dr7
+  NOTE probe=priv_mov_from_dr7 fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_mov_from_dr7 (18.2 ms)
+RUN   priv_rdmsr
+  NOTE probe=priv_rdmsr fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_rdmsr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_rdmsr (22.9 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_wrmsr
+  NOTE probe=priv_wrmsr fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_wrmsr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_wrmsr (26.5 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_clts
+  NOTE probe=priv_clts fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_clts: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_clts (24.6 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_wbinvd
+  NOTE probe=priv_wbinvd fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_wbinvd: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_wbinvd (21.4 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_invlpg
+  NOTE probe=priv_invlpg fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_invlpg: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_invlpg (21.4 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_lldt
+  NOTE probe=priv_lldt fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_lldt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_lldt (23.3 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_ltr
+  NOTE probe=priv_ltr fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_ltr: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_ltr (20.4 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_invd
+  NOTE probe=priv_invd fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_invd: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_invd (28.6 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_mov_to_dr7
+  NOTE probe=priv_mov_to_dr7 fault=1 code=0xc0000096 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+  INFO ea_offset = 0
+PASS  priv_mov_to_dr7 (18.8 ms)
+RUN   priv_sysexit
+  NOTE probe=priv_sysexit fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine does not translate SYSEXIT faults to STATUS_PRIVILEGED_INSTRUCTION
+  FAIL feature_faults.c:756: ok (priv_sysexit: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_sysexit (24.0 ms): Wine does not translate SYSEXIT faults to STATUS_PRIVILEGED_INSTRUCTION
+RUN   priv_lgdt
+  NOTE probe=priv_lgdt fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_lgdt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_lgdt (26.8 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_lidt
+  NOTE probe=priv_lidt fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_lidt: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_lidt (23.0 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_lmsw
+  NOTE probe=priv_lmsw fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+  FAIL feature_faults.c:756: ok (priv_lmsw: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_PRIVILEGED_INSTRUCTION)
+XFAIL priv_lmsw (18.0 ms): Wine reports this #GP as STATUS_ACCESS_VIOLATION (its privileged-opcode list is shorter than Windows')
+RUN   priv_x64_only
+  SKIP MOV from CR8, SWAPGS and SYSRET probes are x64 only
+SKIP  priv_x64_only (0.1 ms): MOV from CR8, SWAPGS and SYSRET probes are x64 only
+RUN   priv_rdpmc_recorded
+  NOTE probe=priv_rdpmc fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO rdpmc = faults
+  NOTE RDPMC #GP reported as STATUS_ACCESS_VIOLATION (Windows lists 0F 33 as privileged)
+PASS  priv_rdpmc_recorded (16.1 ms)
+RUN   gp_xsetbv_user_mode
+  NOTE probe=priv_xsetbv fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_xsetbv_user_mode (17.0 ms)
+RUN   gp_xgetbv_ecx2
+  NOTE probe=gp_xgetbv_ecx2 fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_xgetbv_ecx2 (21.5 ms)
+RUN   gp_xgetbv_ecx_ffffffff
+  NOTE probe=gp_xgetbv_ecx_ffffffff fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_xgetbv_ecx_ffffffff (18.6 ms)
+RUN   gp_xgetbv_ecx1_without_xgetbv1
+  SKIP XGETBV1 enumerated: ECX=1 is legal (see xgetbv_ecx1_with_xgetbv1)
+SKIP  gp_xgetbv_ecx1_without_xgetbv1 (0.2 ms): XGETBV1 enumerated: ECX=1 is legal (see xgetbv_ecx1_with_xgetbv1)
+RUN   gp_movaps_misaligned
+  NOTE probe=gp_movaps_misaligned fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_movaps_misaligned (19.9 ms)
+RUN   gp_ldmxcsr_reserved_bit
+  NOTE probe=gp_ldmxcsr_reserved fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_ldmxcsr_reserved_bit (15.5 ms)
+RUN   gp_fxsave_misaligned
+  NOTE probe=gp_fxsave_misaligned fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_fxsave_misaligned (20.7 ms)
+RUN   gp_xsave_misaligned
+  NOTE probe=gp_xsave_misaligned fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_xsave_misaligned (20.7 ms)
+RUN   gp_xrstor_bad_header
+  NOTE probe=gp_xrstor_bad_header fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_xrstor_bad_header (15.3 ms)
+RUN   gp_int_n_dpl0_gate
+  NOTE probe=gp_int_0e fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_int_n_dpl0_gate (17.2 ms)
+RUN   gp_int_80_not_a_system_call
+  NOTE probe=gp_int_80 fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x14d8ad out1=0x0 out2=0x0
+  INFO exception = none
+  EXPECT-FAIL INT 80h executed without a fault under Wine (the Linux kernel handled the gate), result 0x14d8ad
+  FAIL feature_faults.c:746: r->fault (gp_int_80: executed without raising an exception (expected STATUS_ACCESS_VIOLATION))
+XFAIL gp_int_80_not_a_system_call (16.5 ms): INT 80h executed without a fault under Wine (the Linux kernel handled the gate), result 0x14d8ad
+RUN   gp_int_21_not_a_system_call
+  NOTE probe=gp_int_21 fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+PASS  gp_int_21_not_a_system_call (19.5 ms)
+RUN   gp_xsaves_user_mode
+  NOTE probe=gp_xsaves_user fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_xsaves_user_mode (18.7 ms)
+RUN   gp_xrstors_user_mode
+  NOTE probe=gp_xrstors_user fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  INFO av_params = np=2 p0=0x0 p1=0xffffffff
+PASS  gp_xrstors_user_mode (15.4 ms)
+RUN   ac_alignment_check_recorded
+  NOTE probe=ac_misaligned_load fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+  NOTE EFLAGS.AC + misaligned load executed (CR0.AM clear or alignment checking not delivered)
+  INFO alignment_check = none
+PASS  ac_alignment_check_recorded (18.1 ms)
+RUN   gp_x64_only
+  SKIP CMPXCHG16B and non-canonical probes are x64 only
+SKIP  gp_x64_only (0.3 ms): CMPXCHG16B and non-canonical probes are x64 only
+RUN   umip_sgdt_no_fault
+  NOTE probe=umip_sgdt fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+  NOTE processor implements UMIP: SGDT may be emulated by the OS
+PASS  umip_sgdt_no_fault (21.5 ms)
+RUN   umip_sidt_no_fault
+  NOTE probe=umip_sidt fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+  NOTE processor implements UMIP: SIDT may be emulated by the OS
+PASS  umip_sidt_no_fault (19.2 ms)
+RUN   umip_smsw_no_fault
+  NOTE probe=umip_smsw fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x80050033 out1=0x0 out2=0x0
+  INFO exception = none
+  NOTE processor implements UMIP: SMSW may be emulated by the OS
+  INFO value = 0x80050033
+PASS  umip_smsw_no_fault (22.0 ms)
+RUN   umip_sldt_no_fault
+  NOTE probe=umip_sldt fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+  NOTE processor implements UMIP: SLDT may be emulated by the OS
+PASS  umip_sldt_no_fault (23.2 ms)
+RUN   umip_str_no_fault
+  NOTE probe=umip_str fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x40 out1=0x0 out2=0x0
+  INFO exception = none
+  NOTE processor implements UMIP: STR may be emulated by the OS
+  INFO value = 0x40
+PASS  umip_str_no_fault (15.2 ms)
+RUN   av_null_read
+  NOTE probe=av_null_read fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+PASS  av_null_read (17.8 ms)
+RUN   av_null_write
+  NOTE probe=av_null_write fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x1 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+PASS  av_null_write (17.0 ms)
+RUN   av_execute_nx_page
+  INFO dep_flags = 0x1 permanent=0
+  NOTE probe=av_nx_exec fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x8 p1=0x1f0000 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+PASS  av_execute_nx_page (22.4 ms)
+RUN   trap_int3_breakpoint
+  NOTE probe=trap_int3 fault=1 code=0x80000003 xflags=0x0 ea=0 ip=0 np=1 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0x80000003 STATUS_BREAKPOINT
+  INFO ea_offset = 0
+  INFO ctx_ip_offset = 0
+PASS  trap_int3_breakpoint (17.8 ms)
+RUN   trap_int3_long_form
+  NOTE probe=trap_int3_long fault=1 code=0x80000003 xflags=0x0 ea=1 ip=1 np=1 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0x80000003 STATUS_BREAKPOINT
+  INFO ea_offset = 1
+PASS  trap_int3_long_form (17.6 ms)
+RUN   trap_int2c_assertion
+  NOTE probe=trap_int2c fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine does not implement the int 2Ch assertion gate
+  FAIL feature_faults.c:756: ok (trap_int2c: exception 0xc0000005 (STATUS_ACCESS_VIOLATION), expected STATUS_ASSERTION_FAILURE)
+XFAIL trap_int2c_assertion (20.9 ms): Wine does not implement the int 2Ch assertion gate
+RUN   trap_int2d_recorded
+  NOTE probe=trap_int2d fault=1 code=0x80000003 xflags=0x0 ea=3 ip=2 np=1 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0x80000003 STATUS_BREAKPOINT
+  INFO ea_offset = 3
+  NOTE int 2Dh (debug service, no debugger): 0x80000003 STATUS_BREAKPOINT ea=insn+3 ip=insn+2
+PASS  trap_int2d_recorded (23.2 ms)
+RUN   trap_fastfail_bypasses_handlers
+  NOTE trap_fastfail: no result line: exit=0xc0000409 exception=0xc0000409 (STATUS_STACK_BUFFER_OVERRUN) timed_out=0; output: FP_BEGIN trap_fastfail
+
+PASS  trap_fastfail_bypasses_handlers (17.5 ms)
+RUN   trap_icebp_recorded
+  NOTE probe=trap_icebp fault=1 code=0x80000004 xflags=0x0 ea=1 ip=1 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0x80000004 STATUS_SINGLE_STEP
+  INFO ea_offset = 1
+  NOTE ICEBP: 0x80000004 STATUS_SINGLE_STEP ea=insn+1
+PASS  trap_icebp_recorded (24.2 ms)
+RUN   trap_single_step_tf
+  NOTE probe=trap_single_step fault=1 code=0x80000004 xflags=0x0 ea=1 ip=1 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0x80000004 STATUS_SINGLE_STEP
+  INFO ea_offset = 1
+PASS  trap_single_step_tf (25.8 ms)
+RUN   trap_divide_by_zero
+  NOTE probe=trap_div0 fault=1 code=0xc0000094 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000094 STATUS_INTEGER_DIVIDE_BY_ZERO
+  INFO ea_offset = 0
+PASS  trap_divide_by_zero (16.3 ms)
+RUN   trap_div_quotient_overflow
+  NOTE probe=trap_div_overflow fault=1 code=0xc0000094 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000094 STATUS_INTEGER_DIVIDE_BY_ZERO
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports every #DE as STATUS_INTEGER_DIVIDE_BY_ZERO
+  FAIL feature_faults.c:756: ok (trap_div_overflow: exception 0xc0000094 (STATUS_INTEGER_DIVIDE_BY_ZERO), expected STATUS_INTEGER_OVERFLOW)
+XFAIL trap_div_quotient_overflow (22.3 ms): Wine reports every #DE as STATUS_INTEGER_DIVIDE_BY_ZERO
+RUN   trap_idiv_int_min_by_minus1
+  NOTE probe=trap_idiv_overflow fault=1 code=0xc0000094 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000094 STATUS_INTEGER_DIVIDE_BY_ZERO
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine reports every #DE as STATUS_INTEGER_DIVIDE_BY_ZERO
+  FAIL feature_faults.c:756: ok (trap_idiv_overflow: exception 0xc0000094 (STATUS_INTEGER_DIVIDE_BY_ZERO), expected STATUS_INTEGER_OVERFLOW)
+XFAIL trap_idiv_int_min_by_minus1 (27.6 ms): Wine reports every #DE as STATUS_INTEGER_DIVIDE_BY_ZERO
+RUN   trap_into_overflow_x86
+  NOTE probe=trap_into_x86 fault=1 code=0xc0000095 xflags=0x0 ea=1 ip=1 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000095 STATUS_INTEGER_OVERFLOW
+  INFO ea_offset = 1
+  NOTE INTO: ExceptionAddress insn+1 (Windows reports the INTO itself)
+PASS  trap_into_overflow_x86 (20.1 ms)
+RUN   into_without_of_x86
+  NOTE probe=ok_into_no_of_x86 fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+PASS  into_without_of_x86 (21.9 ms)
+RUN   trap_bound_out_of_range_x86
+  NOTE probe=trap_bound_x86 fault=1 code=0xc000008c xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000008c STATUS_ARRAY_BOUNDS_EXCEEDED
+  INFO ea_offset = 0
+PASS  trap_bound_out_of_range_x86 (25.7 ms)
+RUN   bound_in_range_x86
+  NOTE probe=ok_bound_in_range_x86 fault=0 code=0x00000000 xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=-1 hits=0 setup=0 fsw=0x0 mxcsr=0x0 cflags=0x0 ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = none
+PASS  bound_in_range_x86 (19.7 ms)
+RUN   sys_sysenter_recorded_x86
+  NOTE sys_sysenter_x86: no result line: exit=0x00000001 exception=0x00000000 (none) timed_out=0; output: FP_BEGIN sys_sysenter_x86
+
+  NOTE SYSENTER (eax=0xFFF): no result line: exit=0x00000001 exception=0x00000000 (none) timed_out=0
+PASS  sys_sysenter_recorded_x86 (21.2 ms)
+RUN   sys_int2e_invalid_service_recorded
+  NOTE probe=sys_int2e_badsvc fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xffffffff marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+  NOTE int 2Eh (eax=0xFFF) raised 0xc0000005 STATUS_ACCESS_VIOLATION
+PASS  sys_int2e_invalid_service_recorded (24.9 ms)
+RUN   x87_unmasked_stack_underflow
+  NOTE probe=x87u_stack fault=1 code=0xc0000092 xflags=0x0 ea=-2 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x80c1 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000092 STATUS_FLOAT_STACK_CHECK
+  INFO ea_offset = -2
+  NOTE x87u_stack: ExceptionAddress = faulting x87 instruction (insn-2), not the FWAIT
+  INFO fsw = 0x80c1
+PASS  x87_unmasked_stack_underflow (22.9 ms)
+RUN   x87_unmasked_invalid_sqrt
+  NOTE probe=x87u_invalid fault=1 code=0xc0000090 xflags=0x0 ea=-2 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0xb881 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000090 STATUS_FLOAT_INVALID_OPERATION
+  INFO ea_offset = -2
+  NOTE x87u_invalid: ExceptionAddress = faulting x87 instruction (insn-2), not the FWAIT
+  INFO fsw = 0xb881
+PASS  x87_unmasked_invalid_sqrt (19.4 ms)
+RUN   x87_unmasked_zero_divide
+  NOTE probe=x87u_zerodiv fault=1 code=0xc000008e xflags=0x0 ea=-2 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0xb084 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000008e STATUS_FLOAT_DIVIDE_BY_ZERO
+  INFO ea_offset = -2
+  NOTE x87u_zerodiv: ExceptionAddress = faulting x87 instruction (insn-2), not the FWAIT
+  INFO fsw = 0xb084
+PASS  x87_unmasked_zero_divide (24.2 ms)
+RUN   x87_unmasked_overflow
+  NOTE probe=x87u_overflow fault=1 code=0xc0000091 xflags=0x0 ea=-2 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0xb888 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000091 STATUS_FLOAT_OVERFLOW
+  INFO ea_offset = -2
+  NOTE x87u_overflow: ExceptionAddress = faulting x87 instruction (insn-2), not the FWAIT
+  INFO fsw = 0xb888
+PASS  x87_unmasked_overflow (19.1 ms)
+RUN   x87_unmasked_underflow
+  NOTE probe=x87u_underflow fault=1 code=0xc0000093 xflags=0x0 ea=-2 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0xb890 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000093 STATUS_FLOAT_UNDERFLOW
+  INFO ea_offset = -2
+  NOTE x87u_underflow: ExceptionAddress = faulting x87 instruction (insn-2), not the FWAIT
+  INFO fsw = 0xb890
+PASS  x87_unmasked_underflow (30.9 ms)
+RUN   x87_unmasked_precision
+  NOTE probe=x87u_precision fault=1 code=0xc000008f xflags=0x0 ea=-2 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0xbaa0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000008f STATUS_FLOAT_INEXACT_RESULT
+  INFO ea_offset = -2
+  NOTE x87u_precision: ExceptionAddress = faulting x87 instruction (insn-2), not the FWAIT
+  INFO fsw = 0xbaa0
+PASS  x87_unmasked_precision (18.0 ms)
+RUN   x87_unmasked_denormal
+  NOTE probe=x87u_denormal fault=1 code=0xc000008d xflags=0x0 ea=-6 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0xb882 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000008d STATUS_FLOAT_DENORMAL_OPERAND
+  INFO ea_offset = -6
+  NOTE x87u_denormal: ExceptionAddress = faulting x87 instruction (insn-6), not the FWAIT
+  INFO fsw = 0xb882
+PASS  x87_unmasked_denormal (21.1 ms)
+RUN   sse_unmasked_invalid
+  NOTE probe=sseu_invalid fault=1 code=0xc00002b5 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0x1f01 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f01 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc00002b5 STATUS_FLOAT_MULTIPLE_TRAPS
+  INFO ea_offset = 0
+  INFO mxcsr = 0x1f01
+PASS  sse_unmasked_invalid (18.1 ms)
+RUN   sse_unmasked_zero_divide
+  NOTE probe=sseu_zerodiv fault=1 code=0xc00002b5 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0x1d84 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1d84 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc00002b5 STATUS_FLOAT_MULTIPLE_TRAPS
+  INFO ea_offset = 0
+  INFO mxcsr = 0x1d84
+PASS  sse_unmasked_zero_divide (14.5 ms)
+RUN   sse_unmasked_denormal
+  NOTE probe=sseu_denormal fault=1 code=0xc00002b5 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0x1e82 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1e82 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc00002b5 STATUS_FLOAT_MULTIPLE_TRAPS
+  INFO ea_offset = 0
+  INFO mxcsr = 0x1e82
+PASS  sse_unmasked_denormal (16.3 ms)
+RUN   sse_unmasked_overflow
+  NOTE probe=sseu_overflow fault=1 code=0xc00002b5 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0x1ba8 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1ba8 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc00002b5 STATUS_FLOAT_MULTIPLE_TRAPS
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine translates #XM differently from Windows
+  FAIL feature_faults.c:756: ok (sseu_overflow: exception 0xc00002b5 (STATUS_FLOAT_MULTIPLE_TRAPS), expected STATUS_FLOAT_MULTIPLE_FAULTS)
+XFAIL sse_unmasked_overflow (18.6 ms): Wine translates #XM differently from Windows
+RUN   sse_unmasked_underflow
+  NOTE probe=sseu_underflow fault=1 code=0xc00002b5 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0x1790 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1790 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc00002b5 STATUS_FLOAT_MULTIPLE_TRAPS
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine translates #XM differently from Windows
+  FAIL feature_faults.c:756: ok (sseu_underflow: exception 0xc00002b5 (STATUS_FLOAT_MULTIPLE_TRAPS), expected STATUS_FLOAT_MULTIPLE_FAULTS)
+XFAIL sse_unmasked_underflow (15.6 ms): Wine translates #XM differently from Windows
+RUN   sse_unmasked_precision
+  NOTE probe=sseu_precision fault=1 code=0xc00002b5 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0xfa0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0xfa0 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc00002b5 STATUS_FLOAT_MULTIPLE_TRAPS
+  INFO ea_offset = 0
+  EXPECT-FAIL Wine translates #XM differently from Windows
+  FAIL feature_faults.c:756: ok (sseu_precision: exception 0xc00002b5 (STATUS_FLOAT_MULTIPLE_TRAPS), expected STATUS_FLOAT_MULTIPLE_FAULTS)
+XFAIL sse_unmasked_precision (16.3 ms): Wine translates #XM differently from Windows
+RUN   thread_ud2_on_worker_thread
+  NOTE probe=ud_ud2 fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  thread_ud2_on_worker_thread (14.8 ms)
+RUN   thread_absent_avx512_on_worker_thread
+  NOTE probe=feat_avx512f_vaddps_zmm fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+PASS  thread_absent_avx512_on_worker_thread (19.1 ms)
+RUN   thread_av_null_read_on_worker_thread
+  NOTE probe=av_null_read fault=1 code=0xc0000005 xflags=0x0 ea=0 ip=0 np=2 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+  INFO ea_offset = 0
+PASS  thread_av_null_read_on_worker_thread (16.5 ms)
+RUN   repeat_ud2_500
+  NOTE ud_ud2: no result line: exit=0x00000000 exception=0x00000000 (none) timed_out=0; output: FP_BEGIN ud_ud2
+FPR probe=ud_ud2 iters=500 good=500 first_bad=-1 code=0xc000001d ea=0
+
+  NOTE probe=ud_ud2 iters=500 good=500 first_bad=-1 code=0xc000001d ea=0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+PASS  repeat_ud2_500 (21.0 ms)
+RUN   repeat_null_read_200
+  NOTE av_null_read: no result line: exit=0x00000000 exception=0x00000000 (none) timed_out=0; output: FP_BEGIN av_null_read
+FPR probe=av_null_read iters=200 good=200 first_bad=-1 code=0xc0000005 ea=0
+
+  NOTE probe=av_null_read iters=200 good=200 first_bad=-1 code=0xc0000005 ea=0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+PASS  repeat_null_read_200 (15.2 ms)
+RUN   repeat_movaps_gp_200
+  NOTE gp_movaps_misaligned: no result line: exit=0x00000000 exception=0x00000000 (none) timed_out=0; output: FP_BEGIN gp_movaps_misaligned
+FPR probe=gp_movaps_misaligned iters=200 good=200 first_bad=-1 code=0xc0000005 ea=0
+
+  NOTE probe=gp_movaps_misaligned iters=200 good=200 first_bad=-1 code=0xc0000005 ea=0
+  INFO exception = 0xc0000005 STATUS_ACCESS_VIOLATION
+PASS  repeat_movaps_gp_200 (15.7 ms)
+RUN   repeat_hlt_200
+  NOTE priv_hlt: no result line: exit=0x00000000 exception=0x00000000 (none) timed_out=0; output: FP_BEGIN priv_hlt
+FPR probe=priv_hlt iters=200 good=200 first_bad=-1 code=0xc0000096 ea=0
+
+  NOTE probe=priv_hlt iters=200 good=200 first_bad=-1 code=0xc0000096 ea=0
+  INFO exception = 0xc0000096 STATUS_PRIVILEGED_INSTRUCTION
+PASS  repeat_hlt_200 (15.3 ms)
+RUN   repeat_sse_zerodiv_200
+  NOTE sseu_zerodiv: no result line: exit=0x00000000 exception=0x00000000 (none) timed_out=0; output: FP_BEGIN sseu_zerodiv
+FPR probe=sseu_zerodiv iters=200 good=200 first_bad=-1 code=0xc00002b5 ea=0
+
+  NOTE probe=sseu_zerodiv iters=200 good=200 first_bad=-1 code=0xc00002b5 ea=0
+  INFO exception = 0xc00002b5 STATUS_FLOAT_MULTIPLE_TRAPS
+PASS  repeat_sse_zerodiv_200 (16.6 ms)
+RUN   repeat_x87_zerodiv_200
+  NOTE x87u_zerodiv: no result line: exit=0x00000000 exception=0x00000000 (none) timed_out=0; output: FP_BEGIN x87u_zerodiv
+FPR probe=x87u_zerodiv iters=200 good=200 first_bad=-1 code=0xc000008e ea=-2
+
+  NOTE probe=x87u_zerodiv iters=200 good=200 first_bad=-1 code=0xc000008e ea=-2
+  INFO exception = 0xc000008e STATUS_FLOAT_DIVIDE_BY_ZERO
+PASS  repeat_x87_zerodiv_200 (18.5 ms)
+RUN   repeat_absent_avx512_200
+  NOTE feat_avx512f_vaddps_zmm: no result line: exit=0x00000000 exception=0x00000000 (none) timed_out=0; output: FP_BEGIN feat_avx512f_vaddps_zmm
+FPR probe=feat_avx512f_vaddps_zmm iters=200 good=200 first_bad=-1 code=0xc000001d ea=0
+
+  NOTE probe=feat_avx512f_vaddps_zmm iters=200 good=200 first_bad=-1 code=0xc000001d ea=0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+PASS  repeat_absent_avx512_200 (19.6 ms)
+RUN   ctx_ud2_gpr_xmm_mxcsr_fcw
+  NOTE probe=ctx_gpr_xmm fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x3f80 cflags=0x1007f ctxbad=0x0 ymm=-2 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+  INFO context_flags = 0x1007f
+PASS  ctx_ud2_gpr_xmm_mxcsr_fcw (22.6 ms)
+RUN   ctx_ud2_ymm_upper_in_xstate
+  NOTE probe=ctx_ymm_ud2 fault=1 code=0xc000001d xflags=0x0 ea=0 ip=0 np=0 p0=0x0 p1=0x0 marker=1 hits=1 setup=0 fsw=0x0 mxcsr=0x1f80 cflags=0x1007f ctxbad=0x0 ymm=1 out0=0x0 out1=0x0 out2=0x0
+  INFO exception = 0xc000001d STATUS_ILLEGAL_INSTRUCTION
+  INFO ea_offset = 0
+  INFO context_flags = 0x1007f
+PASS  ctx_ud2_ymm_upper_in_xstate (15.2 ms)
+RUN   x87_stack_overflow_masked
+  INFO sw = after8=0x0000 after9=0x3a41
+PASS  x87_stack_overflow_masked (0.1 ms)
+RUN   x87_stack_underflow_masked
+  INFO sw = after_fadd=0x0041 after_fxam=0x0341
+PASS  x87_stack_underflow_masked (0.1 ms)
+RUN   x87_fxam_empty_register
+  INFO sw = 0x4300
+PASS  x87_fxam_empty_register (0.0 ms)
+RUN   x87_ftst_empty_register
+  INFO sw = 0x4541
+PASS  x87_ftst_empty_register (0.0 ms)
+RUN   x87_fsqrt_negative_masked
+  INFO sw = 0x3801
+PASS  x87_fsqrt_negative_masked (0.0 ms)
+RUN   x87_divide_by_zero_masked
+  INFO sw = 0x3004
+PASS  x87_divide_by_zero_masked (0.0 ms)
+RUN   x87_fist_overflow_integer_indefinite
+  INFO result = 0x80000000 sw=0x0001
+PASS  x87_fist_overflow_integer_indefinite (0.1 ms)
+RUN   mmx_write_sets_tags_valid_and_top0
+  INFO state = sw=0x0000 fnstenv_tag=0x0002 abridged=0xff
+PASS  mmx_write_sets_tags_valid_and_top0 (0.1 ms)
+RUN   emms_marks_all_tags_empty
+PASS  emms_marks_all_tags_empty (0.0 ms)
+RUN   x87_after_mmx_without_emms_overflows
+  INFO sw = 0x3a41
+PASS  x87_after_mmx_without_emms_overflows (0.0 ms)
+RUN   mmx_aliases_x87_mantissa
+  INFO mm7 = 0x8000000000000000
+PASS  mmx_aliases_x87_mantissa (0.1 ms)
+RUN   cpuid_above_max_basic_leaf
+  INFO leaf = 0x21 -> 00000000 00000001 00000000 00000000 (max 0x20 -> 00000000 00000001 00000000 00000000)
+PASS  cpuid_above_max_basic_leaf (0.3 ms)
+RUN   cpuid_above_max_extended_leaf
+  INFO leaf = 0x80000009 -> 00000000 00000001 00000000 00000000
+PASS  cpuid_above_max_extended_leaf (0.2 ms)
+RUN   cpuid_leaf7_invalid_subleaf_zero
+  INFO leaf7 = max subleaf 2, subleaf 3 -> 00000000 00000000 00000000 00000000
+PASS  cpuid_leaf7_invalid_subleaf_zero (0.2 ms)
+RUN   cpuid_leafd_invalid_subleaf_zero
+  INFO subleaves_checked = 54
+PASS  cpuid_leafd_invalid_subleaf_zero (0.1 ms)
+RUN   cpuid_consistent_on_every_cpu
+  INFO cpus = 28 pinned of 28, 28 distinct initial APIC IDs
+PASS  cpuid_consistent_on_every_cpu (24.0 ms)
+SUMMARY exe=feature_faults arch=x86 total=183 pass=132 fail=0 crash=0 skip=32 xfail=19 perf=0 checks=1735 checks_failed=19 exit=0

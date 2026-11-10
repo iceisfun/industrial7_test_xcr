@@ -1,0 +1,373 @@
+wineserver: using server-side synchronization.
+ENV   exe=xsave_roundtrip arch=x64 wow64=0 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+RUN   cpuid_xcr0_rules
+  INFO xcr0 = 0x207
+  INFO xcr0_supported = 0x207
+  INFO xss_supported = 0x19900
+  INFO xsave_size_enabled = 2696
+  INFO xsave_size_max = 2696
+  INFO xsave_subfeatures = xsaveopt=1 xsavec=1 xgetbv1=1 xsaves=1 xfd=0
+PASS  cpuid_xcr0_rules (0.4 ms)
+RUN   cpuid_component_sizes_offsets
+  INFO user_components = 2
+PASS  cpuid_component_sizes_offsets (0.1 ms)
+RUN   cpuid_unsupported_subleaves_zero
+  INFO unsupported_subleaves = 54
+PASS  cpuid_unsupported_subleaves_zero (0.1 ms)
+RUN   cpuid_compacted_layout
+  INFO compacted_size_xcr0 = 840
+  INFO compacted_size_xcr0_xss = 1664
+PASS  cpuid_compacted_layout (0.1 ms)
+RUN   cpuid_windows_api_mask
+  INFO GetEnabledXStateFeatures = 0x7
+PASS  cpuid_windows_api_mask (0.1 ms)
+RUN   fxsave_mxcsr_and_mask
+  INFO mxcsr_mask = 0x0000ffff
+  INFO daz_supported = 1
+PASS  fxsave_mxcsr_and_mask (0.1 ms)
+RUN   fxsave_daz_follows_mask
+PASS  fxsave_daz_follows_mask (0.0 ms)
+RUN   fxsave_x87_three_values
+PASS  fxsave_x87_three_values (0.0 ms)
+RUN   fxsave_x87_full_stack
+PASS  fxsave_x87_full_stack (0.0 ms)
+RUN   fxsave_x87_overflow_indefinite
+PASS  fxsave_x87_overflow_indefinite (0.0 ms)
+RUN   fxsave_mmx_aliasing_and_emms
+  INFO register_contents_after_emms_retained = 1
+PASS  fxsave_mmx_aliasing_and_emms (0.1 ms)
+RUN   fxsave_xmm_from_registers
+PASS  fxsave_xmm_from_registers (0.0 ms)
+RUN   fxrstor_restores_legacy_state
+PASS  fxrstor_restores_legacy_state (0.0 ms)
+RUN   fxrstor_full_tag_word_classes
+PASS  fxrstor_full_tag_word_classes (0.0 ms)
+RUN   fxsave_fxrstor_many_patterns
+PASS  fxsave_fxrstor_many_patterns (0.1 ms)
+RUN   fxrstor_ignores_mask_and_software_bytes
+PASS  fxrstor_ignores_mask_and_software_bytes (0.0 ms)
+RUN   fxsave_fdp_and_forms
+  INFO fxsave64_fip = 0x6fffff02155d
+  INFO fxsave64_fdp = 0x0
+  INFO fxsave32_fcs_fds = fcs=0x0000 fds=0x0000
+  INFO fop = 0x0000
+  INFO fdp_excptn_only = 1
+  INFO fcs_fds_deprecated = 1
+PASS  fxsave_fdp_and_forms (0.4 ms)
+RUN   x87_pointers_fxrstor_fxsave
+  INFO strict = 1 (intel 1, XSaveErPtr 0)
+PASS  x87_pointers_fxrstor_fxsave (0.1 ms)
+RUN   x87_pointers_xrstor_xsave
+  INFO xsave32_form_fcs_fds = fcs=0x0000 fds=0x0000
+PASS  x87_pointers_xrstor_xsave (0.1 ms)
+RUN   x87_pointers_cleared_by_init
+PASS  x87_pointers_cleared_by_init (0.0 ms)
+RUN   xsave_legacy_matches_fxsave
+  INFO pointer_fields_equal = 1
+PASS  xsave_legacy_matches_fxsave (0.1 ms)
+RUN   xsave_xmm_and_header
+PASS  xsave_xmm_and_header (0.0 ms)
+RUN   xsave_ymm_upper_halves
+PASS  xsave_ymm_upper_halves (0.0 ms)
+RUN   xsave_x87_from_fld
+PASS  xsave_x87_from_fld (0.0 ms)
+RUN   xsave_rfbm_x87_only
+PASS  xsave_rfbm_x87_only (0.0 ms)
+RUN   xsave_rfbm_sse_only
+PASS  xsave_rfbm_sse_only (0.0 ms)
+RUN   xsave_rfbm_avx_only
+PASS  xsave_rfbm_avx_only (0.0 ms)
+RUN   xsave_rfbm_x87_avx
+PASS  xsave_rfbm_x87_avx (0.0 ms)
+RUN   xsave_rfbm_all_user
+PASS  xsave_rfbm_all_user (0.0 ms)
+RUN   xsave_rfbm_zero_writes_nothing
+PASS  xsave_rfbm_zero_writes_nothing (0.0 ms)
+RUN   xsave_rfbm_beyond_xcr0
+PASS  xsave_rfbm_beyond_xcr0 (0.0 ms)
+RUN   xsave_exact_size_guard_page
+  NOTE XSAVE(xcr0) size 2696 is not a multiple of 64; area rounded to 2752
+PASS  xsave_exact_size_guard_page (0.2 ms)
+RUN   xsave_fresh_pages_straddle
+  INFO zero_area_mxcsr = 0x00000000
+PASS  xsave_fresh_pages_straddle (0.1 ms)
+RUN   xsave_software_bytes_untouched_all_forms
+  INFO XSAVE = bytes 416..463 written=0
+  INFO XSAVEOPT = bytes 416..463 written=0
+  INFO XSAVEC = bytes 416..463 written=0
+  INFO FXSAVE = bytes 416..463 written=0
+  INFO XSAVE(32-bit form) = bytes 416..463 written=0
+  INFO FXSAVE(32-bit form) = bytes 416..463 written=0
+PASS  xsave_software_bytes_untouched_all_forms (0.5 ms)
+RUN   xsave32_vs_xsave64_forms
+  INFO xsave64_fip_fdp = fip=0x6fffff02194f fdp=0x0
+  INFO xsave32_fip_fcs_fdp_fds = fip=0xff02194f fcs=0x0000 fdp=0x00000000 fds=0x0000
+PASS  xsave32_vs_xsave64_forms (0.3 ms)
+RUN   xinuse_set_by_nonzero_state
+  INFO xinuse_loaded = 0x207
+  INFO xinuse_after_xrstor_init = 0x200
+PASS  xinuse_set_by_nonzero_state (0.1 ms)
+RUN   xsave_bv_equals_xinuse
+  INFO bv_loaded = 0x7
+  INFO bv_after_init = 0x0
+PASS  xsave_bv_equals_xinuse (0.1 ms)
+RUN   xrstor_roundtrip_x87
+PASS  xrstor_roundtrip_x87 (0.0 ms)
+RUN   xrstor_roundtrip_sse
+PASS  xrstor_roundtrip_sse (0.0 ms)
+RUN   xrstor_roundtrip_x87_sse
+PASS  xrstor_roundtrip_x87_sse (0.0 ms)
+RUN   xrstor_roundtrip_ymm
+PASS  xrstor_roundtrip_ymm (0.0 ms)
+RUN   xrstor_roundtrip_all_user
+PASS  xrstor_roundtrip_all_user (0.0 ms)
+RUN   xrstor_roundtrip_many_patterns
+PASS  xrstor_roundtrip_many_patterns (0.4 ms)
+RUN   xrstor32_form_roundtrip
+PASS  xrstor32_form_roundtrip (0.0 ms)
+RUN   xrstor_init_x87_only
+PASS  xrstor_init_x87_only (0.0 ms)
+RUN   xrstor_init_sse_only
+PASS  xrstor_init_sse_only (0.0 ms)
+RUN   xrstor_init_avx_only
+PASS  xrstor_init_avx_only (0.0 ms)
+RUN   xrstor_rfbm_sse_only
+PASS  xrstor_rfbm_sse_only (0.0 ms)
+RUN   xrstor_rfbm_avx_only
+PASS  xrstor_rfbm_avx_only (0.0 ms)
+RUN   xrstor_rfbm_x87_only
+PASS  xrstor_rfbm_x87_only (0.0 ms)
+RUN   xrstor_rfbm_x87_avx
+PASS  xrstor_rfbm_x87_avx (0.0 ms)
+RUN   xrstor_rfbm_zero_noop
+PASS  xrstor_rfbm_zero_noop (0.0 ms)
+RUN   xrstor_bv_subset_mixed
+PASS  xrstor_bv_subset_mixed (0.0 ms)
+RUN   xrstor_init_all
+  INFO xstate_bv_after_init = 0x5a5a5a5a5a5a5a58
+PASS  xrstor_init_all (0.1 ms)
+RUN   xrstor_init_mxcsr_source
+  INFO std_init_mxcsr = loaded-from-area (0x0000df80)
+PASS  xrstor_init_mxcsr_source (0.1 ms)
+RUN   xrstor_ignores_legacy_416_511_and_mask
+PASS  xrstor_ignores_legacy_416_511_and_mask (0.0 ms)
+RUN   xrstor_then_fxsave_consistent
+PASS  xrstor_then_fxsave_consistent (0.0 ms)
+RUN   fxrstor_then_xsave_consistent
+PASS  fxrstor_then_xsave_consistent (0.0 ms)
+RUN   xrstor_ftw_top_patterns
+PASS  xrstor_ftw_top_patterns (0.0 ms)
+RUN   xrstor_mxcsr_values
+PASS  xrstor_mxcsr_values (0.0 ms)
+RUN   xsaveopt_fresh_area_matches_xsave
+PASS  xsaveopt_fresh_area_matches_xsave (0.0 ms)
+RUN   xsaveopt_after_xrstor_new_values
+PASS  xsaveopt_after_xrstor_new_values (0.0 ms)
+RUN   xsaveopt_after_xrstor_unchanged
+PASS  xsaveopt_after_xrstor_unchanged (0.0 ms)
+RUN   xsaveopt_other_area_after_xrstor
+PASS  xsaveopt_other_area_after_xrstor (0.0 ms)
+RUN   xsaveopt_init_component
+  INFO init_optimisation_avx = XSTATE_BV[2]=0 region_untouched=1
+PASS  xsaveopt_init_component (0.1 ms)
+RUN   xsaveopt_rfbm_sse_only
+PASS  xsaveopt_rfbm_sse_only (0.0 ms)
+RUN   xsaveopt_rfbm_x87_only
+PASS  xsaveopt_rfbm_x87_only (0.0 ms)
+RUN   xsavec_rfbm_x87_only
+  INFO XSAVEC RFBM=0x1 = header 16..63 untouched
+PASS  xsavec_rfbm_x87_only (0.1 ms)
+RUN   xsavec_rfbm_sse_only
+  INFO XSAVEC RFBM=0x2 = header 16..63 untouched
+PASS  xsavec_rfbm_sse_only (0.1 ms)
+RUN   xsavec_rfbm_x87_sse
+  INFO XSAVEC RFBM=0x3 = header 16..63 untouched
+PASS  xsavec_rfbm_x87_sse (0.1 ms)
+RUN   xsavec_rfbm_avx_only
+  INFO xsavec_mxcsr_written_without_sse_data = RFBM=0x4: 0
+  INFO XSAVEC RFBM=0x4 = header 16..63 untouched
+PASS  xsavec_rfbm_avx_only (0.2 ms)
+RUN   xsavec_rfbm_x87_avx
+  INFO xsavec_mxcsr_written_without_sse_data = RFBM=0x5: 0
+  INFO XSAVEC RFBM=0x5 = header 16..63 untouched
+PASS  xsavec_rfbm_x87_avx (0.2 ms)
+RUN   xsavec_rfbm_all_user
+  INFO XSAVEC RFBM=0x7 = header 16..63 untouched
+PASS  xsavec_rfbm_all_user (0.1 ms)
+RUN   xsavec_rfbm_beyond_xcr0
+PASS  xsavec_rfbm_beyond_xcr0 (0.0 ms)
+RUN   xsavec_matches_xsave
+PASS  xsavec_matches_xsave (0.0 ms)
+RUN   xsavec_xrstor_roundtrip
+PASS  xsavec_xrstor_roundtrip (0.0 ms)
+RUN   xsavec_crafted_compacted_xrstor
+  INFO compacted_rfbm_avx_only_mxcsr = RFBM=0x4: unchanged
+  INFO compacted_rfbm_avx_only_mxcsr = RFBM=0x5: unchanged
+  INFO masks_tested = 7
+PASS  xsavec_crafted_compacted_xrstor (0.3 ms)
+RUN   xsavec_compacted_init_all
+  INFO compacted_init_mxcsr = initialised (0x00001f80)
+PASS  xsavec_compacted_init_all (0.1 ms)
+RUN   xsavec_compacted_mxcsr_load
+PASS  xsavec_compacted_mxcsr_load (0.0 ms)
+RUN   xsavec_rfbm_zero_header_only
+  INFO header_16_63 = untouched
+PASS  xsavec_rfbm_zero_header_only (0.1 ms)
+RUN   xrstor_cmp_empty_xcomp_inits_all
+  INFO mxcsr = XCOMP_BV=1<<63, XSTATE_BV=0, RFBM=all: initialised
+PASS  xrstor_cmp_empty_xcomp_inits_all (0.1 ms)
+RUN   xrstor_cmp_rfbm_outside_xcomp_inits
+PASS  xrstor_cmp_rfbm_outside_xcomp_inits (0.0 ms)
+RUN   xsavec_init_component_not_saved
+  INFO xsavec_bv_init_state = 0x2
+  INFO x87_region_untouched_when_init = 1
+PASS  xsavec_init_component_not_saved (0.2 ms)
+RUN   xsavec32_vs_xsavec64_forms
+PASS  xsavec32_vs_xsavec64_forms (0.0 ms)
+RUN   zmm_xsave_from_registers
+  SKIP AVX-512F not usable (CPUID=0, XCR0=0x207)
+SKIP  zmm_xsave_from_registers (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
+RUN   zmm_xrstor_roundtrip
+  SKIP AVX-512F not usable (CPUID=0, XCR0=0x207)
+SKIP  zmm_xrstor_roundtrip (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
+RUN   zmm_rfbm_opmask_only
+  SKIP AVX-512F not usable (CPUID=0, XCR0=0x207)
+SKIP  zmm_rfbm_opmask_only (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
+RUN   zmm_rfbm_hi256_only
+  SKIP AVX-512F not usable (CPUID=0, XCR0=0x207)
+SKIP  zmm_rfbm_hi256_only (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
+RUN   zmm_rfbm_hi16_only
+  SKIP AVX-512F not usable (CPUID=0, XCR0=0x207)
+SKIP  zmm_rfbm_hi16_only (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
+RUN   zmm_init_components
+  SKIP AVX-512F not usable (CPUID=0, XCR0=0x207)
+SKIP  zmm_init_components (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
+RUN   zmm_ymm_restore_keeps_hi256
+  SKIP AVX-512F not usable (CPUID=0, XCR0=0x207)
+SKIP  zmm_ymm_restore_keeps_hi256 (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
+RUN   zmm_xsavec_layouts
+  SKIP AVX-512F not usable (CPUID=0, XCR0=0x207)
+SKIP  zmm_xsavec_layouts (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
+RUN   thread_xrstor_xsave_isolation
+  INFO threads = 32 (ncpu 28), iterations 12, spin 300000, lost 0
+PASS  thread_xrstor_xsave_isolation (171.8 ms)
+RUN   thread_fxrstor_fxsave_isolation
+  INFO threads = 32 (ncpu 28), iterations 12, spin 300000, lost 0
+PASS  thread_fxrstor_fxsave_isolation (153.6 ms)
+RUN   thread_xsaveopt_tracking
+  INFO threads = 32 (ncpu 28), iterations 12, spin 300000, lost 0
+PASS  thread_xsaveopt_tracking (153.1 ms)
+RUN   thread_x87_pointer_preservation
+  INFO threads = 32 (ncpu 28), iterations 12, spin 300000, lost 0
+PASS  thread_x87_pointer_preservation (157.2 ms)
+RUN   thread_no_pattern_leak_same_cpu
+  INFO iterations = 60, holder rounds 3
+PASS  thread_no_pattern_leak_same_cpu (197.5 ms)
+RUN   fault_xsave_unaligned
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+PASS  fault_xsave_unaligned (10.1 ms)
+RUN   fault_xsaveopt_unaligned
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+PASS  fault_xsaveopt_unaligned (9.3 ms)
+RUN   fault_xsavec_unaligned
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+PASS  fault_xsavec_unaligned (9.2 ms)
+RUN   fault_xrstor_unaligned
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_unaligned (7.7 ms)
+RUN   fault_fxsave_unaligned
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+PASS  fault_fxsave_unaligned (8.5 ms)
+RUN   fault_fxrstor_unaligned
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_fxrstor_unaligned (7.8 ms)
+RUN   fault_xrstor_bv_not_in_xcr0
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_bv_not_in_xcr0 (8.3 ms)
+RUN   fault_xrstor_std_xcomp_nonzero
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_std_xcomp_nonzero (7.8 ms)
+RUN   fault_xrstor_std_hdr_bytes_16_23
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_std_hdr_bytes_16_23 (7.5 ms)
+RUN   fault_xrstor_cmp_xcomp_not_in_xcr0
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_cmp_xcomp_not_in_xcr0 (12.0 ms)
+RUN   fault_xrstor_cmp_bv_not_in_xcomp
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_cmp_bv_not_in_xcomp (11.1 ms)
+RUN   fault_xrstor_cmp_reserved_hdr
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_cmp_reserved_hdr (10.7 ms)
+RUN   fault_xrstor_mxcsr_reserved
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_mxcsr_reserved (12.5 ms)
+RUN   fault_xrstor_cmp_mxcsr_reserved
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_cmp_mxcsr_reserved (10.6 ms)
+RUN   fault_fxrstor_mxcsr_reserved
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_fxrstor_mxcsr_reserved (12.0 ms)
+RUN   fault_xrstor_mxcsr_not_loaded_no_fault
+  INFO child = fault=0 code=0x00000000 site=0 info0=0x0 info1=0x0 intact=1 lo=0x0 hi=0x0
+PASS  fault_xrstor_mxcsr_not_loaded_no_fault (12.2 ms)
+RUN   fault_xsetbv_cpl3
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=-1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+PASS  fault_xsetbv_cpl3 (9.9 ms)
+RUN   fault_xsaves_cpl3
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=-1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+PASS  fault_xsaves_cpl3 (8.5 ms)
+RUN   fault_xrstors_cpl3
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=-1 lo=0x0 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+PASS  fault_xrstors_cpl3 (12.6 ms)
+RUN   fault_xsave_guard_overrun
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x1 info1=0xa0103f intact=-1 lo=0xa01000 hi=0xa01040
+PASS  fault_xsave_guard_overrun (13.3 ms)
+RUN   fault_xrstor_guard_overrun
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xa0103f intact=-1 lo=0xa01000 hi=0xa01040
+PASS  fault_xrstor_guard_overrun (11.6 ms)
+RUN   fault_xsave_readonly_page
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x1 info1=0xa0033f intact=1 lo=0xa00000 hi=0xa00340
+PASS  fault_xsave_readonly_page (10.1 ms)
+RUN   fault_xrstor_mxcsr_lowest_reserved_bit
+  INFO bit = 16
+  INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x10 hi=0x0
+  INFO exception = STATUS_ACCESS_VIOLATION
+  INFO state_intact = 1
+PASS  fault_xrstor_mxcsr_lowest_reserved_bit (14.3 ms)
+RUN   fault_xrstor_compacted_without_xsavec
+  SKIP XSAVEC/compaction supported: XCOMP_BV[63]=1 is legal here (covered by the compacted cases)
+SKIP  fault_xrstor_compacted_without_xsavec (0.2 ms): XSAVEC/compaction supported: XCOMP_BV[63]=1 is legal here (covered by the compacted cases)
+SUMMARY exe=xsave_roundtrip arch=x64 total=121 pass=112 fail=0 crash=0 skip=9 xfail=0 perf=0 checks=4682 checks_failed=0 exit=0

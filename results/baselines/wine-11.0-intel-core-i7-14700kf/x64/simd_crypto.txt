@@ -1,0 +1,220 @@
+wineserver: using server-side synchronization.
+ENV   exe=simd_crypto arch=x64 wow64=0 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+RUN   crypto_feature_inventory
+  INFO crypto_features = aes=usable pclmulqdq=usable sha=usable gfni=usable vaes=usable vpclmulqdq=usable sha512=absent sm3=absent sm4=absent keylocker=usable sse4.2=usable avx=usable avx512f=absent avx512vl=absent
+PASS  crypto_feature_inventory (0.4 ms)
+RUN   aes_sw_reference_fips197
+PASS  aes_sw_reference_fips197 (0.0 ms)
+RUN   aes_sw_reference_sp800_38a_gcm
+PASS  aes_sw_reference_sp800_38a_gcm (0.1 ms)
+RUN   sha_sw_reference_fips180
+PASS  sha_sw_reference_fips180 (12.4 ms)
+RUN   sha_instruction_models_compose_to_fips180
+PASS  sha_instruction_models_compose_to_fips180 (12.1 ms)
+RUN   crc_sw_reference_check_values
+PASS  crc_sw_reference_check_values (0.0 ms)
+RUN   clmul_sw_reference_identities
+PASS  clmul_sw_reference_identities (0.0 ms)
+RUN   aesni_aesenc_known_answer
+PASS  aesni_aesenc_known_answer (0.0 ms)
+RUN   aesni_aesenclast_known_answer
+PASS  aesni_aesenclast_known_answer (0.0 ms)
+RUN   aesni_aesdec_known_answer
+PASS  aesni_aesdec_known_answer (0.0 ms)
+RUN   aesni_aesdeclast_known_answer
+PASS  aesni_aesdeclast_known_answer (0.0 ms)
+RUN   aesni_aesimc_known_answer
+PASS  aesni_aesimc_known_answer (0.0 ms)
+RUN   aesni_aeskeygenassist_known_answer
+PASS  aesni_aeskeygenassist_known_answer (0.0 ms)
+RUN   aesni_aesenc_random_vs_model
+PASS  aesni_aesenc_random_vs_model (0.2 ms)
+RUN   aesni_aesenclast_random_vs_model
+PASS  aesni_aesenclast_random_vs_model (0.1 ms)
+RUN   aesni_aesdec_random_vs_model
+PASS  aesni_aesdec_random_vs_model (0.5 ms)
+RUN   aesni_aesdeclast_random_vs_model
+PASS  aesni_aesdeclast_random_vs_model (0.1 ms)
+RUN   aesni_aesimc_random_vs_model
+PASS  aesni_aesimc_random_vs_model (0.5 ms)
+RUN   aesni_aeskeygenassist_all_imm8_vs_model
+PASS  aesni_aeskeygenassist_all_imm8_vs_model (0.1 ms)
+RUN   aesni_round_identities
+PASS  aesni_round_identities (0.0 ms)
+RUN   aesni_m128_memory_operand_forms
+PASS  aesni_m128_memory_operand_forms (0.0 ms)
+RUN   aesni_key_expansion_128_fips197
+PASS  aesni_key_expansion_128_fips197 (0.0 ms)
+RUN   aesni_key_expansion_192_fips197
+PASS  aesni_key_expansion_192_fips197 (0.0 ms)
+RUN   aesni_key_expansion_256_fips197
+PASS  aesni_key_expansion_256_fips197 (0.0 ms)
+RUN   aesni_aes128_fips197_encrypt_decrypt
+PASS  aesni_aes128_fips197_encrypt_decrypt (0.0 ms)
+RUN   aesni_aes192_fips197_encrypt_decrypt
+PASS  aesni_aes192_fips197_encrypt_decrypt (0.0 ms)
+RUN   aesni_aes256_fips197_encrypt_decrypt
+PASS  aesni_aes256_fips197_encrypt_decrypt (0.0 ms)
+RUN   aesni_equivalent_inverse_schedule_vs_sw
+PASS  aesni_equivalent_inverse_schedule_vs_sw (0.1 ms)
+RUN   aesni_ecb_sp800_38a
+PASS  aesni_ecb_sp800_38a (0.0 ms)
+RUN   aesni_cbc_sp800_38a
+PASS  aesni_cbc_sp800_38a (0.0 ms)
+RUN   aesni_ctr_sp800_38a
+PASS  aesni_ctr_sp800_38a (0.0 ms)
+RUN   aesni_random_keys_modes_vs_software
+PASS  aesni_random_keys_modes_vs_software (2.0 ms)
+RUN   aesni_ctr_8way_vs_1way_long
+PASS  aesni_ctr_8way_vs_1way_long (0.3 ms)
+RUN   aesni_pclmul_gcm_tc1_tc2_aes128_zero
+PASS  aesni_pclmul_gcm_tc1_tc2_aes128_zero (0.0 ms)
+RUN   aesni_pclmul_gcm_tc3_tc4_aes128
+PASS  aesni_pclmul_gcm_tc3_tc4_aes128 (0.0 ms)
+RUN   aesni_pclmul_gcm_tc13_tc14_aes256
+PASS  aesni_pclmul_gcm_tc13_tc14_aes256 (0.0 ms)
+RUN   aesni_pclmul_gcm_tc16_aes256_aad
+PASS  aesni_pclmul_gcm_tc16_aes256_aad (0.0 ms)
+RUN   aesni_pclmul_gcm_tc5_tc6_ghash_iv
+PASS  aesni_pclmul_gcm_tc5_tc6_ghash_iv (0.0 ms)
+RUN   aesni_pclmul_gcm_tc18_aes256_ghash_iv
+PASS  aesni_pclmul_gcm_tc18_aes256_ghash_iv (0.0 ms)
+RUN   aesni_pclmul_gcm_tamper_and_random_vs_sw
+PASS  aesni_pclmul_gcm_tamper_and_random_vs_sw (0.9 ms)
+RUN   pclmul_imm00_lo_lo
+PASS  pclmul_imm00_lo_lo (0.4 ms)
+RUN   pclmul_imm01_hi_lo
+PASS  pclmul_imm01_hi_lo (0.4 ms)
+RUN   pclmul_imm10_lo_hi
+PASS  pclmul_imm10_lo_hi (0.4 ms)
+RUN   pclmul_imm11_hi_hi
+PASS  pclmul_imm11_hi_hi (0.4 ms)
+RUN   pclmul_all_imm8_only_bits_0_and_4_matter
+PASS  pclmul_all_imm8_only_bits_0_and_4_matter (0.3 ms)
+RUN   pclmul_known_answers
+PASS  pclmul_known_answers (0.0 ms)
+RUN   pclmul_algebraic_properties
+PASS  pclmul_algebraic_properties (0.1 ms)
+RUN   pclmul_m128_memory_operand_form
+PASS  pclmul_m128_memory_operand_form (0.0 ms)
+RUN   pclmul_ghash_multiply_vs_bitwise
+PASS  pclmul_ghash_multiply_vs_bitwise (2.0 ms)
+RUN   pclmul_crc32c_folding_vs_table
+PASS  pclmul_crc32c_folding_vs_table (0.3 ms)
+RUN   pclmul_crc32_ieee_folding_vs_table
+PASS  pclmul_crc32_ieee_folding_vs_table (0.3 ms)
+RUN   crc32c_pclmul_vs_sse42_crc32_instruction
+PASS  crc32c_pclmul_vs_sse42_crc32_instruction (0.7 ms)
+RUN   sha1rnds4_all_functions_vs_model
+PASS  sha1rnds4_all_functions_vs_model (0.6 ms)
+RUN   sha1nexte_vs_model
+PASS  sha1nexte_vs_model (0.1 ms)
+RUN   sha1msg1_vs_model
+PASS  sha1msg1_vs_model (0.1 ms)
+RUN   sha1msg2_vs_model
+PASS  sha1msg2_vs_model (0.1 ms)
+RUN   sha256rnds2_implicit_xmm0_vs_model
+PASS  sha256rnds2_implicit_xmm0_vs_model (0.2 ms)
+RUN   sha256msg1_vs_model
+PASS  sha256msg1_vs_model (0.1 ms)
+RUN   sha256msg2_vs_model
+PASS  sha256msg2_vs_model (0.1 ms)
+RUN   sha1rnds4_m128_fixed_register_form
+PASS  sha1rnds4_m128_fixed_register_form (0.0 ms)
+RUN   sha_m128_memory_operand_forms
+PASS  sha_m128_memory_operand_forms (0.1 ms)
+RUN   sha1ni_digest_known_answers
+PASS  sha1ni_digest_known_answers (0.6 ms)
+RUN   sha256ni_digest_known_answers
+PASS  sha256ni_digest_known_answers (0.5 ms)
+RUN   sha1ni_random_lengths_vs_software
+PASS  sha1ni_random_lengths_vs_software (0.3 ms)
+RUN   sha256ni_random_lengths_vs_software
+PASS  sha256ni_random_lengths_vs_software (0.4 ms)
+RUN   sha512ext_vsha512rnds2_vs_model
+  SKIP sha512 not usable on this CPU (cpuid=0)
+SKIP  sha512ext_vsha512rnds2_vs_model (0.1 ms): sha512 not usable on this CPU (cpuid=0)
+RUN   sha512ext_vsha512msg1_vs_model
+  SKIP sha512 not usable on this CPU (cpuid=0)
+SKIP  sha512ext_vsha512msg1_vs_model (0.1 ms): sha512 not usable on this CPU (cpuid=0)
+RUN   sha512ext_vsha512msg2_vs_model
+  SKIP sha512 not usable on this CPU (cpuid=0)
+SKIP  sha512ext_vsha512msg2_vs_model (0.1 ms): sha512 not usable on this CPU (cpuid=0)
+RUN   sha512ext_digest_known_answers
+  SKIP sha512 not usable on this CPU (cpuid=0)
+SKIP  sha512ext_digest_known_answers (0.1 ms): sha512 not usable on this CPU (cpuid=0)
+RUN   gfni_gf2p8mulb_vs_model
+PASS  gfni_gf2p8mulb_vs_model (0.2 ms)
+RUN   gfni_affineinv_computes_aes_sbox
+PASS  gfni_affineinv_computes_aes_sbox (0.0 ms)
+RUN   gfni_affine_and_affineinv_vs_model
+PASS  gfni_affine_and_affineinv_vs_model (2.7 ms)
+RUN   avx_vex128_aes_pclmul_unaligned_m128
+PASS  avx_vex128_aes_pclmul_unaligned_m128 (0.1 ms)
+RUN   vaes_ymm_per_lane_vs_model
+PASS  vaes_ymm_per_lane_vs_model (0.3 ms)
+RUN   vaes_ymm_ctr_vs_aesni_and_sp800_38a
+PASS  vaes_ymm_ctr_vs_aesni_and_sp800_38a (0.0 ms)
+RUN   vpclmulqdq_ymm_per_lane_vs_model
+PASS  vpclmulqdq_ymm_per_lane_vs_model (0.5 ms)
+RUN   vaes_zmm_per_lane_vs_model
+  SKIP avx512f not usable on this CPU (cpuid=0)
+SKIP  vaes_zmm_per_lane_vs_model (0.1 ms): avx512f not usable on this CPU (cpuid=0)
+RUN   vpclmulqdq_zmm_per_lane_vs_model
+  SKIP avx512f not usable on this CPU (cpuid=0)
+SKIP  vpclmulqdq_zmm_per_lane_vs_model (0.1 ms): avx512f not usable on this CPU (cpuid=0)
+RUN   vaes_vpclmul_evex256_upper_registers_x64
+  SKIP avx512vl not usable on this CPU (cpuid=0)
+SKIP  vaes_vpclmul_evex256_upper_registers_x64 (0.1 ms): avx512vl not usable on this CPU (cpuid=0)
+RUN   aesni_legacy_misaligned_m128_faults_child
+  INFO exception_code = 0xc0000005
+PASS  aesni_legacy_misaligned_m128_faults_child (17.1 ms)
+RUN   sha_legacy_misaligned_m128_faults_child
+  INFO exception_code = 0xc0000005
+PASS  sha_legacy_misaligned_m128_faults_child (17.8 ms)
+RUN   crypto_unadvertised_instruction_probe_child
+  SKIP AES, PCLMULQDQ, SHA and GFNI are all advertised: nothing to probe
+SKIP  crypto_unadvertised_instruction_probe_child (0.1 ms): AES, PCLMULQDQ, SHA and GFNI are all advertised: nothing to probe
+RUN   crypto_threads_per_thread_key_isolation
+  INFO threads = 8 threads x 40 iterations (AES-CTR + SHA-NI SHA-256)
+PASS  crypto_threads_per_thread_key_isolation (23.5 ms)
+RUN   crypto_state_survives_suspend_getsetcontext
+  INFO suspend_rounds = 300 suspends, 300 GetThreadContext, 150 SetThreadContext, 458 iterations
+PASS  crypto_state_survives_suspend_getsetcontext (8.1 ms)
+RUN   crypto_results_independent_of_mxcsr
+PASS  crypto_results_independent_of_mxcsr (0.1 ms)
+RUN   legacy_sse_crypto_preserves_upper_ymm_vex128_zeroes_it
+PASS  legacy_sse_crypto_preserves_upper_ymm_vex128_zeroes_it (0.1 ms)
+RUN   crypto_m128_operand_ending_at_guard_page_no_fault
+PASS  crypto_m128_operand_ending_at_guard_page_no_fault (0.0 ms)
+RUN   aesni_legacy_m128_in_noaccess_page_faults_child
+  INFO av_address_minus_page_end = 0
+PASS  aesni_legacy_m128_in_noaccess_page_faults_child (13.5 ms)
+RUN   vaes128_m128_straddling_noaccess_page_faults_child
+  INFO av_address_minus_page_end = 0
+PASS  vaes128_m128_straddling_noaccess_page_faults_child (11.1 ms)
+RUN   aesni_pinned_registers_survive_preemption_and_context_roundtrips
+  INFO iterations_per_run = 4000000 (calibration: 20000 in 0.13 ms)
+  INFO workers = 56 threads on 28 CPUs, 4000000 iterations each; 204 suspends, 204 GetThreadContext, 102 SetThreadContext
+PASS  aesni_pinned_registers_survive_preemption_and_context_roundtrips (334.0 ms)
+RUN   aesni_key_register_visible_and_settable_via_thread_context
+PASS  aesni_key_register_visible_and_settable_via_thread_context (1.2 ms)
+RUN   aesni_key_register_reported_by_get_thread_context
+PASS  aesni_key_register_reported_by_get_thread_context (1.2 ms)
+RUN   perf_aes128_ecb_software_vs_aesni
+  PERF aes128_ecb_sw_MBps = 51.2279 MB/s
+  PERF aes128_ecb_aesni_MBps = 9930.94 MB/s
+PERF  perf_aes128_ecb_software_vs_aesni (48.4 ms)
+RUN   perf_crc32c_table_vs_pclmul_vs_sse42
+  PERF crc32c_table_MBps = 661.693 MB/s
+  PERF crc32c_pclmul_fold4_MBps = 39512.3 MB/s
+  PERF crc32c_sse42_MBps = 13943.1 MB/s
+PERF  perf_crc32c_table_vs_pclmul_vs_sse42 (67.2 ms)
+RUN   perf_sha256_software_vs_shani
+  PERF sha256_sw_MBps = 177.998 MB/s
+  PERF sha256_shani_MBps = 2076.8 MB/s
+PERF  perf_sha256_software_vs_shani (38.6 ms)
+SUMMARY exe=simd_crypto arch=x64 total=95 pass=84 fail=0 crash=0 skip=8 xfail=0 perf=3 checks=562 checks_failed=0 exit=0

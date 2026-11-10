@@ -1,0 +1,17 @@
+{
+ "runner": "run_all.sh (wine)",
+ "slug": "wine-11.0-intel-core-i7-14700kf",
+ "host_os": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
+ "cpu": "Intel(R) Core(TM) i7-14700KF",
+ "wine": "wine-11.0 (Staging)",
+ "git_rev": "04dd202b5ba1",
+ "git_dirty": true,
+ "timeout_s": 600,
+ "only": "",
+ "arches": [
+  "x64",
+  "x86"
+ ],
+ "finished": "2026-11-10T02:40:11Z",
+ "note": "Wine run: plumbing reference only, not a Windows contract reference. Exes built from a clean worktree at 04dd202 (env version 04dd202); git_dirty reflects only the newer scripts/ used to run them."
+}

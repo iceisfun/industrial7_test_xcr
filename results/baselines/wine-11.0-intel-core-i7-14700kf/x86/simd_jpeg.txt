@@ -1,0 +1,997 @@
+wineserver: using server-side synchronization.
+ENV   exe=simd_jpeg arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   kernel_sets_available
+  INFO scalar = usable
+  INFO sse2 = usable
+  INFO avx2 = usable
+  INFO avx2_hw = 1
+  INFO reference_decoder = libjpeg-turbo version 2.1.5 (build 20240408)
+  INFO corpus = 91 images, 19 truncations, 5 synthetic
+PASS  kernel_sets_available (0.5 ms)
+RUN   idct_islow_dc_closed_form
+PASS  idct_islow_dc_closed_form (10.1 ms)
+RUN   idct_float_dc_closed_form
+PASS  idct_float_dc_closed_form (68.5 ms)
+RUN   idct_islow_identical_realistic
+  INFO sse2 = 20000 blocks identical
+  INFO avx2 = 20000 blocks identical
+PASS  idct_islow_identical_realistic (24.4 ms)
+RUN   idct_islow_identical_dense
+  INFO sse2 = 20000 blocks identical
+  INFO avx2 = 20000 blocks identical
+PASS  idct_islow_identical_dense (15.3 ms)
+RUN   idct_islow_identical_extreme
+  INFO sse2 = 20000 blocks identical
+  INFO avx2 = 20000 blocks identical
+PASS  idct_islow_identical_extreme (25.1 ms)
+RUN   idct_islow_identical_dconly
+  INFO sse2 = 5000 blocks identical
+  INFO avx2 = 5000 blocks identical
+PASS  idct_islow_identical_dconly (3.1 ms)
+RUN   idct_float_identical_realistic
+  INFO sse2 = 20000 blocks identical
+  INFO avx2 = 20000 blocks identical
+PASS  idct_float_identical_realistic (25.6 ms)
+RUN   idct_float_identical_dense
+  INFO sse2 = 20000 blocks identical
+  INFO avx2 = 20000 blocks identical
+PASS  idct_float_identical_dense (16.3 ms)
+RUN   idct_float_identical_extreme
+  INFO sse2 = 20000 blocks identical
+  INFO avx2 = 20000 blocks identical
+PASS  idct_float_identical_extreme (26.7 ms)
+RUN   idct_float_identical_dconly
+  INFO sse2 = 5000 blocks identical
+  INFO avx2 = 5000 blocks identical
+PASS  idct_float_identical_dconly (3.2 ms)
+RUN   idct_islow_golden_hash
+PASS  idct_islow_golden_hash (39.3 ms)
+RUN   idct_float_golden_hash
+PASS  idct_float_golden_hash (40.4 ms)
+RUN   idct_islow_accuracy_ieee1180
+  INFO scalar_L128_s-1 = peak 1 omse 0.01304 ome 0.00005 ppmse 0.0170 ppme 0.0047
+  INFO scalar_L128_s+1 = peak 1 omse 0.01312 ome 0.00003 ppmse 0.0173 ppme 0.0040
+  INFO scalar_L5_s-1 = peak 1 omse 0.01275 ome 0.00000 ppmse 0.0173 ppme 0.0043
+  INFO scalar_L5_s+1 = peak 1 omse 0.01304 ome 0.00027 ppmse 0.0163 ppme 0.0040
+  INFO sse2_L128_s-1 = peak 1 omse 0.01304 ome 0.00005 ppmse 0.0170 ppme 0.0047
+  INFO sse2_L128_s+1 = peak 1 omse 0.01312 ome 0.00003 ppmse 0.0173 ppme 0.0040
+  INFO sse2_L5_s-1 = peak 1 omse 0.01275 ome 0.00000 ppmse 0.0173 ppme 0.0043
+  INFO sse2_L5_s+1 = peak 1 omse 0.01304 ome 0.00027 ppmse 0.0163 ppme 0.0040
+  INFO avx2_L128_s-1 = peak 1 omse 0.01304 ome 0.00005 ppmse 0.0170 ppme 0.0047
+  INFO avx2_L128_s+1 = peak 1 omse 0.01312 ome 0.00003 ppmse 0.0173 ppme 0.0040
+  INFO avx2_L5_s-1 = peak 1 omse 0.01275 ome 0.00000 ppmse 0.0173 ppme 0.0043
+  INFO avx2_L5_s+1 = peak 1 omse 0.01304 ome 0.00027 ppmse 0.0163 ppme 0.0040
+PASS  idct_islow_accuracy_ieee1180 (319.6 ms)
+RUN   idct_float_accuracy_ieee1180
+  INFO scalar_L128_s-1 = peak 1 omse 0.00001 ome 0.00001 ppmse 0.0003 ppme 0.0003
+  INFO scalar_L128_s+1 = peak 1 omse 0.00002 ome 0.00002 ppmse 0.0003 ppme 0.0003
+  INFO scalar_L5_s-1 = peak 1 omse 0.00001 ome 0.00001 ppmse 0.0003 ppme 0.0003
+  INFO scalar_L5_s+1 = peak 1 omse 0.00000 ome 0.00000 ppmse 0.0003 ppme 0.0003
+  INFO sse2_L128_s-1 = peak 1 omse 0.00001 ome 0.00001 ppmse 0.0003 ppme 0.0003
+  INFO sse2_L128_s+1 = peak 1 omse 0.00002 ome 0.00002 ppmse 0.0003 ppme 0.0003
+  INFO sse2_L5_s-1 = peak 1 omse 0.00001 ome 0.00001 ppmse 0.0003 ppme 0.0003
+  INFO sse2_L5_s+1 = peak 1 omse 0.00000 ome 0.00000 ppmse 0.0003 ppme 0.0003
+  INFO avx2_L128_s-1 = peak 1 omse 0.00001 ome 0.00001 ppmse 0.0003 ppme 0.0003
+  INFO avx2_L128_s+1 = peak 1 omse 0.00002 ome 0.00002 ppmse 0.0003 ppme 0.0003
+  INFO avx2_L5_s-1 = peak 1 omse 0.00001 ome 0.00001 ppmse 0.0003 ppme 0.0003
+  INFO avx2_L5_s+1 = peak 1 omse 0.00000 ome 0.00000 ppmse 0.0003 ppme 0.0003
+PASS  idct_float_accuracy_ieee1180 (377.8 ms)
+RUN   idct_float_vs_islow_close
+  INFO max_diff = 1
+  INFO differing_samples = 9585 of 1280000
+PASS  idct_float_vs_islow_close (31.8 ms)
+RUN   idct_guard_page_bounds
+PASS  idct_guard_page_bounds (0.7 ms)
+RUN   idct_unaligned_and_stride
+PASS  idct_unaligned_and_stride (1.6 ms)
+RUN   upsample_h2v1_fancy_vs_reference
+PASS  upsample_h2v1_fancy_vs_reference (6.2 ms)
+RUN   upsample_h2v2_fancy_vs_reference
+PASS  upsample_h2v2_fancy_vs_reference (8.2 ms)
+RUN   upsample_h1v2_fancy_vs_reference
+PASS  upsample_h1v2_fancy_vs_reference (5.3 ms)
+RUN   upsample_constant_preserved
+PASS  upsample_constant_preserved (0.2 ms)
+RUN   upsample_guard_page_bounds
+PASS  upsample_guard_page_bounds (9.8 ms)
+RUN   ycc_rgb_exhaustive_scalar
+PASS  ycc_rgb_exhaustive_scalar (64.5 ms)
+RUN   ycc_rgb_exhaustive_sse2
+PASS  ycc_rgb_exhaustive_sse2 (35.5 ms)
+RUN   ycc_rgb_exhaustive_avx2
+PASS  ycc_rgb_exhaustive_avx2 (33.1 ms)
+RUN   ycc_rgba_exhaustive_scalar
+PASS  ycc_rgba_exhaustive_scalar (64.3 ms)
+RUN   ycc_rgba_exhaustive_sse2
+PASS  ycc_rgba_exhaustive_sse2 (34.1 ms)
+RUN   ycc_rgba_exhaustive_avx2
+PASS  ycc_rgba_exhaustive_avx2 (33.4 ms)
+RUN   ycc_neutral_axis_is_gray
+PASS  ycc_neutral_axis_is_gray (0.0 ms)
+RUN   ycc_lengths_guard_page
+PASS  ycc_lengths_guard_page (16.1 ms)
+RUN   corpus_err_cmyk
+  INFO desc = 4-component CMYK (Adobe)
+  INFO bytes = 557
+  INFO djpeg_rc = 0 (libjpeg-turbo decodes this; outside this decoder's documented scope)
+PASS  corpus_err_cmyk (0.4 ms)
+RUN   corpus_err_soi_eoi
+  INFO desc = SOI + EOI only
+  INFO bytes = 4
+  INFO djpeg_rc = 1
+PASS  corpus_err_soi_eoi (0.2 ms)
+RUN   corpus_err_prog_badss
+  INFO desc = progressive scan with Se < Ss
+  INFO bytes = 646
+  INFO djpeg_rc = 1
+PASS  corpus_err_prog_badss (0.2 ms)
+RUN   corpus_err_dht_oversub
+  INFO desc = over-subscribed Huffman table
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_dht_oversub (1.2 ms)
+RUN   corpus_err_dht_slot2
+  INFO desc = SOS selects Huffman tables 2/2 that were never defined
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_dht_slot2 (0.3 ms)
+RUN   corpus_err_sos_badcomp
+  INFO desc = SOS names a component id absent from the frame
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_sos_badcomp (0.2 ms)
+RUN   corpus_err_no_soi
+  INFO desc = SOI missing
+  INFO bytes = 727
+  INFO djpeg_rc = 1
+PASS  corpus_err_no_soi (0.1 ms)
+RUN   corpus_err_no_dqt
+  INFO desc = DQT segments removed
+  INFO bytes = 591
+  INFO djpeg_rc = 1
+PASS  corpus_err_no_dqt (0.2 ms)
+RUN   corpus_mjpeg_no_dht
+  INFO desc = DHT removed: Annex K default tables (Motion-JPEG convention, libjpeg std_huff_tables)
+  INFO bytes = 297
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_mjpeg_no_dht (0.5 ms)
+RUN   corpus_err_mcu_blocks
+  INFO desc = luma 4x4 + 2 chroma = 18 blocks per MCU (> 10)
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_mcu_blocks (0.2 ms)
+RUN   corpus_err_zero_width
+  INFO desc = width 0
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_zero_width (0.2 ms)
+RUN   corpus_err_too_big
+  INFO desc = 65535x65535
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_too_big (0.2 ms)
+RUN   corpus_err_dnl
+  INFO desc = height 0 (DNL)
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_dnl (0.2 ms)
+RUN   corpus_err_12bit
+  INFO desc = 12-bit precision
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_12bit (0.2 ms)
+RUN   corpus_err_sof3
+  INFO desc = lossless SOF3 marker
+  INFO bytes = 729
+  INFO djpeg_rc = 1
+PASS  corpus_err_sof3 (0.2 ms)
+RUN   corpus_err_arith
+  INFO desc = arithmetic coding (SOF9)
+  INFO bytes = 323
+  INFO djpeg_rc = 0 (libjpeg-turbo decodes this; outside this decoder's documented scope)
+PASS  corpus_err_arith (0.3 ms)
+RUN   corpus_c420_256x192
+  INFO desc = 4:2:0 256x192 (multi-thread / perf)
+  INFO bytes = 13970
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_256x192 (11.9 ms)
+RUN   corpus_nojfif_420_96x72
+  INFO desc = APP0/JFIF removed: 3 components ids 1,2,3 -> YCbCr by libjpeg's default rule
+  INFO bytes = 2694
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_nojfif_420_96x72 (1.8 ms)
+RUN   corpus_markers_fill_96x72
+  INFO desc = COM/APP1 segments, FF fill bytes, garbage before SOS
+  INFO bytes = 2746
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_markers_fill_96x72 (1.8 ms)
+RUN   corpus_prog_420_1x1
+  INFO desc = progressive 4:2:0 1x1
+  INFO bytes = 519
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_420_1x1 (0.5 ms)
+RUN   corpus_prog_420_17x13
+  INFO desc = progressive 4:2:0 17x13
+  INFO bytes = 692
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_420_17x13 (0.6 ms)
+RUN   corpus_prog_420_61x45
+  INFO desc = progressive 4:2:0 odd size
+  INFO bytes = 1476
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_420_61x45 (1.6 ms)
+RUN   corpus_c420_61x45
+  INFO desc = 4:2:0 odd size
+  INFO bytes = 1607
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_61x45 (1.2 ms)
+RUN   corpus_prog_rst_96x72
+  INFO desc = progressive with restart every 2 MCUs
+  INFO bytes = 3140
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_rst_96x72 (2.3 ms)
+RUN   corpus_prog_custom_96x72
+  INFO desc = progressive, custom scans: Al=2 DC/AC, two refinement passes
+  INFO bytes = 2416
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_custom_96x72 (2.4 ms)
+RUN   corpus_prog_gray_96x72
+  INFO desc = progressive grayscale
+  INFO bytes = 1728
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_gray_96x72 (1.7 ms)
+RUN   corpus_prog_440_96x72
+  INFO desc = progressive 4:4:0
+  INFO bytes = 2814
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_440_96x72 (2.3 ms)
+RUN   corpus_prog_422_96x72
+  INFO desc = progressive 4:2:2
+  INFO bytes = 2724
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_422_96x72 (1.6 ms)
+RUN   corpus_prog_444_96x72
+  INFO desc = progressive 4:4:4
+  INFO bytes = 3684
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_prog_444_96x72 (2.1 ms)
+RUN   corpus_prog_420_96x72
+  INFO desc = progressive 4:2:0 (default script: spectral selection + successive approx.)
+  INFO bytes = 2401
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_420_96x72 (1.7 ms)
+RUN   corpus_seq_scans_96x72
+  INFO desc = sequential, 3 non-interleaved scans
+  INFO bytes = 2733
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_seq_scans_96x72 (1.2 ms)
+RUN   corpus_gray_rst2b_96x72
+  INFO desc = grayscale restart every 2 blocks
+  INFO bytes = 2087
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_gray_rst2b_96x72 (0.9 ms)
+RUN   corpus_c444_rst5b_96x72
+  INFO desc = 4:4:4 restart every 5 MCUs
+  INFO bytes = 4294
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_c444_rst5b_96x72 (1.7 ms)
+RUN   corpus_c420_rst1b_96x72
+  INFO desc = restart every MCU
+  INFO bytes = 2791
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_rst1b_96x72 (1.2 ms)
+RUN   corpus_c420_rst1row_96x72
+  INFO desc = restart every MCU row
+  INFO bytes = 2722
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_rst1row_96x72 (1.4 ms)
+RUN   corpus_c420_opt_96x72
+  INFO desc = optimised Huffman tables
+  INFO bytes = 2221
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_opt_96x72 (1.7 ms)
+RUN   corpus_c420_q1_16bit_96x72
+  INFO desc = quality 1, 16-bit quant tables (SOF1 extended)
+  INFO bytes = 884
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_q1_16bit_96x72 (1.4 ms)
+RUN   corpus_c420_q5_96x72
+  INFO desc = quality 5
+  INFO bytes = 973
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_c420_q5_96x72 (1.5 ms)
+RUN   corpus_c420_q100_96x72
+  INFO desc = quality 100
+  INFO bytes = 9598
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_q100_96x72 (2.5 ms)
+RUN   corpus_rgb_96x72
+  INFO desc = RGB colour space (Adobe transform 0 / 'RGB' component ids)
+  INFO bytes = 5292
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_rgb_96x72 (2.0 ms)
+RUN   corpus_cinv_96x72
+  INFO desc = luma 1x1, chroma 2x2 (luma is the upsampled component)
+  INFO bytes = 3078
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_cinv_96x72 (2.0 ms)
+RUN   corpus_c411_96x72
+  INFO desc = 4:1:1 (h4v1 box upsampling)
+  INFO bytes = 2642
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c411_96x72 (1.8 ms)
+RUN   corpus_gray_96x72
+  INFO desc = grayscale
+  INFO bytes = 1951
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_gray_96x72 (1.2 ms)
+RUN   corpus_c440_96x72
+  INFO desc = 4:4:0 (h1v2 fancy)
+  INFO bytes = 3151
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_96x72 (1.8 ms)
+RUN   corpus_c444_96x72
+  INFO desc = 4:4:4
+  INFO bytes = 4228
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_c444_96x72 (1.6 ms)
+RUN   corpus_c422_96x72
+  INFO desc = 4:2:2
+  INFO bytes = 3107
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_96x72 (1.2 ms)
+RUN   corpus_c420_96x72
+  INFO desc = 4:2:0 q75 baseline
+  INFO bytes = 2712
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_96x72 (1.2 ms)
+RUN   corpus_prog_440_5x5
+  INFO desc = progressive 4:4:0 5x5
+  INFO bytes = 602
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_440_5x5 (0.4 ms)
+RUN   corpus_prog_422_33x35
+  INFO desc = progressive 4:2:2 33x35
+  INFO bytes = 1188
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_prog_422_33x35 (0.6 ms)
+RUN   corpus_c440_65x9
+  INFO desc = 4:4:0 65x9
+  INFO bytes = 1065
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_c440_65x9 (0.6 ms)
+RUN   corpus_c422_65x9
+  INFO desc = 4:2:2 65x9
+  INFO bytes = 1037
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_c422_65x9 (0.6 ms)
+RUN   corpus_c420_65x9
+  INFO desc = 4:2:0 65x9
+  INFO bytes = 981
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = no (informational: libjpeg-turbo float IDCT is SIMD-path dependent)
+PASS  corpus_c420_65x9 (0.5 ms)
+RUN   corpus_c440_33x35
+  INFO desc = 4:4:0 33x35
+  INFO bytes = 1277
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_33x35 (0.5 ms)
+RUN   corpus_c422_33x35
+  INFO desc = 4:2:2 33x35
+  INFO bytes = 1268
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_33x35 (0.5 ms)
+RUN   corpus_c420_33x35
+  INFO desc = 4:2:0 33x35
+  INFO bytes = 1163
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_33x35 (0.5 ms)
+RUN   corpus_c440_6x3
+  INFO desc = 4:4:0 6x3
+  INFO bytes = 683
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_6x3 (0.3 ms)
+RUN   corpus_c422_6x3
+  INFO desc = 4:2:2 6x3
+  INFO bytes = 680
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_6x3 (0.3 ms)
+RUN   corpus_c420_6x3
+  INFO desc = 4:2:0 6x3
+  INFO bytes = 682
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_6x3 (0.3 ms)
+RUN   corpus_c440_5x5
+  INFO desc = 4:4:0 5x5
+  INFO bytes = 691
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_5x5 (0.3 ms)
+RUN   corpus_c422_5x5
+  INFO desc = 4:2:2 5x5
+  INFO bytes = 690
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_5x5 (0.3 ms)
+RUN   corpus_c420_5x5
+  INFO desc = 4:2:0 5x5
+  INFO bytes = 688
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_5x5 (0.3 ms)
+RUN   corpus_c440_4x5
+  INFO desc = 4:4:0 4x5
+  INFO bytes = 680
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_4x5 (0.3 ms)
+RUN   corpus_c422_4x5
+  INFO desc = 4:2:2 4x5
+  INFO bytes = 684
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_4x5 (0.3 ms)
+RUN   corpus_c420_4x5
+  INFO desc = 4:2:0 4x5
+  INFO bytes = 684
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_4x5 (0.3 ms)
+RUN   corpus_c440_2x9
+  INFO desc = 4:4:0 2x9
+  INFO bytes = 683
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_2x9 (0.3 ms)
+RUN   corpus_c422_2x9
+  INFO desc = 4:2:2 2x9
+  INFO bytes = 700
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_2x9 (0.4 ms)
+RUN   corpus_c420_2x9
+  INFO desc = 4:2:0 2x9
+  INFO bytes = 684
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_2x9 (0.3 ms)
+RUN   corpus_c420_77x3
+  INFO desc = 4:2:0 77x3
+  INFO bytes = 955
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_77x3 (0.4 ms)
+RUN   corpus_c444_77x3
+  INFO desc = 4:4:4 77x3
+  INFO bytes = 1097
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c444_77x3 (0.4 ms)
+RUN   corpus_gray_77x3
+  INFO desc = grayscale 77x3
+  INFO bytes = 540
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_gray_77x3 (0.3 ms)
+RUN   corpus_c440_3x77
+  INFO desc = 4:4:0 3x77
+  INFO bytes = 896
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_3x77 (0.4 ms)
+RUN   corpus_c422_3x77
+  INFO desc = 4:2:2 3x77
+  INFO bytes = 1017
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_3x77 (0.4 ms)
+RUN   corpus_c420_3x77
+  INFO desc = 4:2:0 3x77
+  INFO bytes = 909
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_3x77 (0.3 ms)
+RUN   corpus_c444_3x77
+  INFO desc = 4:4:4 3x77
+  INFO bytes = 994
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c444_3x77 (0.4 ms)
+RUN   corpus_gray_3x77
+  INFO desc = grayscale 3x77
+  INFO bytes = 486
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_gray_3x77 (0.3 ms)
+RUN   corpus_c420_1x1
+  INFO desc = 4:2:0 1x1
+  INFO bytes = 631
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_1x1 (0.3 ms)
+RUN   corpus_c444_1x1
+  INFO desc = 4:4:4 1x1
+  INFO bytes = 629
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c444_1x1 (0.3 ms)
+RUN   corpus_gray_1x1
+  INFO desc = grayscale 1x1
+  INFO bytes = 333
+  INFO float_vs_islow_maxdiff = 0
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_gray_1x1 (0.3 ms)
+RUN   corpus_c440_17x13
+  INFO desc = 4:4:0 17x13
+  INFO bytes = 796
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_17x13 (0.4 ms)
+RUN   corpus_c422_17x13
+  INFO desc = 4:2:2 17x13
+  INFO bytes = 799
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_17x13 (0.3 ms)
+RUN   corpus_c420_17x13
+  INFO desc = 4:2:0 17x13
+  INFO bytes = 769
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_17x13 (0.4 ms)
+RUN   corpus_c444_17x13
+  INFO desc = 4:4:4 17x13
+  INFO bytes = 871
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c444_17x13 (0.3 ms)
+RUN   corpus_gray_17x13
+  INFO desc = grayscale 17x13
+  INFO bytes = 429
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_gray_17x13 (0.3 ms)
+RUN   corpus_c440_16x16
+  INFO desc = 4:4:0 16x16
+  INFO bytes = 754
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c440_16x16 (0.4 ms)
+RUN   corpus_c422_16x16
+  INFO desc = 4:2:2 16x16
+  INFO bytes = 752
+  INFO float_vs_islow_maxdiff = 3
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c422_16x16 (0.3 ms)
+RUN   corpus_c420_16x16
+  INFO desc = 4:2:0 16x16
+  INFO bytes = 729
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_16x16 (0.4 ms)
+RUN   corpus_c444_16x16
+  INFO desc = 4:4:4 16x16
+  INFO bytes = 812
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c444_16x16 (0.3 ms)
+RUN   corpus_gray_16x16
+  INFO desc = grayscale 16x16
+  INFO bytes = 409
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_gray_16x16 (0.3 ms)
+RUN   corpus_c420_8x8
+  INFO desc = 4:2:0 8x8
+  INFO bytes = 676
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c420_8x8 (0.3 ms)
+RUN   corpus_c444_8x8
+  INFO desc = 4:4:4 8x8
+  INFO bytes = 687
+  INFO float_vs_islow_maxdiff = 2
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_c444_8x8 (0.4 ms)
+RUN   corpus_gray_8x8
+  INFO desc = grayscale 8x8
+  INFO bytes = 359
+  INFO float_vs_islow_maxdiff = 1
+  INFO float_equals_djpeg_float = yes
+PASS  corpus_gray_8x8 (0.4 ms)
+RUN   equiv_420_sequential_progressive_restart_optimized
+PASS  equiv_420_sequential_progressive_restart_optimized (3.2 ms)
+RUN   equiv_444_and_gray_variants
+PASS  equiv_444_and_gray_variants (2.7 ms)
+RUN   box_equals_fancy_without_subsampling
+PASS  box_equals_fancy_without_subsampling (2.7 ms)
+RUN   trunc_baseline_420_vs_djpeg
+  INFO len_135 = rc -3 warn 0x0 mcus 0/0
+  INFO len_1220 = rc 0 warn 0x9 mcus 9/30
+  INFO len_1627 = rc 0 warn 0x9 mcus 15/30
+  INFO len_2034 = rc 0 warn 0x9 mcus 20/30
+  INFO len_2440 = rc 0 warn 0x9 mcus 25/30
+  INFO len_2710 = rc 0 warn 0x8 mcus 30/30
+  INFO len_2711 = rc 0 warn 0x8 mcus 30/30
+PASS  trunc_baseline_420_vs_djpeg (2.5 ms)
+RUN   trunc_restart_1b_vs_djpeg
+  INFO len_1395 = rc 0 warn 0xd mcus 11/30
+  INFO len_2232 = rc 0 warn 0xd mcus 22/30
+PASS  trunc_restart_1b_vs_djpeg (0.8 ms)
+RUN   trunc_restart_444_vs_djpeg
+  INFO len_3005 = rc 0 warn 0xd mcus 72/108
+PASS  trunc_restart_444_vs_djpeg (0.5 ms)
+RUN   trunc_gray_vs_djpeg
+  INFO len_975 = rc 0 warn 0x9 mcus 48/108
+  INFO len_1949 = rc 0 warn 0x8 mcus 108/108
+PASS  trunc_gray_vs_djpeg (0.4 ms)
+RUN   trunc_seq_scans_vs_djpeg
+  INFO len_1366 = rc 0 warn 0x9 mcus 68/108
+  INFO len_2323 = rc 0 warn 0x9 mcus 108/108
+PASS  trunc_seq_scans_vs_djpeg (0.8 ms)
+RUN   trunc_odd_420_vs_djpeg
+  INFO len_1060 = rc 0 warn 0x9 mcus 6/12
+PASS  trunc_odd_420_vs_djpeg (0.2 ms)
+RUN   trunc_progressive_clean
+  INFO len_960 = rc 0 warn 0x9 mcus 30/30
+  INFO len_1680 = rc 0 warn 0x9 mcus 30/30
+  INFO len_2399 = rc 0 warn 0x8 mcus 30/30
+  INFO len_1727 = rc 0 warn 0xd mcus 30/30
+PASS  trunc_progressive_clean (1.9 ms)
+RUN   trunc_every_prefix_baseline
+  INFO prefixes = 770: 623 error, 147 decoded
+PASS  trunc_every_prefix_baseline (20.9 ms)
+RUN   trunc_every_prefix_progressive
+  INFO prefixes = 693: 239 error, 454 decoded
+PASS  trunc_every_prefix_progressive (22.4 ms)
+RUN   trunc_every_prefix_restart
+  INFO prefixes = 696
+PASS  trunc_every_prefix_restart (74.6 ms)
+RUN   fuzz_baseline_mutations
+  INFO mutations = 300: 83 clean, 157 with warnings, 60 errors
+  INFO ms = 76
+PASS  fuzz_baseline_mutations (135.2 ms)
+RUN   fuzz_progressive_mutations
+  INFO mutations = 300: 67 clean, 160 with warnings, 73 errors
+  INFO ms = 97
+PASS  fuzz_progressive_mutations (164.2 ms)
+RUN   fuzz_restart_mutations
+  INFO mutations = 300: 81 clean, 175 with warnings, 44 errors
+  INFO ms = 70
+PASS  fuzz_restart_mutations (130.0 ms)
+RUN   fuzz_mixed_mutations
+  INFO mutations = 300: 78 clean, 159 with warnings, 63 errors
+  INFO ms = 60
+PASS  fuzz_mixed_mutations (108.6 ms)
+RUN   fuzz_child_process_consistent
+  INFO child_ms = 251 / 255
+PASS  fuzz_child_process_consistent (700.8 ms)
+RUN   api_invalid_arguments
+PASS  api_invalid_arguments (0.0 ms)
+RUN   api_max_pixels_limit
+PASS  api_max_pixels_limit (0.1 ms)
+RUN   api_output_formats_gray
+PASS  api_output_formats_gray (0.2 ms)
+RUN   api_image_metadata
+PASS  api_image_metadata (0.9 ms)
+RUN   corpus_files_match_embedded
+  INFO dir = Z:\tmp\claude-1000\-home-iceisfun-test-pattern\1e1477fb-a58f-444b-8de7-b96dccd37525\scratchpad\g2_baseline_wt\build\x86\..\..\corpus\jpeg\
+  INFO files = 91
+PASS  corpus_files_match_embedded (8.0 ms)
+RUN   synth_encoder_deterministic
+  INFO synth_4k_420 = 3840x2160 2500276 bytes, encoded in 445 ms
+  INFO synth_1k_444_rst = 1024x768 599526 bytes, encoded in 86 ms
+  INFO synth_vga_gray = 640x480 61709 bytes, encoded in 12 ms
+  INFO synth_mt_420 = 512x384 60794 bytes, encoded in 14 ms
+PASS  synth_encoder_deterministic (561.9 ms)
+RUN   synth_4k_420_scalar_vs_djpeg
+PASS  synth_4k_420_scalar_vs_djpeg (314.3 ms)
+RUN   synth_4k_420_sse2_vs_djpeg
+PASS  synth_4k_420_sse2_vs_djpeg (209.4 ms)
+RUN   synth_4k_420_avx2_vs_djpeg
+PASS  synth_4k_420_avx2_vs_djpeg (206.3 ms)
+RUN   synth_4k_420_repeated_decode
+PASS  synth_4k_420_repeated_decode (1619.0 ms)
+RUN   synth_1k_444_restart_vs_djpeg
+PASS  synth_1k_444_restart_vs_djpeg (107.9 ms)
+RUN   synth_vga_gray_vs_djpeg
+PASS  synth_vga_gray_vs_djpeg (13.7 ms)
+RUN   synth_mt_420_vs_djpeg
+PASS  synth_mt_420_vs_djpeg (19.9 ms)
+RUN   synth_8k_420_vs_djpeg
+  INFO encode = 7680x4320 6580094 bytes in 1621 ms
+  INFO scalar_mode0_ms = 449
+  INFO scalar_mode1_ms = 513
+  INFO scalar_mode2_ms = 467
+  INFO sse2_mode0_ms = 327
+  INFO sse2_mode1_ms = 385
+  INFO sse2_mode2_ms = 295
+  INFO avx2_mode0_ms = 286
+  INFO avx2_mode1_ms = 352
+  INFO avx2_mode2_ms = 275
+PASS  synth_8k_420_vs_djpeg (5010.1 ms)
+RUN   mt_decode_4_threads_512x384
+  INFO threads = 4 of 4
+  INFO decodes = 24 in 21 ms
+PASS  mt_decode_4_threads_512x384 (27.6 ms)
+RUN   mt_decode_16_threads_512x384
+  INFO threads = 16 of 16
+  INFO decodes = 64 in 18 ms
+PASS  mt_decode_16_threads_512x384 (49.6 ms)
+RUN   mt_decode_64_threads_256x192
+  INFO threads = 64 of 64
+  INFO decodes = 384 in 22 ms
+PASS  mt_decode_64_threads_256x192 (67.2 ms)
+RUN   mt_decode_256_threads_96x72
+  INFO threads = 256 of 256
+  INFO decodes = 1024 in 37 ms
+PASS  mt_decode_256_threads_96x72 (95.3 ms)
+RUN   mt_decode_1024_threads_17x13
+  INFO threads = 1024 of 1024
+  INFO decodes = 2048 in 100 ms
+PASS  mt_decode_1024_threads_17x13 (217.7 ms)
+RUN   mt_decode_12_threads_same_cpu
+  INFO threads = 12 of 12
+  INFO pinned_to_cpu = 0 (12 of 12 threads)
+  INFO decodes = 72 in 164 ms
+PASS  mt_decode_12_threads_same_cpu (172.4 ms)
+RUN   mt_decode_48_threads_same_cpu
+  INFO threads = 48 of 48
+  INFO pinned_to_cpu = 1 (48 of 48 threads)
+  INFO decodes = 384 in 27 ms
+PASS  mt_decode_48_threads_same_cpu (32.7 ms)
+RUN   mt_decode_while_suspended_getcontext
+  INFO context = InitializeContext XSTATE, xstate mask 0x4
+  INFO suspend_cycles = 57612 in 1502 ms, 1615 decodes on 4 threads
+PASS  mt_decode_while_suspended_getcontext (1505.8 ms)
+RUN   mt_decode_while_context_roundtrip
+  INFO context = InitializeContext XSTATE, xstate mask 0x4
+  INFO suspend_cycles = 47836 in 1503 ms, 1534 decodes on 4 threads
+PASS  mt_decode_while_context_roundtrip (1506.5 ms)
+RUN   threadpool_callbacks_decode
+  INFO callbacks = 192
+PASS  threadpool_callbacks_decode (6.6 ms)
+RUN   fpenv_decode_preserves_mxcsr_and_x87
+PASS  fpenv_decode_preserves_mxcsr_and_x87 (0.5 ms)
+RUN   fpenv_results_independent_of_ftz_daz_rc
+  INFO float_rc_zero = same pixels
+  INFO float_rc_down = same pixels
+  INFO float_rc_up = same pixels
+PASS  fpenv_results_independent_of_ftz_daz_rc (5.9 ms)
+RUN   fpenv_float_independent_of_x87_precision
+PASS  fpenv_float_independent_of_x87_precision (0.6 ms)
+RUN   perf_decode_4k_islow_scalar
+  PERF decode_4k_420_islow_scalar = 81.6221 MPix/s
+  INFO median_ms = 101.6 (min 100.1 max 102.3)
+PERF  perf_decode_4k_islow_scalar (781.1 ms)
+RUN   perf_decode_4k_islow_sse2
+  PERF decode_4k_420_islow_sse2 = 125.402 MPix/s
+  INFO median_ms = 66.1 (min 65.5 max 66.8)
+PERF  perf_decode_4k_islow_sse2 (511.4 ms)
+RUN   perf_decode_4k_islow_avx2
+  PERF decode_4k_420_islow_avx2 = 149.454 MPix/s
+  INFO median_ms = 55.5 (min 55.2 max 56.0)
+PERF  perf_decode_4k_islow_avx2 (444.3 ms)
+RUN   perf_decode_4k_float_scalar
+  PERF decode_4k_420_float_scalar = 84.1739 MPix/s
+  INFO median_ms = 98.5 (min 98.0 max 98.7)
+PERF  perf_decode_4k_float_scalar (691.5 ms)
+RUN   perf_decode_4k_float_sse2
+  PERF decode_4k_420_float_sse2 = 144.544 MPix/s
+  INFO median_ms = 57.4 (min 57.3 max 59.0)
+PERF  perf_decode_4k_float_sse2 (404.1 ms)
+RUN   perf_decode_4k_float_avx2
+  PERF decode_4k_420_float_avx2 = 154.95 MPix/s
+  INFO median_ms = 53.5 (min 53.5 max 53.7)
+PERF  perf_decode_4k_float_avx2 (375.2 ms)
+RUN   perf_decode_mt_scaling
+  PERF decode_512x384_avx2_1threads = 85.2686 MPix/s
+  PERF decode_512x384_avx2_16threads = 834.256 MPix/s
+  INFO scaling = 9.78x with 16 threads
+PERF  perf_decode_mt_scaling (50.1 ms)
+RUN   perf_kernel_idct_islow
+  PERF idct_islow_scalar = 4.803 Mblocks/s
+  PERF idct_islow_sse2 = 16.3951 Mblocks/s
+  INFO speedup_sse2 = 3.41x
+  PERF idct_islow_avx2 = 29.5674 Mblocks/s
+  INFO speedup_avx2 = 6.16x
+PERF  perf_kernel_idct_islow (45.7 ms)
+RUN   perf_kernel_idct_float
+  PERF idct_float_scalar = 3.98618 Mblocks/s
+  PERF idct_float_sse2 = 19.954 Mblocks/s
+  INFO speedup_sse2 = 5.01x
+  PERF idct_float_avx2 = 49.4859 Mblocks/s
+  INFO speedup_avx2 = 12.41x
+PERF  perf_kernel_idct_float (45.1 ms)
+RUN   perf_kernel_h2v2_fancy
+  PERF h2v2_fancy_scalar = 2729.18 MPix/s
+  PERF h2v2_fancy_sse2 = 9553.45 MPix/s
+  INFO speedup_sse2 = 3.50x
+  PERF h2v2_fancy_avx2 = 17682.3 MPix/s
+  INFO speedup_avx2 = 6.48x
+PERF  perf_kernel_h2v2_fancy (44.0 ms)
+RUN   perf_kernel_ycc_rgb
+  PERF ycc_rgb_scalar = 714.785 MPix/s
+  PERF ycc_rgb_sse2 = 1714.41 MPix/s
+  INFO speedup_sse2 = 2.40x
+  PERF ycc_rgb_avx2 = 2326.81 MPix/s
+  INFO speedup_avx2 = 3.26x
+PERF  perf_kernel_ycc_rgb (43.6 ms)
+RUN   stb_reference_build_info
+  INFO decoder = stb_image v2.30 (nothings/stb 013ac3b)
+  INFO sse2_kernels = compiled in
+  INFO golden = 75 corpus + 5 synthetic images
+PASS  stb_reference_build_info (0.4 ms)
+RUN   stb_corpus_vs_golden_and_suite_decoder
+  INFO gray_8x8 = max 1 mean 0.0625 identical 60/64 px
+  INFO c444_8x8 = max 2 mean 0.1042 identical 54/64 px
+  INFO c420_8x8 = max 2 mean 0.1146 identical 55/64 px
+  INFO gray_16x16 = max 1 mean 0.0039 identical 255/256 px
+  INFO c444_16x16 = max 2 mean 0.0430 identical 232/256 px
+  INFO c420_16x16 = max 3 mean 0.0938 identical 218/256 px
+  INFO c422_16x16 = max 2 mean 0.9883 identical 188/256 px [h2v1 edge column excluded, its max 59]
+  INFO c440_16x16 = max 3 mean 0.1706 identical 197/256 px
+  INFO gray_17x13 = max 1 mean 0.0090 identical 219/221 px
+  INFO c444_17x13 = max 2 mean 0.0332 identical 209/221 px
+  INFO c420_17x13 = max 2 mean 0.0860 identical 184/221 px
+  INFO c422_17x13 = max 2 mean 0.7044 identical 159/221 px [h2v1 edge column excluded, its max 29]
+  INFO c440_17x13 = max 2 mean 0.1870 identical 163/221 px
+  INFO gray_1x1 = max 0 mean 0.0000 identical 1/1 px
+  INFO c444_1x1 = max 0 mean 0.0000 identical 1/1 px
+  INFO c420_1x1 = max 0 mean 0.0000 identical 1/1 px [reported only: libjpeg box-upsamples a component with downsampled width <= 2, stb filters it]
+  INFO gray_3x77 = max 1 mean 0.0130 identical 228/231 px
+  INFO c444_3x77 = max 2 mean 0.0260 identical 220/231 px
+  INFO c420_3x77 = max 69 mean 18.6089 identical 2/231 px [reported only: libjpeg box-upsamples a component with downsampled width <= 2, stb filters it]
+  INFO c422_3x77 = max 167 mean 33.8211 identical 70/231 px [reported only: libjpeg box-upsamples a component with downsampled width <= 2, stb filters it]
+  INFO c440_3x77 = max 2 mean 0.2049 identical 168/231 px
+  INFO gray_77x3 = max 1 mean 0.0043 identical 230/231 px
+  INFO c444_77x3 = max 2 mean 0.0216 identical 222/231 px
+  INFO c420_77x3 = max 2 mean 0.1342 identical 186/231 px
+  INFO c420_2x9 = max 20 mean 7.9074 identical 2/18 px [reported only: libjpeg box-upsamples a component with downsampled width <= 2, stb filters it]
+  INFO c422_2x9 = max 0 mean 0.0000 identical 18/18 px [reported only: libjpeg box-upsamples a component with downsampled width <= 2, stb filters it]
+  INFO c440_2x9 = max 2 mean 0.1667 identical 13/18 px
+  INFO c420_4x5 = max 66 mean 16.1833 identical 1/20 px [reported only: libjpeg box-upsamples a component with downsampled width <= 2, stb filters it]
+  INFO c422_4x5 = max 91 mean 19.5333 identical 8/20 px [reported only: libjpeg box-upsamples a component with downsampled width <= 2, stb filters it]
+  INFO c440_4x5 = max 2 mean 0.2667 identical 13/20 px
+  INFO c420_5x5 = max 2 mean 0.1600 identical 20/25 px
+  INFO c422_5x5 = max 2 mean 4.4667 identical 17/25 px [h2v1 edge column excluded, its max 62]
+  INFO c440_5x5 = max 2 mean 0.1600 identical 19/25 px
+  INFO c420_6x3 = max 2 mean 0.4074 identical 8/18 px
+  INFO c422_6x3 = max 2 mean 5.5000 identical 13/18 px [h2v1 edge column excluded, its max 73]
+  INFO c440_6x3 = max 2 mean 0.1481 identical 15/18 px
+  INFO c420_33x35 = max 2 mean 0.0658 identical 1036/1155 px
+  INFO c422_33x35 = max 3 mean 0.5287 identical 873/1155 px [h2v1 edge column excluded, its max 77]
+  INFO c440_33x35 = max 3 mean 0.1766 identical 883/1155 px
+  INFO c420_65x9 = max 2 mean 0.0832 identical 514/585 px
+  INFO c422_65x9 = max 3 mean 0.3533 identical 437/585 px [h2v1 edge column excluded, its max 87]
+  INFO c440_65x9 = max 2 mean 0.1772 identical 449/585 px
+  INFO prog_422_33x35 = max 3 mean 0.5287 identical 873/1155 px [h2v1 edge column excluded, its max 77]
+  INFO prog_440_5x5 = max 2 mean 0.1600 identical 19/25 px
+  INFO c420_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO c422_96x72 = max 3 mean 0.2364 identical 5241/6912 px [h2v1 edge column excluded, its max 67]
+  INFO c444_96x72 = max 2 mean 0.0232 identical 6594/6912 px
+  INFO c440_96x72 = max 3 mean 0.1776 identical 5275/6912 px
+  INFO gray_96x72 = max 1 mean 0.0071 identical 6863/6912 px
+  INFO c411_96x72 = max 2 mean 0.0219 identical 6595/6912 px
+  INFO cinv_96x72 = max 3 mean 0.0617 identical 6319/6912 px
+  INFO rgb_96x72 = max 1 mean 0.0095 identical 6717/6912 px
+  INFO c420_q100_96x72 = max 3 mean 0.0670 identical 6180/6912 px
+  INFO c420_q5_96x72 = max 2 mean 0.0376 identical 6566/6912 px
+  INFO c420_q1_16bit_96x72 = max 2 mean 0.0257 identical 6649/6912 px
+  INFO c420_opt_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO c420_rst1row_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO c420_rst1b_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO c444_rst5b_96x72 = max 2 mean 0.0232 identical 6594/6912 px
+  INFO gray_rst2b_96x72 = max 1 mean 0.0071 identical 6863/6912 px
+  INFO seq_scans_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO prog_420_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO prog_444_96x72 = max 2 mean 0.0232 identical 6594/6912 px
+  INFO prog_422_96x72 = max 3 mean 0.2364 identical 5241/6912 px [h2v1 edge column excluded, its max 67]
+  INFO prog_440_96x72 = max 3 mean 0.1776 identical 5275/6912 px
+  INFO prog_gray_96x72 = max 1 mean 0.0071 identical 6863/6912 px
+  INFO prog_custom_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO prog_rst_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO c420_61x45 = max 3 mean 0.0788 identical 2418/2745 px
+  INFO prog_420_61x45 = max 3 mean 0.0788 identical 2418/2745 px
+  INFO prog_420_17x13 = max 2 mean 0.0860 identical 184/221 px
+  INFO prog_420_1x1 = max 0 mean 0.0000 identical 1/1 px [reported only: libjpeg box-upsamples a component with downsampled width <= 2, stb filters it]
+  INFO nojfif_420_96x72 = max 2 mean 0.0699 identical 6155/6912 px
+  INFO c420_256x192 = max 3 mean 0.0625 identical 44298/49152 px
+  INFO mjpeg_no_dht = max 128 mean 64.8477 identical 0/256 px [reported only: stb_image lacks the Motion-JPEG default Huffman tables]
+  INFO not_given_to_stb = 16 corrupt or warning files
+  INFO summary = 75 images: 66 within tolerance 3 (worst 3, c420_16x16, mean 0.0938), 9 reported only, 5 pixel-identical
+PASS  stb_corpus_vs_golden_and_suite_decoder (31.2 ms)
+RUN   stb_synth_vs_golden_and_suite_decoder
+  INFO synth_4k_420 = max 3 mean 0.0652 identical 7414787/8294400 px
+  INFO synth_1k_444_rst = max 3 mean 0.0233 identical 751379/786432 px
+  INFO synth_vga_gray = max 1 mean 0.0066 identical 305171/307200 px
+  INFO synth_mt_420 = max 3 mean 0.0630 identical 177027/196608 px
+  INFO summary = 4 images: 4 within tolerance 3 (worst 3, synth_4k_420, mean 0.0652), 0 reported only, 0 pixel-identical
+PASS  stb_synth_vs_golden_and_suite_decoder (634.7 ms)
+RUN   stb_synth_8k_vs_golden_and_suite_decoder
+  INFO stb_c_ms = 241
+  INFO synth_8k_420 = max 3 mean 0.0545 identical 30206693/33177600 px
+  INFO stb_sse2_ms = 175
+PASS  stb_synth_8k_vs_golden_and_suite_decoder (2702.3 ms)
+RUN   stb_mt_decode_16_threads_512x384
+  INFO decoders = 3 suite kernel sets + 2 stb_image kernel sets
+  INFO threads = 16 of 16
+  INFO decodes = 80 in 22 ms
+PASS  stb_mt_decode_16_threads_512x384 (30.7 ms)
+RUN   stb_mt_decode_64_threads_256x192
+  INFO decoders = 3 suite kernel sets + 2 stb_image kernel sets
+  INFO threads = 64 of 64
+  INFO decodes = 320 in 19 ms
+PASS  stb_mt_decode_64_threads_256x192 (26.2 ms)
+RUN   stb_mt_decode_12_threads_same_cpu
+  INFO decoders = 3 suite kernel sets + 2 stb_image kernel sets
+  INFO threads = 12 of 12
+  INFO pinned_to_cpu = 0 (12 of 12 threads)
+  INFO decodes = 60 in 139 ms
+PASS  stb_mt_decode_12_threads_same_cpu (146.6 ms)
+RUN   stb_mt_decode_while_suspended_getcontext
+  INFO decoders = 3 suite kernel sets + 2 stb_image kernel sets
+  INFO context = InitializeContext XSTATE, xstate mask 0x4
+  INFO suspend_cycles = 51184 in 1504 ms, 1703 decodes on 4 threads
+PASS  stb_mt_decode_while_suspended_getcontext (1508.3 ms)
+RUN   stb_mt_decode_while_context_roundtrip
+  INFO decoders = 3 suite kernel sets + 2 stb_image kernel sets
+  INFO context = InitializeContext XSTATE, xstate mask 0x4
+  INFO suspend_cycles = 50620 in 1501 ms, 1760 decodes on 4 threads
+PASS  stb_mt_decode_while_context_roundtrip (1505.9 ms)
+RUN   stb_fpenv_independent_and_preserved
+PASS  stb_fpenv_independent_and_preserved (1.1 ms)
+RUN   perf_stb_decode_4k_c
+  PERF decode_4k_420_stb_c = 117.766 MPix/s
+  INFO median_ms = 70.4 (min 70.0 max 70.5)
+PERF  perf_stb_decode_4k_c (534.5 ms)
+RUN   perf_stb_decode_4k_sse2
+  PERF decode_4k_420_stb_sse2 = 156.319 MPix/s
+  INFO median_ms = 53.1 (min 52.8 max 54.1)
+PERF  perf_stb_decode_4k_sse2 (396.7 ms)
+SUMMARY exe=simd_jpeg arch=x86 total=190 pass=177 fail=0 crash=0 skip=0 xfail=0 perf=13 checks=8130 checks_failed=0 exit=0

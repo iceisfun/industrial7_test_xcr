@@ -1,0 +1,537 @@
+wineserver: using server-side synchronization.
+ENV   exe=fiber_xstate arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   fiber_api_initial_not_fiber
+  EXPECT-FAIL Wine: ConvertFiberToThread succeeds on a thread that is not a fiber
+  FAIL fiber_xstate.c:442: b.r[1] == FALSE (ConvertFiberToThread on a non-fiber thread returned 1)
+  FAIL fiber_xstate.c:443: b.e[1] == ERROR_ALREADY_THREAD (GetLastError 0 want ERROR_ALREADY_THREAD (1281))
+XFAIL fiber_api_initial_not_fiber (1.5 ms): Wine: ConvertFiberToThread succeeds on a thread that is not a fiber
+RUN   fiber_convert_basic
+  EXPECT-FAIL Wine: ConvertFiberToThread succeeds on a thread that is not a fiber
+  FAIL fiber_xstate.c:469: b.r[6] == FALSE (got 0x1 (1) want 0x0 (0))
+  FAIL fiber_xstate.c:470: b.e[6] == ERROR_ALREADY_THREAD (got 0x0 (0) want 0x501 (1281))
+XFAIL fiber_convert_basic (1.2 ms): Wine: ConvertFiberToThread succeeds on a thread that is not a fiber
+RUN   fiber_convert_ex_basic
+PASS  fiber_convert_ex_basic (0.2 ms)
+RUN   fiber_convert_twice_fails
+PASS  fiber_convert_twice_fails (0.2 ms)
+RUN   fiber_convert_ex_bad_flags
+  EXPECT-FAIL Wine: ConvertThreadToFiberEx does not reject unknown dwFlags bits
+  FAIL fiber_xstate.c:552: b.p[i] == NULL (ConvertThreadToFiberEx(flags=0x2) succeeded)
+  FAIL fiber_xstate.c:553: b.e[i] == ERROR_INVALID_PARAMETER (flags=0x2: GetLastError 0 want 87)
+  FAIL fiber_xstate.c:554: b.r[i] == FALSE (thread became a fiber after rejected flags 0x2)
+  FAIL fiber_xstate.c:552: b.p[i] == NULL (ConvertThreadToFiberEx(flags=0x4) succeeded)
+  FAIL fiber_xstate.c:553: b.e[i] == ERROR_INVALID_PARAMETER (flags=0x4: GetLastError 0 want 87)
+  FAIL fiber_xstate.c:554: b.r[i] == FALSE (thread became a fiber after rejected flags 0x4)
+  FAIL fiber_xstate.c:552: b.p[i] == NULL (ConvertThreadToFiberEx(flags=0x80000000) succeeded)
+  FAIL fiber_xstate.c:553: b.e[i] == ERROR_INVALID_PARAMETER (flags=0x80000000: GetLastError 0 want 87)
+  FAIL fiber_xstate.c:554: b.r[i] == FALSE (thread became a fiber after rejected flags 0x80000000)
+  FAIL fiber_xstate.c:552: b.p[i] == NULL (ConvertThreadToFiberEx(flags=0xffffffff) succeeded)
+  FAIL fiber_xstate.c:553: b.e[i] == ERROR_INVALID_PARAMETER (flags=0xffffffff: GetLastError 0 want 87)
+  FAIL fiber_xstate.c:554: b.r[i] == FALSE (thread became a fiber after rejected flags 0xffffffff)
+  FAIL fiber_xstate.c:552: b.p[i] == NULL (ConvertThreadToFiberEx(flags=0xfffffffe) succeeded)
+  FAIL fiber_xstate.c:553: b.e[i] == ERROR_INVALID_PARAMETER (flags=0xfffffffe: GetLastError 0 want 87)
+  FAIL fiber_xstate.c:554: b.r[i] == FALSE (thread became a fiber after rejected flags 0xfffffffe)
+  FAIL fiber_xstate.c:552: b.p[i] == NULL (ConvertThreadToFiberEx(flags=0x100) succeeded)
+  FAIL fiber_xstate.c:553: b.e[i] == ERROR_INVALID_PARAMETER (flags=0x100: GetLastError 0 want 87)
+  FAIL fiber_xstate.c:554: b.r[i] == FALSE (thread became a fiber after rejected flags 0x100)
+  INFO already_fiber_bad_flags_error = 1280
+XFAIL fiber_convert_ex_bad_flags (6.5 ms): Wine: ConvertThreadToFiberEx does not reject unknown dwFlags bits
+RUN   fiber_convert_cycle_300
+PASS  fiber_convert_cycle_300 (2.8 ms)
+RUN   fiber_convert_preserves_fp_env
+PASS  fiber_convert_preserves_fp_env (0.2 ms)
+RUN   fiber_create_ex_bad_flags
+  EXPECT-FAIL Wine: CreateFiberEx does not reject unknown dwFlags bits
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0x2) succeeded (thread))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0x2): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0x4) succeeded (thread))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0x4): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0x80000000) succeeded (thread))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0x80000000): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0xffffffff) succeeded (thread))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0xffffffff): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0xfffffffe) succeeded (thread))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0xfffffffe): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0x100) succeeded (thread))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0x100): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0x2) succeeded (fiber))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0x2): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0x4) succeeded (fiber))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0x4): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0x80000000) succeeded (fiber))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0x80000000): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0xffffffff) succeeded (fiber))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0xffffffff): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0xfffffffe) succeeded (fiber))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0xfffffffe): GetLastError 0 want 87)
+  FAIL fiber_xstate.c:643: b.p[k * 20 + i] == NULL (CreateFiberEx(flags=0x100) succeeded (fiber))
+  FAIL fiber_xstate.c:644: b.e[k * 20 + i] == ERROR_INVALID_PARAMETER (CreateFiberEx(flags=0x100): GetLastError 0 want 87)
+XFAIL fiber_create_ex_bad_flags (7.9 ms): Wine: CreateFiberEx does not reject unknown dwFlags bits
+RUN   fiber_create_basic_param
+PASS  fiber_create_basic_param (0.3 ms)
+RUN   fiber_create_from_non_fiber_thread
+PASS  fiber_create_from_non_fiber_thread (0.3 ms)
+RUN   fiber_create_delete_unrun_256
+PASS  fiber_create_delete_unrun_256 (7.3 ms)
+RUN   fiber_data_values
+PASS  fiber_data_values (0.5 ms)
+RUN   fiber_chain_three
+PASS  fiber_chain_three (0.3 ms)
+RUN   fiber_nested_create_depth16
+PASS  fiber_nested_create_depth16 (0.8 ms)
+RUN   fiber_ping_pong_100000_noflag
+PASS  fiber_ping_pong_100000_noflag (3.4 ms)
+RUN   fiber_ping_pong_100000_float_switch
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 100000
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 100000 of 100000 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber A: x87 CW 0x063f expected per fiber, wrong after 100000 of 100000 switches (last seen 0x0a7f))
+  INFO B_switch_returns = 99999
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 99999 of 99999 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber B: x87 CW 0x0a3f expected per fiber, wrong after 99999 of 99999 switches (last seen 0x067f))
+XFAIL fiber_ping_pong_100000_float_switch (5.6 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fp_sig_modes_distinct
+  INFO mxcsr_mask = 0xffff
+PASS  fp_sig_modes_distinct (0.1 ms)
+RUN   fiber_mxcsr_rc_per_fiber_float_switch
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times)
+  INFO B_switch_returns = 1999
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times)
+XFAIL fiber_mxcsr_rc_per_fiber_float_switch (2.2 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_mxcsr_rc_all_pairs_float_switch
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x3f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x1f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x1f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x7f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x7f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x1f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x1f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x1f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x7f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x7f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x5f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x1f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x1f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x5f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x3f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x5f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x7f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x7f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x7f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x1f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x1f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x7f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x7f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x3f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x7f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 200
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x7f80 expected per fiber, wrong after 200 of 200 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 200 of 200 times)
+  INFO B_switch_returns = 199
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 199 of 199 switches (last seen 0x7f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 199 of 199 times)
+XFAIL fiber_mxcsr_rc_all_pairs_float_switch (41.5 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_mxcsr_rc_per_fiber_noflag
+  INFO A_switch_returns = 2000
+  INFO A_sig_mismatch = 2000
+  INFO B_switch_returns = 1999
+  INFO B_sig_mismatch = 1999
+PASS  fiber_mxcsr_rc_per_fiber_noflag (1.6 ms)
+RUN   fiber_mxcsr_ftz_daz_per_fiber_float_switch
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x9fc0))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times)
+  INFO B_switch_returns = 1999
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x9fc0 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x1f80))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times)
+XFAIL fiber_mxcsr_ftz_daz_per_fiber_float_switch (4.0 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_mxcsr_ftz_daz_per_fiber_noflag
+  INFO A_switch_returns = 2000
+  INFO A_sig_mismatch = 2000
+  INFO B_switch_returns = 1999
+  INFO B_sig_mismatch = 1999
+PASS  fiber_mxcsr_ftz_daz_per_fiber_noflag (1.4 ms)
+RUN   fiber_mxcsr_mask_bits_per_fiber_float_switch
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x1f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x1e80))
+  INFO B_switch_returns = 1999
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x1e80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x1f80))
+XFAIL fiber_mxcsr_mask_bits_per_fiber_float_switch (2.2 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_x87_cw_rc_per_fiber_float_switch
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times)
+  INFO B_switch_returns = 1999
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times)
+XFAIL fiber_x87_cw_rc_per_fiber_float_switch (3.4 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_x87_cw_pc_per_fiber_float_switch
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber A: x87 CW 0x003f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x037f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times)
+  INFO B_switch_returns = 1999
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber B: x87 CW 0x033f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x007f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times)
+XFAIL fiber_x87_cw_pc_per_fiber_float_switch (2.0 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_x87_cw_per_fiber_noflag
+  INFO A_switch_returns = 2000
+  INFO A_sig_mismatch = 2000
+  INFO B_switch_returns = 1999
+  INFO B_sig_mismatch = 1999
+PASS  fiber_x87_cw_per_fiber_noflag (1.2 ms)
+RUN   fiber_fp_full_mode_mix_float_switch
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 5000
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x7fc0 expected per fiber, wrong after 5000 of 5000 switches (last seen 0xbf80))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber A: x87 CW 0x0e3f expected per fiber, wrong after 5000 of 5000 switches (last seen 0x007f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 5000 of 5000 times)
+  INFO B_switch_returns = 4999
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0xbf80 expected per fiber, wrong after 4999 of 4999 switches (last seen 0x7fc0))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber B: x87 CW 0x003f expected per fiber, wrong after 4999 of 4999 switches (last seen 0x0e7f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 4999 of 4999 times)
+XFAIL fiber_fp_full_mode_mix_float_switch (3.7 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_fp_mixed_flags_a_flagged
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times)
+  INFO B_switch_returns = 1999
+  INFO B_mxcsr_switched = no (1999 of 1999 wrong)
+  INFO B_x87cw_switched = no (1999 of 1999 wrong)
+  INFO B_sig_mismatch = 1999
+XFAIL fiber_fp_mixed_flags_a_flagged (2.5 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_fp_mixed_flags_b_flagged
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  INFO A_mxcsr_switched = no (2000 of 2000 wrong)
+  INFO A_x87cw_switched = no (2000 of 2000 wrong)
+  INFO A_sig_mismatch = 2000
+  INFO B_switch_returns = 1999
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times)
+XFAIL fiber_fp_mixed_flags_b_flagged (2.5 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_fp_plain_convert_thread_to_fiber
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  INFO A_mxcsr_switched = no (2000 of 2000 wrong)
+  INFO A_x87cw_switched = no (2000 of 2000 wrong)
+  INFO A_sig_mismatch = 2000
+  INFO B_switch_returns = 1999
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x3f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x7f80))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber B: x87 CW 0x063f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x0e7f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times)
+XFAIL fiber_fp_plain_convert_thread_to_fiber (2.8 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_new_fiber_initial_fp_and_flags_info
+  INFO new_fiber_mxcsr = 0x3fa0 (creator had 0x3FA0)
+  INFO new_fiber_x87_cw = 0x0e7f (creator had 0x0E7F)
+  INFO A_mxcsr_after_B_cleared_flags = 0x3f80
+  INFO B_mxcsr_after_A_raised_PE = 0x3fa2
+  INFO A_x87_sw_after_switch = 0x0020
+PASS  fiber_new_fiber_initial_fp_and_flags_info (0.8 ms)
+RUN   fiber_xmm6_15_preserved_noflag
+  NOTE x86 ABI: no XMM register is callee-saved; observing only
+  INFO A_xmm_changed = 10000 of 10000 (all XMM volatile in the x86 ABI)
+  INFO B_xmm_changed = 9999 of 9999 (all XMM volatile in the x86 ABI)
+PASS  fiber_xmm6_15_preserved_noflag (2.6 ms)
+RUN   fiber_xmm6_15_preserved_float_switch
+  INFO A_xmm_changed = 10000 of 10000 (all XMM volatile in the x86 ABI)
+  INFO B_xmm_changed = 9999 of 9999 (all XMM volatile in the x86 ABI)
+PASS  fiber_xmm6_15_preserved_float_switch (2.4 ms)
+RUN   fiber_xmm6_15_preserved_plain_convert
+  INFO A_xmm_changed = 10000 of 10000 (all XMM volatile in the x86 ABI)
+  INFO B_xmm_changed = 9999 of 9999 (all XMM volatile in the x86 ABI)
+PASS  fiber_xmm6_15_preserved_plain_convert (2.4 ms)
+RUN   fiber_ymm_low128_preserved
+  INFO A_xmm_changed = 5000 of 5000 (all XMM volatile in the x86 ABI)
+  INFO A_upper_changed = 5000 of 5000 (upper YMM/ZMM bits, xmm16-31: volatile)
+  INFO B_xmm_changed = 4999 of 4999 (all XMM volatile in the x86 ABI)
+  INFO B_upper_changed = 4999 of 4999 (upper YMM/ZMM bits, xmm16-31: volatile)
+PASS  fiber_ymm_low128_preserved (1.9 ms)
+RUN   fiber_zmm_low128_preserved
+  SKIP AVX-512F not usable
+SKIP  fiber_zmm_low128_preserved (0.1 ms): AVX-512F not usable
+RUN   fiber_gpr_nonvolatile_preserved_noflag
+PASS  fiber_gpr_nonvolatile_preserved_noflag (1.2 ms)
+RUN   fiber_gpr_nonvolatile_preserved_float_switch
+PASS  fiber_gpr_nonvolatile_preserved_float_switch (1.5 ms)
+RUN   fiber_volatile_xmm_info
+  INFO xmm0_7_survive_switch = no
+PASS  fiber_volatile_xmm_info (0.3 ms)
+RUN   fiber_switch_perf
+  PERF switch_noflag = 17.1528 ns/switch
+  PERF switch_float_switch = 12.8985 ns/switch
+PERF  fiber_switch_perf (12.7 ms)
+RUN   fiber_return_exits_thread
+  INFO thread_exit_code = 0x1
+PASS  fiber_return_exits_thread (0.3 ms)
+RUN   fiber_exitthread_in_fiber
+PASS  fiber_exitthread_in_fiber (0.2 ms)
+RUN   fiber_delete_current_exits_thread
+  INFO thread_exit_code = 0x1
+PASS  fiber_delete_current_exits_thread (0.3 ms)
+RUN   fiber_delete_current_primary_exits_thread
+  INFO thread_exit_code = 0x1
+PASS  fiber_delete_current_primary_exits_thread (0.3 ms)
+RUN   fiber_delete_suspended_other
+PASS  fiber_delete_suspended_other (3.2 ms)
+RUN   fiber_run_on_other_thread
+PASS  fiber_run_on_other_thread (0.5 ms)
+RUN   fiber_migrate_threads_1000
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  FAIL fiber_xstate.c:1323: m.bad_mx == 0 (fiber MXCSR control lost across threads 750 times)
+  FAIL fiber_xstate.c:1324: m.bad_cw == 0 (fiber x87 CW lost across threads 750 times)
+  FAIL fiber_xstate.c:1325: m.bad_tmx == 0 (thread primary fiber MXCSR wrong after switch back 250 times)
+  FAIL fiber_xstate.c:1326: m.bad_tcw == 0 (thread primary fiber x87 CW wrong after switch back 250 times)
+XFAIL fiber_migrate_threads_1000 (19.0 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_threads_16x_ping_pong
+  INFO threads = 16
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 0 fiber A: MXCSR wrong 5000 times (last 0x3f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 0 fiber A: x87 CW wrong 5000 times (last 0x087f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 0 fiber B: MXCSR wrong 4999 times (last 0x1f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 0 fiber B: x87 CW wrong 4999 times (last 0x027f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 1 fiber A: MXCSR wrong 5000 times (last 0x5f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 1 fiber A: x87 CW wrong 5000 times (last 0x0c7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 1 fiber B: MXCSR wrong 4999 times (last 0x3f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 1 fiber B: x87 CW wrong 4999 times (last 0x067f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 2 fiber A: MXCSR wrong 5000 times (last 0x7f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 2 fiber A: x87 CW wrong 5000 times (last 0x007f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 2 fiber B: MXCSR wrong 4999 times (last 0x5f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 2 fiber B: x87 CW wrong 4999 times (last 0x0a7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 3 fiber A: MXCSR wrong 5000 times (last 0x1f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 3 fiber A: x87 CW wrong 5000 times (last 0x047f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 3 fiber B: MXCSR wrong 4999 times (last 0x7f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 3 fiber B: x87 CW wrong 4999 times (last 0x0e7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 4 fiber A: MXCSR wrong 5000 times (last 0xbf80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 4 fiber A: x87 CW wrong 5000 times (last 0x087f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 4 fiber B: MXCSR wrong 4999 times (last 0x1f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 4 fiber B: x87 CW wrong 4999 times (last 0x027f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 5 fiber A: MXCSR wrong 5000 times (last 0xdf80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 5 fiber A: x87 CW wrong 5000 times (last 0x0c7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 5 fiber B: MXCSR wrong 4999 times (last 0x3f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 5 fiber B: x87 CW wrong 4999 times (last 0x067f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 6 fiber A: MXCSR wrong 5000 times (last 0xff80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 6 fiber A: x87 CW wrong 5000 times (last 0x007f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 6 fiber B: MXCSR wrong 4999 times (last 0x5f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 6 fiber B: x87 CW wrong 4999 times (last 0x0a7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 7 fiber A: MXCSR wrong 5000 times (last 0x9f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 7 fiber A: x87 CW wrong 5000 times (last 0x047f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 7 fiber B: MXCSR wrong 4999 times (last 0x7f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 7 fiber B: x87 CW wrong 4999 times (last 0x0e7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 8 fiber A: MXCSR wrong 5000 times (last 0x3f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 8 fiber A: x87 CW wrong 5000 times (last 0x087f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 8 fiber B: MXCSR wrong 4999 times (last 0x1f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 8 fiber B: x87 CW wrong 4999 times (last 0x027f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 9 fiber A: MXCSR wrong 5000 times (last 0x5f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 9 fiber A: x87 CW wrong 5000 times (last 0x0c7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 9 fiber B: MXCSR wrong 4999 times (last 0x3f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 9 fiber B: x87 CW wrong 4999 times (last 0x067f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 10 fiber A: MXCSR wrong 5000 times (last 0x7f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 10 fiber A: x87 CW wrong 5000 times (last 0x007f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 10 fiber B: MXCSR wrong 4999 times (last 0x5f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 10 fiber B: x87 CW wrong 4999 times (last 0x0a7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 11 fiber A: MXCSR wrong 5000 times (last 0x1f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 11 fiber A: x87 CW wrong 5000 times (last 0x047f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 11 fiber B: MXCSR wrong 4999 times (last 0x7f80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 11 fiber B: x87 CW wrong 4999 times (last 0x0e7f))
+  FAIL fiber_xstate.c:1370: d[i].mx_bad[s] == 0 (thread 12 fiber A: MXCSR wrong 5000 times (last 0xbf80))
+  FAIL fiber_xstate.c:1371: d[i].cw_bad[s] == 0 (thread 12 fiber A: x87 CW wrong 5000 times (last 0x087f))
+  FAIL ... further failures not printed
+XFAIL fiber_threads_16x_ping_pong (33.1 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_many_1024_ring
+  INFO fibers_created = 1024
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  FAIL fiber_xstate.c:1459: r.bad_mx == 0 (per-fiber MXCSR wrong 4096 times)
+  FAIL fiber_xstate.c:1460: r.bad_cw == 0 (per-fiber x87 CW wrong 4096 times)
+  FAIL fiber_xstate.c:1461: r.main_bad == 0 (main fiber FP control wrong 4096 times)
+XFAIL fiber_many_1024_ring (18.7 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_fp_state_follows_fiber_across_threads
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  FAIL fiber_xstate.c:1496: (c.mx_in[1] & MXC_CTRL) == 0x5F80 (fiber MXCSR on thread 2: 0x3f80 want 0x5F80)
+  FAIL fiber_xstate.c:1497: (c.cw_in[1] & CW_CTRL) == (0x0A7F & CW_CTRL) (fiber x87 CW on thread 2: 0x067f want 0x0A7F)
+  FAIL fiber_xstate.c:1498: (c.mx_t[0] & MXC_CTRL) == 0x7F80 (thread 1 MXCSR after switch back 0x5f80)
+  FAIL fiber_xstate.c:1500: (c.cw_t[0] & CW_CTRL) == (0x0E7F & CW_CTRL) (thread 1 x87 CW after switch back 0x0a7f)
+XFAIL fiber_fp_state_follows_fiber_across_threads (1.6 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_blocking_calls_inside_fiber
+PASS  fiber_blocking_calls_inside_fiber (51.7 ms)
+RUN   fiber_get_thread_context_sees_fiber
+PASS  fiber_get_thread_context_sees_fiber (0.5 ms)
+RUN   fiber_set_thread_context_modifies_fiber
+PASS  fiber_set_thread_context_modifies_fiber (0.4 ms)
+RUN   fiber_exception_veh_in_fiber
+PASS  fiber_exception_veh_in_fiber (0.2 ms)
+RUN   fiber_x86_seh_chain_per_fiber
+PASS  fiber_x86_seh_chain_per_fiber (0.2 ms)
+RUN   fiber_stacks_distinct_and_restored
+PASS  fiber_stacks_distinct_and_restored (0.5 ms)
+RUN   fiber_stack_reserve_honored
+  INFO reserve_65536 = 1048576
+  INFO reserve_262144 = 1048576
+  INFO reserve_1048577 = 1114112
+  INFO reserve_3145728 = 3145728
+PASS  fiber_stack_reserve_honored (1.3 ms)
+RUN   fiber_stack_default_reserve
+  INFO image_stack_reserve = 2097152
+  INFO fiber_stack_reserve = 2097152
+PASS  fiber_stack_default_reserve (0.4 ms)
+RUN   fiber_stack_grows_on_demand
+PASS  fiber_stack_grows_on_demand (0.4 ms)
+RUN   fiber_stack_overflow_child
+  INFO child_exit = 0xc00000fd
+PASS  fiber_stack_overflow_child (13.5 ms)
+RUN   fiber_stack_guarantee_per_fiber
+  INFO guarantee_A = 0
+  INFO guarantee_B_initial = 0
+  INFO guarantee_B_after_set = 49152
+  EXPECT-FAIL Wine: SetThreadStackGuarantee value is not per fiber
+  FAIL fiber_xstate.c:1972: s.a1 == s.a0 (fiber A guarantee changed from 0 to 49152 by fiber B)
+  FAIL fiber_xstate.c:1973: s.a2 == s.a0 (fiber A guarantee 49152 after second switch, was 0)
+  FAIL fiber_xstate.c:1975: s.b_other_thread == s.b1 (fiber B guarantee on another thread 0, was 49152)
+XFAIL fiber_stack_guarantee_per_fiber (1.4 ms): Wine: SetThreadStackGuarantee value is not per fiber
+RUN   fiber_stack_alignment_at_entry
+  INFO esp_mod16_at_entry = 12
+  INFO esp_mod16_at_entry = 12
+  INFO esp_mod16_at_entry = 12
+  INFO esp_mod16_at_entry = 12
+PASS  fiber_stack_alignment_at_entry (0.6 ms)
+RUN   fiber_create_huge_stack_fails
+  INFO reserve_error = 8
+  INFO commit_error = 8
+PASS  fiber_create_huge_stack_fails (0.3 ms)
+RUN   fls_alloc_set_get_free
+PASS  fls_alloc_set_get_free (0.0 ms)
+RUN   fls_invalid_index
+PASS  fls_invalid_index (0.0 ms)
+RUN   fls_without_fibers_is_per_thread
+PASS  fls_without_fibers_is_per_thread (0.2 ms)
+RUN   fls_per_fiber_values
+PASS  fls_per_fiber_values (0.3 ms)
+RUN   fls_callback_on_delete_fiber
+PASS  fls_callback_on_delete_fiber (0.2 ms)
+RUN   fls_callback_not_called_for_null_slot
+PASS  fls_callback_not_called_for_null_slot (0.2 ms)
+RUN   fls_callback_on_flsfree_all_fibers
+PASS  fls_callback_on_flsfree_all_fibers (0.2 ms)
+RUN   fls_callback_on_thread_exit
+  INFO plain_exit_cb_on_exiting_thread = yes
+  INFO fiber_exit_cb_on_exiting_thread = yes
+PASS  fls_callback_on_thread_exit (0.5 ms)
+RUN   fls_many_indexes_many_fibers
+PASS  fls_many_indexes_many_fibers (0.4 ms)
+RUN   fiber_mxcsr_unmasked_trap_per_fiber_float_switch
+  INFO traps_A = 200
+  INFO traps_B = 0
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  FAIL fiber_xstate.c:2349: a == 0 (fiber A (all masked) took 200 divide-by-zero traps: fiber B's unmasked MXCSR leaked)
+  FAIL fiber_xstate.c:2350: b == TRAP_N - 1 (fiber B (ZM unmasked) took 0 traps, want 199)
+XFAIL fiber_mxcsr_unmasked_trap_per_fiber_float_switch (17.4 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_mxcsr_unmasked_trap_noflag
+  INFO traps_A = 200
+  INFO traps_B = 0
+PASS  fiber_mxcsr_unmasked_trap_noflag (13.0 ms)
+RUN   fiber_seh_frame_handler_and_longjmp_child
+  INFO longjmp_unwind_handler_calls = 1
+PASS  fiber_seh_frame_handler_and_longjmp_child (13.3 ms)
+RUN   fiber_user_apc_runs_on_fiber
+PASS  fiber_user_apc_runs_on_fiber (0.3 ms)
+RUN   fiber_in_threadpool_callback
+  EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  INFO A_switch_returns = 2000
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber A: MXCSR control 0x3f80 expected per fiber, wrong after 2000 of 2000 switches (last seen 0x5f80))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber A: x87 CW 0x063f expected per fiber, wrong after 2000 of 2000 switches (last seen 0x0a7f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber A: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 2000 of 2000 times)
+  INFO B_switch_returns = 1999
+  FAIL fiber_xstate.c:370: d->mx_bad[s] == 0 (fiber B: MXCSR control 0x5f80 expected per fiber, wrong after 1999 of 1999 switches (last seen 0x3f80))
+  FAIL fiber_xstate.c:377: d->cw_bad[s] == 0 (fiber B: x87 CW 0x0a3f expected per fiber, wrong after 1999 of 1999 switches (last seen 0x067f))
+  FAIL fiber_xstate.c:384: d->sig_bad[s] == 0 (fiber B: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode 1999 of 1999 times)
+  INFO A_xmm_changed = 2000 of 2000 (all XMM volatile in the x86 ABI)
+  INFO B_xmm_changed = 1999 of 1999 (all XMM volatile in the x86 ABI)
+XFAIL fiber_in_threadpool_callback (3.7 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   fiber_backtrace_and_lasterror_info
+  INFO backtrace_frames_in_fiber = 2
+  INFO lasterror_seen_by_new_fiber = 0xa0a (switcher set 0xA0A)
+  INFO lasterror_after_switch_back = 0xb0b (fiber set 0xB0B)
+  INFO nt_tib_fiberdata_non_fiber_thread = 00000000
+PASS  fiber_backtrace_and_lasterror_info (0.7 ms)
+RUN   fiber_switch_to_self_child_info
+  INFO returned = 1
+  INFO current_fiber_ok = 1
+  INFO exit_code = 0x0
+PASS  fiber_switch_to_self_child_info (13.1 ms)
+RUN   fiber_switch_null_child_info
+  INFO exit_code = 0xc0000005
+  INFO exception = 0xc0000005
+  INFO returned = no
+PASS  fiber_switch_null_child_info (18.9 ms)
+RUN   fiber_switch_from_non_fiber_thread_child_info
+  INFO exit_code = 0xc0000005
+  INFO exception = 0xc0000005
+  INFO fiber_ran = no
+PASS  fiber_switch_from_non_fiber_thread_child_info (18.7 ms)
+SUMMARY exe=fiber_xstate arch=x86 total=81 pass=57 fail=0 crash=0 skip=1 xfail=22 perf=1 checks=1236 checks_failed=217 exit=0

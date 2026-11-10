@@ -1,0 +1,388 @@
+wineserver: using server-side synchronization.
+ENV   exe=exception_xstate arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   ref_nop_roundtrip_xmm
+PASS  ref_nop_roundtrip_xmm (0.0 ms)
+RUN   ref_nop_roundtrip_ymm
+PASS  ref_nop_roundtrip_ymm (0.0 ms)
+RUN   ref_nop_roundtrip_zmm
+  SKIP AVX-512F not usable
+SKIP  ref_nop_roundtrip_zmm (0.1 ms): AVX-512F not usable
+RUN   ref_nop_roundtrip_x87_eflags
+PASS  ref_nop_roundtrip_x87_eflags (0.0 ms)
+RUN   veh_div0_record_context_xmm
+PASS  veh_div0_record_context_xmm (0.0 ms)
+RUN   veh_div0_record_context_ymm
+PASS  veh_div0_record_context_ymm (0.0 ms)
+RUN   veh_div0_record_context_zmm
+  SKIP AVX-512F not usable
+SKIP  veh_div0_record_context_zmm (0.1 ms): AVX-512F not usable
+RUN   veh_div64_record_context
+  SKIP 64-bit DIV exists only in 64-bit mode
+SKIP  veh_div64_record_context (0.1 ms): 64-bit DIV exists only in 64-bit mode
+RUN   veh_idiv_overflow_intmin
+  NOTE VEH: ExceptionCode 0xc0000094 (accepted alternative to 0xc0000095)
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  INFO code = 0xc0000094
+PASS  veh_idiv_overflow_intmin (0.3 ms)
+RUN   veh_int3_record_context
+  INFO nparams = VEH: 1 (info0=0x0 info1=0x0)
+  INFO nparams = VEH: 1 (info0=0x0 info1=0x0)
+PASS  veh_int3_record_context (0.3 ms)
+RUN   veh_int3_cd03_form
+  INFO nparams = VEH: 1 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label+1
+  NOTE VEH: context PC = label+1
+  INFO address_delta = 1
+PASS  veh_int3_cd03_form (0.3 ms)
+RUN   veh_single_step_tf
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+PASS  veh_single_step_tf (0.2 ms)
+RUN   veh_ctx_eflags_df_and_arith_flags
+  INFO nparams = VEH: 1 (info0=0x0 info1=0x0)
+PASS  veh_ctx_eflags_df_and_arith_flags (0.1 ms)
+RUN   veh_ctx_x87_stack_and_cw
+PASS  veh_ctx_x87_stack_and_cw (0.0 ms)
+RUN   veh_av_read_null
+PASS  veh_av_read_null (0.0 ms)
+RUN   veh_av_write_null
+PASS  veh_av_write_null (0.0 ms)
+RUN   veh_av_read_null_ymm
+PASS  veh_av_read_null_ymm (0.0 ms)
+RUN   veh_av_read_guard_page_end
+  INFO straddle_info1 = 0x12a1000 (load at p+60, page at p+64)
+PASS  veh_av_read_guard_page_end (0.2 ms)
+RUN   veh_av_write_readonly
+PASS  veh_av_write_readonly (0.0 ms)
+RUN   veh_av_noncanonical_x64
+  SKIP non-canonical addresses exist only in 64-bit mode
+SKIP  veh_av_noncanonical_x64 (0.1 ms): non-canonical addresses exist only in 64-bit mode
+RUN   veh_av_execute_nx
+PASS  veh_av_execute_nx (0.0 ms)
+RUN   veh_movaps_misaligned
+  INFO nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  INFO code = 0xc0000005 np=2 info1=0xffffffff
+PASS  veh_movaps_misaligned (0.2 ms)
+RUN   veh_guard_page_read_once
+PASS  veh_guard_page_read_once (0.1 ms)
+RUN   veh_guard_page_write_once
+PASS  veh_guard_page_write_once (0.1 ms)
+RUN   veh_ctx_modify_xmm
+PASS  veh_ctx_modify_xmm (0.0 ms)
+RUN   veh_ctx_modify_gpr
+PASS  veh_ctx_modify_gpr (0.0 ms)
+RUN   veh_ctx_modify_mxcsr
+PASS  veh_ctx_modify_mxcsr (0.0 ms)
+RUN   veh_ctx_modify_mxcsr_toplevel_only_x64
+  SKIP x64 CONTEXT only
+SKIP  veh_ctx_modify_mxcsr_toplevel_only_x64 (0.1 ms): x64 CONTEXT only
+RUN   veh_ctx_modify_ymm_upper
+PASS  veh_ctx_modify_ymm_upper (0.0 ms)
+RUN   veh_ctx_modify_ymm_and_xmm
+PASS  veh_ctx_modify_ymm_and_xmm (0.0 ms)
+RUN   veh_ctx_modify_zmm_upper
+  SKIP AVX-512F not usable
+SKIP  veh_ctx_modify_zmm_upper (0.1 ms): AVX-512F not usable
+RUN   veh_ctx_modify_x87_st0
+PASS  veh_ctx_modify_x87_st0 (0.0 ms)
+RUN   veh_ctx_clear_avx_mask_note
+  INFO ymm_upper_after_clear_mask = initialized (zero)
+PASS  veh_ctx_clear_avx_mask_note (0.1 ms)
+RUN   veh_ctx_unchanged_all_kinds
+PASS  veh_ctx_unchanged_all_kinds (0.1 ms)
+RUN   veh_handler_clobbers_volatile_xmm
+PASS  veh_handler_clobbers_volatile_xmm (0.0 ms)
+RUN   veh_handler_clobbers_ymm_upper
+PASS  veh_handler_clobbers_ymm_upper (0.0 ms)
+RUN   veh_handler_clobbers_zmm
+  SKIP AVX-512F not usable
+SKIP  veh_handler_clobbers_zmm (0.1 ms): AVX-512F not usable
+RUN   veh_handler_live_fp_environment
+  INFO handler_mxcsr = 0xbf80 (thread at fault: 0xbf80)
+  INFO handler_x87_cw = 0x0e7f (thread at fault: 0x0e7f)
+PASS  veh_handler_live_fp_environment (0.3 ms)
+RUN   fp_sse_zero_divide_unmasked
+  INFO nparams = VEH: 2 (info0=0x0 info1=0x1d84)
+  INFO code = 0xc00002b5 np=2 info0=0x0 info1=0x1d84
+PASS  fp_sse_zero_divide_unmasked (0.3 ms)
+RUN   fp_sse_invalid_unmasked
+  INFO nparams = VEH: 2 (info0=0x0 info1=0x1f01)
+  INFO code = 0xc00002b5 np=2 info0=0x0 info1=0x1f01
+PASS  fp_sse_invalid_unmasked (0.3 ms)
+RUN   fp_sse_denormal_unmasked
+  INFO nparams = VEH: 2 (info0=0x0 info1=0x1e82)
+  INFO code = 0xc00002b5 np=2 info0=0x0 info1=0x1e82
+PASS  fp_sse_denormal_unmasked (0.3 ms)
+RUN   fp_sse_overflow_unmasked
+  EXPECT-FAIL Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+  FAIL exception_xstate.c:907: code == e->code || alt (VEH: ExceptionCode 0xc00002b5, expected 0xc00002b4)
+  INFO nparams = VEH: 2 (info0=0x0 info1=0x1ba8)
+  INFO code = 0xc00002b5 np=2 info0=0x0 info1=0x1ba8
+XFAIL fp_sse_overflow_unmasked (0.9 ms): Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+RUN   fp_sse_underflow_unmasked
+  EXPECT-FAIL Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+  FAIL exception_xstate.c:907: code == e->code || alt (VEH: ExceptionCode 0xc00002b5, expected 0xc00002b4)
+  INFO nparams = VEH: 2 (info0=0x0 info1=0x17b0)
+  INFO code = 0xc00002b5 np=2 info0=0x0 info1=0x17b0
+XFAIL fp_sse_underflow_unmasked (0.8 ms): Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+RUN   fp_sse_inexact_unmasked
+  EXPECT-FAIL Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+  FAIL exception_xstate.c:907: code == e->code || alt (VEH: ExceptionCode 0xc00002b5, expected 0xc00002b4)
+  INFO nparams = VEH: 2 (info0=0x0 info1=0xfa0)
+  INFO code = 0xc00002b5 np=2 info0=0x0 info1=0xfa0
+XFAIL fp_sse_inexact_unmasked (0.8 ms): Wine gap: 32-bit SSE #XM for OE/UE/PE is reported as STATUS_FLOAT_MULTIPLE_TRAPS (Windows: _MULTIPLE_FAULTS)
+RUN   fp_sse_zero_divide_unmasked_ymm
+  INFO nparams = VEH: 2 (info0=0x0 info1=0x1d84)
+  INFO code = 0xc00002b5 np=2 info0=0x0 info1=0x1d84
+PASS  fp_sse_zero_divide_unmasked_ymm (0.2 ms)
+RUN   fp_sse_masked_no_exception
+PASS  fp_sse_masked_no_exception (0.1 ms)
+RUN   fp_x87_zero_divide_unmasked
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label-2
+  INFO code = 0xc000008e np=0
+  INFO address = x87 op (FIP)
+PASS  fp_x87_zero_divide_unmasked (0.3 ms)
+RUN   fp_x87_stack_overflow_unmasked
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label-2
+  INFO code = 0xc0000092 np=0
+  INFO address = x87 op (FIP)
+PASS  fp_x87_stack_overflow_unmasked (0.3 ms)
+RUN   fp_x87_masked_no_exception
+PASS  fp_x87_masked_no_exception (0.0 ms)
+RUN   fp_sse_unmasked_seh_frame
+  INFO nparams = SEH: 2 (info0=0x0 info1=0x1d84)
+PASS  fp_sse_unmasked_seh_frame (0.1 ms)
+RUN   seh_frame_handler_continue_div0
+PASS  seh_frame_handler_continue_div0 (0.0 ms)
+RUN   seh_frame_handler_continue_av
+PASS  seh_frame_handler_continue_av (0.0 ms)
+RUN   seh_frame_handler_continue_int3
+  INFO nparams = SEH: 1 (info0=0x0 info1=0x0)
+PASS  seh_frame_handler_continue_int3 (0.1 ms)
+RUN   seh_frame_handler_modify_context
+PASS  seh_frame_handler_modify_context (0.0 ms)
+RUN   seh_frame_handler_ymm
+PASS  seh_frame_handler_ymm (0.0 ms)
+RUN   seh_frame_handler_via_caller_frame
+PASS  seh_frame_handler_via_caller_frame (0.0 ms)
+RUN   seh_veh_runs_before_frame_handler
+PASS  seh_veh_runs_before_frame_handler (0.0 ms)
+RUN   seh_nested_call_flag
+PASS  seh_nested_call_flag (0.0 ms)
+RUN   seh_unwind_same_frame_nonvolatile_x64
+  SKIP table-based unwinding is x64 only
+SKIP  seh_unwind_same_frame_nonvolatile_x64 (0.1 ms): table-based unwinding is x64 only
+RUN   seh_unwind_through_inner_frame_x64
+  SKIP table-based unwinding is x64 only
+SKIP  seh_unwind_through_inner_frame_x64 (0.1 ms): table-based unwinding is x64 only
+RUN   veh_first_last_order
+PASS  veh_first_last_order (0.0 ms)
+RUN   vch_called_after_veh_continue
+  EXPECT-FAIL Wine gap: vectored continue handlers are registered but never called by the dispatcher
+  FAIL exception_xstate.c:2104: ok (VEH(continue) then continue handler: handler order [3 ] want [3 9 ])
+XFAIL vch_called_after_veh_continue (0.5 ms): Wine gap: vectored continue handlers are registered but never called by the dispatcher
+RUN   vch_context_edit_takes_effect
+  EXPECT-FAIL Wine gap: vectored continue handlers are registered but never called by the dispatcher
+  FAIL exception_xstate.c:2171: s->nested_calls == 1 (continue handler ran 0 times after the VEH continued)
+XFAIL vch_context_edit_takes_effect (0.5 ms): Wine gap: vectored continue handlers are registered but never called by the dispatcher
+RUN   vch_reference_dispatch_selfcheck
+PASS  vch_reference_dispatch_selfcheck (0.0 ms)
+RUN   veh_shared_context_between_handlers
+PASS  veh_shared_context_between_handlers (0.0 ms)
+RUN   veh_nested_exception_in_handler
+PASS  veh_nested_exception_in_handler (0.0 ms)
+RUN   raise_custom_code_args
+PASS  raise_custom_code_args (0.0 ms)
+RUN   raise_parameter_count_clamped
+PASS  raise_parameter_count_clamped (0.0 ms)
+RUN   raise_flags_masked_to_noncontinuable
+PASS  raise_flags_masked_to_noncontinuable (0.0 ms)
+RUN   raise_preserves_abi_nonvolatile_registers
+  NOTE x86: no vector register is nonvolatile; only completion is checked
+PASS  raise_preserves_abi_nonvolatile_registers (0.2 ms)
+RUN   raise_context_flags_info
+  INFO raise_context_flags = 0x1003f
+PASS  raise_context_flags_info (0.1 ms)
+RUN   thr_worker_exceptions_isolated_xmm
+  INFO threads = 8
+  INFO exceptions = 384
+PASS  thr_worker_exceptions_isolated_xmm (2.2 ms)
+RUN   thr_worker_exceptions_isolated_ymm
+  INFO threads = 16
+  INFO exceptions = 768
+PASS  thr_worker_exceptions_isolated_ymm (22.0 ms)
+RUN   thr_worker_exceptions_isolated_zmm
+  SKIP AVX-512F not usable
+SKIP  thr_worker_exceptions_isolated_zmm (0.1 ms): AVX-512F not usable
+RUN   thr_worker_fp_exceptions
+  NOTE Wine: iterations with a known exception-code gap (see fp_sse_*_unmasked) replaced by ZE/IE
+PASS  thr_worker_fp_exceptions (2.3 ms)
+RUN   child_ud2_illegal_instruction_handled
+  NOTE child ud2: nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE child ud2: nparams = VEH: 0 (info0=0x0 info1=0x0)
+PASS  child_ud2_illegal_instruction_handled (42.4 ms)
+RUN   child_ud2_frame_handler
+  NOTE child ud2: nparams = SEH: 0 (info0=0x0 info1=0x0)
+PASS  child_ud2_frame_handler (16.9 ms)
+RUN   child_ud2_unhandled_exit_code
+PASS  child_ud2_unhandled_exit_code (15.7 ms)
+RUN   child_div0_unhandled_exit_code
+PASS  child_div0_unhandled_exit_code (18.1 ms)
+RUN   child_privileged_hlt_cli_sti
+  NOTE child hlt: nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE child cli: nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE child sti: nparams = VEH: 0 (info0=0x0 info1=0x0)
+PASS  child_privileged_hlt_cli_sti (49.0 ms)
+RUN   child_privileged_misc
+  NOTE child inb: nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE child outb: nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE child wbinvd: VEH: ExceptionCode 0xc0000005 (accepted alternative to 0xc0000096)
+  NOTE child wbinvd: nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  NOTE child rdmsr: VEH: ExceptionCode 0xc0000005 (accepted alternative to 0xc0000096)
+  NOTE child rdmsr: nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  NOTE child wrmsr: VEH: ExceptionCode 0xc0000005 (accepted alternative to 0xc0000096)
+  NOTE child wrmsr: nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  NOTE child movcr: nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE child clts: VEH: ExceptionCode 0xc0000005 (accepted alternative to 0xc0000096)
+  NOTE child clts: nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  NOTE child invd: VEH: ExceptionCode 0xc0000005 (accepted alternative to 0xc0000096)
+  NOTE child invd: nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  INFO codes = inb=0xc0000096 outb=0xc0000096 wbinvd=0xc0000005 rdmsr=0xc0000005 wrmsr=0xc0000005 movcr=0xc0000096 clts=0xc0000005 invd=0xc0000005 
+PASS  child_privileged_misc (154.8 ms)
+RUN   child_xsetbv_privileged
+  NOTE child xsetbv: VEH: ExceptionCode 0xc0000005 (accepted alternative to 0xc0000096)
+  NOTE child xsetbv: nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  INFO code = 0xc0000005
+PASS  child_xsetbv_privileged (17.5 ms)
+RUN   child_int2c_assertion_failure
+  EXPECT-FAIL Wine gap: 32-bit INT 2Ch raises STATUS_ACCESS_VIOLATION instead of STATUS_ASSERTION_FAILURE
+  FAIL exception_xstate.c:1483: int2c (child: exception_xstate.c:907: code == e->code || alt (VEH: ExceptionCode 0xc0000005, expected 0xc0000420))
+  NOTE child int2c: nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  INFO code = 0xc0000005
+XFAIL child_int2c_assertion_failure (21.3 ms): Wine gap: 32-bit INT 2Ch raises STATUS_ACCESS_VIOLATION instead of STATUS_ASSERTION_FAILURE
+RUN   child_fastfail_bypasses_handlers
+  INFO exit = 0xc0000409
+PASS  child_fastfail_bypasses_handlers (12.6 ms)
+RUN   child_noncontinuable_continue_raises_0xC0000025
+  INFO chained_record = 0x00000000
+PASS  child_noncontinuable_continue_raises_0xC0000025 (20.3 ms)
+RUN   child_noncontinuable_veh_continue_info
+  INFO outcome = RaiseException returned exit=0x00000000
+PASS  child_noncontinuable_veh_continue_info (14.2 ms)
+RUN   x86_into_overflow_trap
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label+1
+  NOTE VEH: context PC = label+1
+  INFO address_delta = 1
+PASS  x86_into_overflow_trap (0.3 ms)
+RUN   x86_bound_range_exceeded
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+PASS  x86_bound_range_exceeded (0.1 ms)
+RUN   sj_longjmp_unwinding_restores_nonvolatile
+  SKIP x86 _setjmp takes no frame argument; covered by sj_longjmp_frame0_restores_nonvolatile
+SKIP  sj_longjmp_unwinding_restores_nonvolatile (0.2 ms): x86 _setjmp takes no frame argument; covered by sj_longjmp_frame0_restores_nonvolatile
+RUN   sj_longjmp_frame0_restores_nonvolatile
+  INFO mxcsr_after_longjmp = 0x5f80 (setjmp time 0xbf80, before longjmp 0x5f80)
+  INFO x87cw_after_longjmp = 0x0f7f (setjmp time 0x037f, before longjmp 0x0f7f)
+  INFO jb_esp_delta = -8
+PASS  sj_longjmp_frame0_restores_nonvolatile (0.4 ms)
+RUN   cap_rtlcapturecontext_reference
+  INFO context_flags = 0x10007
+  INFO x86_capture = Eip=label+0 Esp=rsp_at+2074460820 Ebp=other
+PASS  cap_rtlcapturecontext_reference (0.2 ms)
+RUN   cap_rtlcapturecontext2_xstate_x64
+  SKIP RtlCaptureContext2 is x64 only
+SKIP  cap_rtlcapturecontext2_xstate_x64 (0.1 ms): RtlCaptureContext2 is x64 only
+RUN   cap_reference_capture2_selfcheck_x64
+  SKIP x64 only (RtlCaptureContext2 is an x64 export)
+SKIP  cap_reference_capture2_selfcheck_x64 (0.1 ms): x64 only (RtlCaptureContext2 is an x64 export)
+RUN   cap_rtlrestorecontext_ymm_refcapture_x64
+  SKIP RtlRestoreContext is not exported on x86
+SKIP  cap_rtlrestorecontext_ymm_refcapture_x64 (0.1 ms): RtlRestoreContext is not exported on x86
+RUN   cap_ntcontinue_ymm_refcapture_x64
+  SKIP x64 only
+SKIP  cap_ntcontinue_ymm_refcapture_x64 (0.0 ms): x64 only
+RUN   cap_rtlcapturecontext2_vs_reference_x64
+  SKIP RtlCaptureContext2 is x64 only
+SKIP  cap_rtlcapturecontext2_vs_reference_x64 (0.1 ms): RtlCaptureContext2 is x64 only
+RUN   cap_rtlrestorecontext_edited_x64
+  SKIP RtlRestoreContext is not exported on x86
+SKIP  cap_rtlrestorecontext_edited_x64 (0.1 ms): RtlRestoreContext is not exported on x86
+RUN   cap_ntcontinue_edited_x64
+  SKIP x86 NtContinue path is covered by exception continuation
+SKIP  cap_ntcontinue_edited_x64 (0.1 ms): x86 NtContinue path is covered by exception continuation
+RUN   cap_rtlrestorecontext_ymm_x64
+  SKIP x64 only
+SKIP  cap_rtlrestorecontext_ymm_x64 (0.0 ms): x64 only
+RUN   cap_ntcontinue_ymm_x64
+  SKIP x64 only
+SKIP  cap_ntcontinue_ymm_x64 (0.0 ms): x64 only
+RUN   fp_x87_invalid_unmasked
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label-2
+  INFO code = 0xc0000090 np=0
+PASS  fp_x87_invalid_unmasked (0.3 ms)
+RUN   fp_x87_denormal_unmasked
+  NOTE VEH: ExceptionCode 0xc000008d (accepted alternative to 0xc0000090)
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label-2
+  INFO code = 0xc000008d np=0
+PASS  fp_x87_denormal_unmasked (0.5 ms)
+RUN   fp_x87_overflow_unmasked
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label-2
+  INFO code = 0xc0000091 np=0
+  INFO st0_scaled_result = 00000000 00000080 0020
+PASS  fp_x87_overflow_unmasked (0.4 ms)
+RUN   fp_x87_underflow_unmasked
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label-2
+  INFO code = 0xc0000093 np=0
+  INFO st0_scaled_result = 00000000 00000080 0060
+PASS  fp_x87_underflow_unmasked (0.4 ms)
+RUN   fp_x87_inexact_unmasked
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  NOTE VEH: ExceptionAddress = label-2
+  INFO code = 0xc000008f np=0
+PASS  fp_x87_inexact_unmasked (0.3 ms)
+RUN   fp_avx_zero_divide_unmasked_ymm
+  INFO nparams = VEH: 2 (info0=0x0 info1=0x1d84)
+  INFO code = 0xc00002b5 np=2
+PASS  fp_avx_zero_divide_unmasked_ymm (0.2 ms)
+RUN   fp_avx_invalid_unmasked_ymm
+  INFO nparams = VEH: 2 (info0=0x0 info1=0x1f01)
+  INFO code = 0xc00002b5 np=2
+PASS  fp_avx_invalid_unmasked_ymm (0.2 ms)
+RUN   veh_avx_misaligned_vmovaps_ymm
+  INFO nparams = VEH: 2 (info0=0x0 info1=0xffffffff)
+  INFO code = 0xc0000005 np=2 info0=0x0 info1=0xffffffff
+PASS  veh_avx_misaligned_vmovaps_ymm (0.3 ms)
+RUN   veh_avx_load_straddle_guard_ymm
+  INFO av_address = access+16 (page boundary at +16)
+PASS  veh_avx_load_straddle_guard_ymm (0.2 ms)
+RUN   veh_nested_hw_fault_in_handler
+PASS  veh_nested_hw_fault_in_handler (0.1 ms)
+RUN   seh_nested_hw_fault_in_frame_handler
+PASS  seh_nested_hw_fault_in_frame_handler (0.0 ms)
+RUN   child_unhandled_filter_continue
+PASS  child_unhandled_filter_continue (54.7 ms)
+RUN   child_stack_overflow_context
+  XFAIL Wine gap: STATUS_STACK_OVERFLOW delivered without the guaranteed stack; handler cannot run
+XFAIL child_stack_overflow_context (0.3 ms): Wine gap: STATUS_STACK_OVERFLOW delivered without the guaranteed stack; handler cannot run
+RUN   veh_hw_breakpoint_dr0_rf
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+  INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
+PASS  veh_hw_breakpoint_dr0_rf (12.5 ms)
+RUN   stress_random_patterns_main_thread
+  INFO exceptions = 253
+PASS  stress_random_patterns_main_thread (3.7 ms)
+RUN   perf_exception_roundtrip
+  PERF div0_veh_xmm = 224997 exceptions/s (n=7 min=212292 max=267272 sd=1.86e+04)
+  PERF div0_veh_ymm = 259101 exceptions/s (n=7 min=254291 max=275634 sd=9.43e+03)
+PERF  perf_exception_roundtrip (11.9 ms)
+SUMMARY exe=exception_xstate arch=x86 total=116 pass=88 fail=0 crash=0 skip=20 xfail=7 perf=1 checks=96550 checks_failed=6 exit=0
