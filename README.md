@@ -14,7 +14,48 @@ operating system and the programs that use CPU SIMD and extended processor state
 The same exe runs on ordinary Windows 10/11 and on any other environment that runs Windows programs:
 compatibility layers, hypervisors, emulators and other operating systems. Comparing the results from
 two environments shows where they differ. Guiding principle: **test the OS contract, not the processor
-implementation.** The owner's full guidance is in [docs/GUIDANCE.md](docs/GUIDANCE.md).
+implementation.** The owner's full guidance is in [docs/GUIDANCE.md](docs/GUIDANCE.md), the map from
+guidance to cases is [docs/COVERAGE.md](docs/COVERAGE.md), and [HANDOFF.md](HANDOFF.md) is the procedure
+for running the suite on real Windows 10/11 and on other environments and reporting the results.
+
+## Exes
+
+31 exes, each built for x64 and x86 (`build/x64/<name>.exe`, `build/x86/<name>.exe`). Every exe is
+independent: run any one alone.
+
+| exe | what it proves |
+|---|---|
+| cpu_features | CPUID leaves and subleaves (0, 1, 7, 0Dh, 4, 0Bh/1Fh, extended) are well formed and stable across calls, threads and every CPU of the affinity mask; IsProcessorFeaturePresent claims are checked by executing the instruction |
+| xcr0_probe | XGETBV legality, XCR0 invariants, XINUSE, CPUID 0Dh consistency, XCR0 vs IA32_XSS separation, XSETBV is privileged, AVX/AVX-512/AMX eligibility rules, XCR0 identical across CPUs, processes and the WOW64 view; native XCR0 vs GetEnabledXStateFeatures |
+| xstate_windows | GetEnabledXStateFeatures, InitializeContext(2), Get/SetXStateFeaturesMask, LocateXStateFeature, CopyContext and the ntdll CONTEXT_EX layer against their documented (decomp-pinned) contracts, including invalid flags, unsupported bits and undersized buffers |
+| xsave_roundtrip | XSAVE / XSAVEOPT / XSAVEC / XRSTOR / FXSAVE / FXRSTOR from user mode with legal masks: layouts, init/modified optimisation, header rules, #GP cases (in children) |
+| xmm_registers | XMM data movement and preservation across preemption, page faults, exceptions, context APIs and calls into Windows (x64 ABI: XMM6-15 nonvolatile) |
+| ymm_registers | YMM lanes, VEX.128 vs legacy SSE upper-lane rules, VZEROUPPER/VZEROALL, AVX XSAVE component, 256-bit state across OS events, #UD when YMM state is disabled |
+| zmm_registers | AVX-512 ZMM0-31 and k0-k7, EVEX masking/broadcast/rounding, fault suppression, gather/scatter, FP16/BF16/VBMI2/BITALG reference models, AVX-512 state across OS events and context APIs |
+| sse_arithmetic | SSE..SSE4.2 arithmetic, integer, conversion, shuffle and string instructions bit-exact against scalar C models |
+| avx_arithmetic | AVX / AVX2 / FMA3 / F16C / BMI1 / BMI2 / ADX reference vectors, rounding modes, DAZ/FTZ, NaN rules, SIMD FP exceptions |
+| fp_environment | MXCSR and x87 control/status: initial values (new threads, 0x1F80 / 0x27F), rounding, DAZ/FTZ, sticky flags, masked/unmasked exceptions, CRT float APIs, context round trips |
+| thread_xstate | per-thread SIMD/FP isolation through every wait primitive, APCs, thread pools, suspension and migration with 2..1024 threads |
+| context_xstate | Get/SetThreadContext with XSTATE-aware CONTEXT buffers on running, suspended and kernel-blocked threads, RtlCaptureContext, WOW64 contexts, parameter validation |
+| exception_xstate | register preservation and CONTEXT fidelity through SEH, VEH, VCH, RaiseException, hardware faults (#DE, #UD, #AV, guard page, #MF, #XM), longjmp and RtlRestoreContext, compared with instruction-level reference captures |
+| fiber_xstate | fibers with and without FIBER_FLAG_FLOAT_SWITCH: MXCSR/x87 CW per fiber, nonvolatile XMM/GPR, FLS, migration, parameter validation |
+| cxx_exceptions | C++ throw/catch through the x64 OS unwinder (RtlUnwindEx, UWOP_SAVE_XMM128) preserves exactly the ABI nonvolatile registers (x86: SKIP by design) |
+| alignment | aligned/unaligned SIMD and GPR access, page-boundary straddling, faults on misaligned or inaccessible operands, stack/heap/VirtualAlloc alignment, misaligned CONTEXT buffers |
+| simd_memory | non-temporal stores and fences, cache control, prefetch, masked-access fault suppression, gathers/scatters, CMPXCHG8B/16B, RDRAND/RDSEED, MOVDIRI/MOVDIR64B, OS handling of their faults |
+| simd_dispatch | runtime detection and implementation selection the way applications do it (including synthetic CPUID/XCR0 matrices); every usable tier bit-identical to scalar |
+| simd_crypto | AES-NI, PCLMULQDQ, SHA, GFNI, VAES/VPCLMULQDQ, SHA512 against bit-exact models and published known answers; state survives OS events |
+| simd_jpeg | in-tree baseline/progressive JPEG decoder (scalar/SSE2/AVX2) and stb_image vs libjpeg-turbo golden hashes; corrupt/truncated input; multithreaded decode |
+| simd_png | in-tree inflate + PNG decoder (scalar/SSE2/SSSE3/AVX2) vs Python zlib vectors; corrupt/truncated input; multithreaded decode |
+| feature_faults | unsupported (absent ISA), privileged and disabled-state instructions raise the right exception and status code; every probe in a child process |
+| xstate_stress | many-thread contamination and context-switch stress with a capture oracle; churn, timers, suspend/get/set controllers |
+| amx_xstate | AMX TILECFG/TILEDATA as an opt-in (XFD) component: EnableProcessOptionalXStateFeatures, first-use, preservation, context capture (x64, Windows 11, AMX hardware) |
+| apx_xstate | APX R16-R31 (XSAVE component 19): enumeration, layout, #UD when disabled, CONTEXT XSTATE path |
+| cet_xstate | CET user shadow stacks: policy, RDSSP per thread, CET_U context SSP, RIP redirect/longjmp/fiber transfers under enforcement (x64) |
+| simd_bench | PERF: scalar/SSE/AVX/AVX-512 throughput and latency, memcpy/memset, CRC32C, AES, RGB/YUV, transitions, XSAVE variants, context capture |
+| memory_bench | PERF: memcpy/memset bandwidth 4 KB .. 256 MB per kernel, labelled by cache level |
+| context_bench | PERF: RtlCaptureContext, Get/SetThreadContext (CONTROL/FP/XSTATE), exception round trips, fiber switches, thread create |
+| jpeg_bench | PERF: JPEG decode MPix/s by image size x tier x threads |
+| smoke_selftest | the harness itself: result kinds, crash recovery, child pass/fail/crash/timeout, JSON validity, exit codes |
 
 ## Result model
 
@@ -44,7 +85,10 @@ tests/     one <name>.c per exe  -> build/x64/<name>.exe, build/x86/<name>.exe
 benchmarks/ one <name>.c per benchmark exe, same harness and output (see "Benchmarks" below)
 scripts/   run_all.ps1 (Windows), run_all.sh (Linux + Wine), compare_results.py, bench_table.py
 tools/     wine_run.sh, make_base_prefix.sh, reap_wine.py (headless Wine sandbox), new_exe.sh, check_isa.py
-docs/      GUIDANCE.md
+docs/      GUIDANCE.md (owner guidance), COVERAGE.md (guidance -> cases map, validation status)
+corpus/    JPEG/PNG inputs and reference vectors
+results/baselines/  committed reference runs (everything else under results/ is ignored)
+HANDOFF.md how to run on Windows / other environments and what to report back
 ```
 
 ## Build (Linux, mingw-w64)
@@ -60,8 +104,22 @@ The exes are built without `-march` and without `-mavx*`, so they start on CPUs 
 Wider instruction sets live only in functions marked with `T_TARGET(...)` and in assembly helpers,
 and run only after runtime detection. The x86 build assumes SSE2, which Windows 8 and later require.
 
-A Windows-native build with clang-cl is possible through `CMakeLists.txt` (best effort). Plain MSVC
-`cl.exe` is not supported, because the helpers use GNU inline asm.
+Prerequisites on Debian/Ubuntu: `gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 g++-mingw-w64-x86-64
+g++-mingw-w64-i686` (the exes are linked statically and need no runtime DLLs). `make check-isa` must
+report 0 functions; the integration audit also disassembles every exe and confirms that VEX/EVEX/AMX
+instructions appear only in the runtime-gated `T_TARGET` functions and the `t__ymm_*`/`t__zmm_*` asm helpers.
+
+Windows-native builds (best effort, through `CMakeLists.txt`; the mingw Makefile is the reference):
+
+```
+cmake -S . -B build-cl   -G Ninja -DCMAKE_C_COMPILER=clang-cl                       (x64)
+cmake -S . -B build-cl32 -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_C_FLAGS=-m32  (x86)
+cmake --build build-cl
+```
+
+clang (MSVC or GNU target) and mingw gcc also work through CMake. Plain MSVC `cl.exe` is **not**
+supported: the helpers need GNU inline asm, top-level asm and per-function target attributes, so CMake
+stops with an error. Never add `/arch:AVX*`, `-mavx*` or `-march`.
 
 ## Run
 
@@ -231,6 +289,88 @@ regenerated whenever that string changes, so a new HEAD or a dirty tree re-stamp
 
 `--child=<case>` is internal: the exe uses it to re-run itself as a child process for cases that fault
 on purpose (illegal instruction, access violation, privileged instruction) or that might hang.
+
+| option | effect |
+|---|---|
+| `--json=<file>` | write JSON lines (below) |
+| `--filter=a,b` | run only cases whose name contains one of the substrings |
+| `--list` | print the case names and exit |
+| `--verbose` / `-v` | print `t_log` diagnostics |
+| `--case-timeout=<sec>` | per-case watchdog (default 120, 0 = off); a case that exceeds it is a CRASH |
+| `--include-manual` | also run long/manual cases (8K decodes, full benchmark sweeps) |
+
+Exit codes: 0 = no FAIL and no CRASH, 1 = at least one FAIL or CRASH, 2 = harness error (bad argument,
+unwritable `--json` file, no case matches the filter).
+
+## JSON output
+
+`--json=<file>` writes one JSON object per line ([common/API.md](common/API.md) section 9):
+
+```
+{"type":"env", "exe", "version", "compiler", "arch", "wow64", "native_machine", "timestamp",
+ "os":{major,minor,build,ubr,product}, "wine"?, "sde"?, "cpu":{vendor,brand,signature,family,model,...},
+ "features_hw", "features_usable", "osxsave", "xcr0", "xinuse", "xsave_size_*", "api_xstate_features",
+ "pf_present", "ncpu", "affinity", ...}
+{"type":"case", "exe", "arch", "case", "result":"PASS|FAIL|SKIP|XFAIL|CRASH|PERF", "ms", "checks", "failed",
+ "reason", "failures":[{"file","line","expr","msg"}...], "notes":[...], "info":{key:value},
+ "perf":[{"metric","value","unit","n","min","max","mean","stddev","q1","q3"}], "exception"?}
+{"type":"summary", "exe", "arch", "total", "pass", "fail", "crash", "skip", "xfail", "perf", "checks",
+ "checks_failed", "ms", "exit_code"}
+```
+
+The runners add `<arch>/run.json` (per exe: status OK/FAIL/CRASH/TIMEOUT/HARNESS_ERROR, exit code,
+duration, sha256, env) and `host.json`. `scripts/compare_results.py` reads exactly these files.
+
+## Known SKIPs and Wine caveats
+
+SKIP means the capability is absent; it is never a failure. On a typical host expect:
+
+- **no AVX-512** (most client CPUs): about 225 cases per arch SKIP (zmm_registers ~120, simd_memory,
+  alignment, simd_bench, memory_bench, exception_xstate ZMM frames). Use an AVX-512 host or Intel SDE.
+- **no AMX** or no Windows 11 optional-XSTATE APIs: every amx_xstate case SKIPs.
+- **no APX**: apx_xstate runs only the disabled-state #UD probes and SKIPs the rest.
+- **CET shadow stacks not enforced** for the process: cet_xstate records the policy and SKIPs.
+- **x86 build**: cxx_exceptions SKIPs (GCC i686 C++ does not unwind through SEH); AMX/APX/CET are x64-only.
+- Windows 10: cases that need Windows 11 APIs (GetThreadEnabledXStateFeatures,
+  EnableProcessOptionalXStateFeatures, QueueUserAPC2 special APCs) SKIP and name the build they need.
+- Single processor group: `xcr0_identical_across_processor_groups` SKIPs after its group-0 checks.
+
+Wine (11.0 here) is plumbing validation only. Wine gaps are guarded by `t_is_wine()` and reported as
+XFAIL with a reason starting "Wine", never by weakening a check: context API last-error handling,
+CopyContext flag validation, CONTEXT_EX validation, #MF/#XM/#DE status mapping, privileged opcodes
+reported as access violations, vectored continue handlers never called, SwitchToFiber not switching
+MXCSR/x87 CW, special user APCs, stack overflow handling, x86 GetThreadContext inside system calls, and
+missing exports (RtlCaptureContext2, Wow64Get/SetThreadContext, the Windows 11 XSTATE APIs) which SKIP.
+An XFAIL with a "Wine" reason must never appear on real Windows.
+
+## Related corpora
+
+Sibling conformance suites for the same differential method (Windows as the reference, any other
+environment as the candidate):
+
+- [industrial7_test_ntdll](https://github.com/iceisfun/industrial7_test_ntdll),
+  [industrial7_test_kernel32_kernelbase](https://github.com/iceisfun/industrial7_test_kernel32_kernelbase),
+  [industrial7_test_advapi32](https://github.com/iceisfun/industrial7_test_advapi32),
+  [industrial7_test_msvcrt](https://github.com/iceisfun/industrial7_test_msvcrt)
+- [industrial7_test_user32](https://github.com/iceisfun/industrial7_test_user32),
+  [industrial7_test_win32k](https://github.com/iceisfun/industrial7_test_win32k),
+  [industrial7_test_gdi](https://github.com/iceisfun/industrial7_test_gdi),
+  [industrial7_test_gdi32_gdifull](https://github.com/iceisfun/industrial7_test_gdi32_gdifull),
+  [industrial7_test_theme](https://github.com/iceisfun/industrial7_test_theme),
+  [industrial7_test_dwrite](https://github.com/iceisfun/industrial7_test_dwrite),
+  [industrial7_test_d3d](https://github.com/iceisfun/industrial7_test_d3d),
+  [industrial7_test_shell32](https://github.com/iceisfun/industrial7_test_shell32),
+  [industrial7_test_ole](https://github.com/iceisfun/industrial7_test_ole)
+- [industrial7_test_ws2](https://github.com/iceisfun/industrial7_test_ws2),
+  [industrial7_test_wininet](https://github.com/iceisfun/industrial7_test_wininet),
+  [industrial7_test_curl](https://github.com/iceisfun/industrial7_test_curl),
+  [industrial7_test_tls](https://github.com/iceisfun/industrial7_test_tls),
+  [industrial7_test_crypt](https://github.com/iceisfun/industrial7_test_crypt),
+  [industrial7_test_webauthn](https://github.com/iceisfun/industrial7_test_webauthn),
+  [industrial7_test_winmm](https://github.com/iceisfun/industrial7_test_winmm)
+
+Industrial7 (a from-scratch OS that runs Windows exes) is one of the environments these suites are run
+on; nothing in the test logic depends on it.
 
 ## Writing a test exe
 

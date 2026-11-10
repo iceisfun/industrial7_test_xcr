@@ -1,34 +1,37 @@
 # Coverage map: docs/GUIDANCE.md -> exes and cases
 
-Produced by a completeness review at commit 7080d1e (2026-11-09). Every bullet of GUIDANCE sections 2, 3, 4,
-5, 6, 7 and 10 is mapped to the exe and cases that implement it. Gaps are listed at the end of each section
-and summarized in "Open work". Case names are the `--list` names. `x64` and `x86` mean the two builds.
+First produced by a completeness review at commit 7080d1e (2026-11-09); refreshed at integration
+(commit 3e3abed + docs, 2026-11-10). Every bullet of GUIDANCE sections 2, 3, 4, 5, 6, 7 and 10 is mapped to
+the exe and cases that implement it. Case names are the `--list` names. `x64` and `x86` mean the two builds.
 
 Status legend: **covered** = hard checks exist and ran on the validation host; **covered (unvalidated)** =
-checks exist but only SKIP on the validation host, so the code path has never executed; **INFO** = recorded
-but not hard-checked; **thin** = partly covered; **MISSING** = no test.
+checks exist but only SKIP on the validation host (some of them ran under Intel SDE, see README); **INFO** =
+recorded but not hard-checked; **thin** = partly covered; **MISSING** = no test.
 
 ## Validation run (headless Wine, plumbing only)
 
 Host: Intel i7-14700KF (Raptor Lake, hybrid). AVX2/FMA/F16C/AES/PCLMUL/SHA/GFNI/VAES/VPCLMULQDQ (VEX)/AVX-VNNI
 are present. AVX-512, AMX, APX, SHA512, SSE4A/XOP/FMA4/TBM/CLZERO and PREFETCHI are absent. XCR0 = 0x207.
 Wine 11.0 (proton-ge build) reports Windows 10 build 19045. The run used `scripts/run_all.sh --arch all
---timeout 600`, one wine tree at a time.
+--timeout 600`, one wine tree at a time; it is committed as `results/baselines/wine-11.0-intel-core-i7-14700kf`
+(with `triage.txt`).
 
-All 23 exes x 2 archs exited 0. There were no FAIL, CRASH, TIMEOUT or HARNESS_ERROR results, and no hangs.
+All 31 exes x 2 archs exited 0. There were no FAIL, CRASH, TIMEOUT or HARNESS_ERROR results, and no hangs.
+`make check-isa` and a disassembly audit of every exe found no VEX/EVEX/AMX instruction outside the
+runtime-gated functions.
 
-| arch | cases | PASS | PERF | SKIP | XFAIL | AVX-512-only SKIPs |
-|---|---|---|---|---|---|---|
-| x64 | 2515 | 1904 | 243 | 290 | 78 | 214 |
-| x86 | 2506 | 1855 | 241 | 318 | 92 | 213 |
+| arch | cases | PASS | PERF | SKIP | XFAIL | AVX-512-only SKIPs | wall time |
+|---|---|---|---|---|---|---|---|
+| x64 | 2754 | 2018 | 293 | 357 | 86 | 227 | 178 s |
+| x86 | 2700 | 1932 | 291 | 365 | 112 | 226 | 190 s |
 
-Longest exes: thread_xstate takes 40 s, xstate_stress 19 s, simd_jpeg 15-18 s and ymm_registers 9-12 s. The
-others take less than 8 s.
+Longest exes: thread_xstate takes 40 s, simd_jpeg 22-25 s, xstate_stress 19 s, memory_bench / jpeg_bench /
+ymm_registers 11-12 s. The others take less than 10 s.
 
 Every XFAIL is a Wine gap, and each one records its reason. The main groups are:
 - **context API validation.** Locate/Get/SetXStateFeaturesMask last-error handling, CopyContext not
-  validating flags or copying MxCsr, CONTEXT_EX not validated, and reserved MXCSR bits in a CONTEXT
-  killing the thread.
+  validating flags or copying MxCsr, CONTEXT_EX not validated, misaligned CONTEXT buffers accepted, and
+  reserved MXCSR bits in a CONTEXT killing the thread.
 - **#MF/#XM/#DE status mapping.** NumberParameters=0, DE reported as underflow, and every #DE reported as
   divide-by-zero.
 - **privileged opcodes.** These are reported as AV instead of PRIVILEGED_INSTRUCTION.
@@ -37,12 +40,11 @@ Every XFAIL is a Wine gap, and each one records its reason. The main groups are:
   do not validate flags.
 - **special user APCs.** They are not delivered.
 - **stack overflow handling.** STATUS_STACK_OVERFLOW arrives without the guaranteed stack.
-- **x86 capture during system calls.** On x86 only, xstate_stress has 21 XFAILs because GetThreadContext
-  of a thread inside a system call returns an all-zero FP area.
+- **x86 capture during system calls.** On x86, xstate_stress has about 22 XFAILs and context_xstate 26,
+  because GetThreadContext of a thread inside a system call returns an all-zero FP area. A few
+  xstate_stress cases flip between PASS and XFAIL from run to run (timing of host-side syscall captures).
 
-Exe version stamp defect: the env JSON reported `version=8b988f1-dirty` while HEAD was 7080d1e. T_VERSION
-is compiled only into `build/obj/*/t.o`, and the Makefile does not rebuild that object when HEAD changes.
-Results from different builds therefore cannot be told apart (§9 asks for the exe version).
+The exe version stamp follows HEAD (`build/version.h` is regenerated when `git describe` changes).
 
 ## 2. Processor feature consistency
 
@@ -57,8 +59,8 @@ Results from different builds therefore cannot be told apart (§9 asks for the e
 | Working AVX2 execution with incomplete context APIs reported as SEPARATE results | xstate_windows exec_avx_matches_api, exec_xinuse_vs_context_mask; context_xstate ctx_api_reports_usable_features; simd_dispatch detect_vs_context_xstate_api | covered |
 
 Section 2 gaps: Windows 11 GetThreadEnabledXStateFeatures and EnableProcessOptionalXStateFeatures are
-unvalidated (Wine does not export them). AMX/APX (leaf 7.1 / XCR0 bits 17-19) are only reported, never
-executed.
+unvalidated (Wine does not export them). AMX and APX are executed by amx_xstate / apx_xstate, which SKIP on
+the validation host (no AMX/APX hardware).
 
 ## 3. Userland tests
 
@@ -74,7 +76,7 @@ executed.
 | Nested calls, callbacks, DLL calls, thread-pool callbacks | xmm_abi_nested_calls_depth64, xmm_abi_qsort_callback, xmm_abi_direct_dll_exports, xmm_abi_threadpool_callback; ymm_call_window_message_callback; zmm_preserve_cb_load_library/nested/threadpool; thread_xstate tp_* | covered |
 | Fibers with and without FIBER_FLAG_FLOAT_SWITCH vs native | fiber_xstate (81 cases: *_float_switch vs *_noflag, xmm6_15, ymm/zmm low128, FLS, migration, 1024 ring) | covered. 26 x64 / 22 x86 XFAILs under Wine. |
 | x64 ABI: XMM6-15 low 128 nonvolatile, upper YMM volatile | xmm_abi_* (hard-check XMM6-15), ymm_call_abi_legal_clobber, exception_xstate raise_preserves_abi_nonvolatile_registers, simd_dispatch impls_preserve_nonvolatile_xmm | covered |
-| x86 and x64 separately; WOW64 context tests | Both builds run every exe. context_xstate wow64_own_threads (x86) and wow64_cross_process_context (x64 drives a WOW64 child through Wow64*ThreadContext); xcr0_probe xcr0_same_in_other_architecture_process | **thin**: wow64_cross_process_context SKIPs under Wine ("Wow64*ThreadContext not exported") and has never run. The WOW64 XSTATE limits (YMM of a WOW64 thread seen from x64) are not tested. |
+| x86 and x64 separately; WOW64 context tests | Both builds run every exe. context_xstate wow64_own_threads (x86) and wow64_cross_process_context (x64 drives a WOW64 child through Wow64*ThreadContext); xcr0_probe xcr0_same_in_other_architecture_process | covered: wow64_own_threads, wow64_cross_process_context (ntdll fallbacks when Wow64SuspendThread is absent), wow64_suspend_count, wow64_context_native_thread_rejected, wow64_ymm_views_agree; xcr0_probe compares IsWow64Process2 and reported XSTATE features with the other-architecture process. Never run on real WOW64. |
 | Assembly helpers, not C variables | common/asm_*.c t_vregs_*; every register case uses asm | covered |
 
 ### Windows XSTATE context
@@ -83,7 +85,7 @@ executed.
 |---|---|---|
 | Initialize XSTATE-aware CONTEXT via supported APIs; size negotiation and alignment | xstate_windows init_size_*, init_exact_size_guarded_*, init2_*; context_xstate init_ctx_*; alignment initialize_context_buffer_alignment | covered |
 | GetThreadContext on suspended worker | context_xstate getctx_*, xstate_getctx_*; xmm_getthreadcontext_reports_spinner_xmm; thread_xstate iso_suspend_getcontext_*; xstate_stress ctl_getctx_* (oracle) | covered |
-| Modify with SetThreadContext, resume, inspect | context_xstate setctx_*, xstate_setctx_*; xmm_setthreadcontext_changes_spinner_xmm; ymm_context_set_xstate_upper_spinning; zmm_context_set_xstate_avx512 | covered for **spinning** (user-mode) targets. **MISSING** for a target blocked inside a kernel wait or syscall (see gaps). |
+| Modify with SetThreadContext, resume, inspect | context_xstate setctx_*, xstate_setctx_*; xmm_setthreadcontext_changes_spinner_xmm; ymm_context_set_xstate_upper_spinning; zmm_context_set_xstate_avx512 | covered, for spinning targets and for targets blocked in kernel waits and syscalls (context_xstate blk_getctx_*, blk_setctx_*, blk_redirect_*) |
 | CopyContext and compare XSTATE | xstate_windows copy_*; context_xstate copy_context_*, xstate_copycontext_from_thread | covered |
 | LocateXStateFeature for enabled and unsupported features | xstate_windows locate_*; context_xstate locate_*; zmm_api_locate_* | covered |
 | Active masks, initialized vs modified components | xstate_windows exec_xinuse_vs_context_mask, getmask_fresh_xstate_context; context_xstate xstate_getctx_ymm_init_state; xcr0_probe xgetbv1_* | covered |
@@ -102,7 +104,7 @@ executed.
 | Unsupported instructions under controlled handling | feature_faults ud_*, feat_* (child processes); exception_xstate child_ud2_* | covered |
 | FP control/status after exceptions; masked and unmasked recovery | exception_xstate fp_sse_*_unmasked, fp_x87_*_unmasked, veh_handler_live_fp_environment; fp_environment sse_unmasked_*, x87_unmasked_* | covered |
 | RaiseException, RtlCaptureContext | exception_xstate raise_*, cap_*; context_xstate rtlcapture_*; simd_bench ctx_rtlcapturecontext* | covered (RtlCaptureContext2 unvalidated: not exported by Wine) |
-| setjmp/longjmp and **C++ exceptions** (ABI-required preservation only) | exception_xstate sj_longjmp_*; fiber_xstate fiber_seh_frame_handler_and_longjmp_child | setjmp covered. **C++ exceptions MISSING**: the suite is C only, with no throw/catch through the OS unwinder (RtlUnwindEx with UWOP_SAVE_XMM128). |
+| setjmp/longjmp and **C++ exceptions** (ABI-required preservation only) | exception_xstate sj_longjmp_*; fiber_xstate fiber_seh_frame_handler_and_longjmp_child | covered: cxx_exceptions (15 cases, x64) throws through RtlUnwindEx / RtlVirtualUnwind (UWOP_SAVE_XMM128) and checks only ABI nonvolatile registers; the x86 build SKIPs by design (GCC i686 C++ does not unwind through SEH) |
 | Compare reported context against an instruction-level reference helper | exception_xstate ref_nop_roundtrip_*, cap_rtlcapturecontext_reference; xstate_stress capture oracle | covered |
 | Faulting tests in CHILD processes | t_child_run is used by feature_faults, exception_xstate child_*, alignment, zmm/ymm fault children | covered |
 
@@ -123,10 +125,10 @@ executed.
 | Exact bits vs tolerance (rcp/rsqrt), original bits in diagnostics | sse_rcpps_rsqrtps_accuracy, avx_rcp_rsqrt_error_bound, zmm_fp_rcp14_rsqrt14_accuracy | covered |
 | AVX -> SSE routine -> AVX transition | avx_legacy_sse_transition_preserves_upper; simd_bench transition_*; simd_dispatch sse_avx_transitions_between_tiers; ymm_mix_vex256_legacy_chain | covered |
 
-Section 4 gaps (lower priority by the guidance's own ordering): AVX-512 math is entirely unvalidated on
-this host. AVX-512 FP16, BF16, AVX-IFMA, AVX-VNNI-INT8, AVX-NE-CONVERT and CMPccXADD are only
-exec-probed (cpu_features exec_*), with no reference vectors. AVX-VNNI is present on the host but has only
-the exec probe plus zmm_ext_vnni (EVEX).
+Section 4 gaps (lower priority by the guidance's own ordering): AVX-512 math SKIPs on this host (it ran under
+Intel SDE). AVX-512 FP16, BF16, VBMI2 and BITALG have reference models in zmm_registers; AVX-IFMA,
+AVX-VNNI-INT8, AVX-NE-CONVERT and CMPccXADD are only exec-probed (cpu_features exec_*). AVX-VNNI is present
+on the host but has only the exec probe plus zmm_ext_vnni (EVEX).
 
 ## 5. Benchmarks (PERF)
 
@@ -146,17 +148,15 @@ the exec probe plus zmm_ext_vnni (EVEX).
 | Context capture normal/XSTATE ops/s | ctx_*; context_xstate perf_getctx_std/xstate, perf_rtlcapturecontext; exception_xstate perf_exception_roundtrip | covered |
 | QPC, optional RDTSC/RDTSCP, warm-up, median + variability, DCE defeat, cache-resident vs bandwidth, pinning, env/affinity/frequency record, verify before accepting | bench_qpc_contract, bench_tsc_estimate, bench_affinity_contract, bench_stats_selftest, bench_env_report, known-answer cases before each family | covered |
 
-Section 5 gaps: §8 lists `benchmarks/{simd_bench,memory_bench,context_bench,jpeg_bench}.c`, but no
-`benchmarks/` directory exists. Everything lives in tests/simd_bench.c and the PERF cases of other exes,
-and that mapping is undocumented. No script turns PERF records into the §5 table (compare_results.py only
-diffs two runs).
+Section 5: benchmarks/memory_bench.c, context_bench.c and jpeg_bench.c exist; simd_bench stays in tests/
+(shared kernels); the mapping is in README "Benchmarks" and scripts/bench_table.py renders the §5 table.
 
 ## 6. Real-world decoder tests
 
 | Bullet | Implemented by | Status |
 |---|---|---|
 | libjpeg-turbo-style scalar/SSE2/AVX2 | simd_jpeg (own baseline+progressive decoder; islow/float IDCT, fancy upsampling, YCC kernels in scalar/SSE2/AVX2) | covered (in-tree decoder, not libjpeg-turbo itself) |
-| **libpng / zlib** | none (simd_dispatch has only adler32/crc32 kernels) | **MISSING** |
+| libpng / zlib | simd_png (71 cases): in-tree inflate + PNG decoder, scalar/SSE2/SSSE3/AVX2 unfilter/expand/Adler-32/CRC-32 kernels vs Python zlib vectors (corpus/png/gen_png.py), corrupt/truncated streams, MT decode, context round trips | covered (in-tree decoder, not libpng itself) |
 | **stb_image as independent reference** | stb_reference_build_info, stb_corpus_vs_golden_and_suite_decoder, stb_synth_vs_golden_and_suite_decoder, stb_synth_8k_vs_golden_and_suite_decoder, stb_mt_decode_{16_threads_512x384,64_threads_256x192,12_threads_same_cpu}, stb_mt_decode_while_{suspended_getcontext,context_roundtrip}, stb_fpenv_independent_and_preserved, perf_stb_decode_4k_{c,sse2}. Vendored third_party/stb/stb_image.h v2.30 (optional: -DSJ_NO_STB), C and SSE2 kernels exact vs host golden hashes (tests/simd_jpeg_stb_ref.h, corpus/jpeg/gen_stb_refs.c) and vs each other; vs the suite decoder per-pixel tolerance 3, reported per image (h2v1 edge column, chroma width <= 2 and mjpeg_no_dht are known stb/libjpeg algorithm differences, reported only). | covered |
 | YCbCr->RGBA scalar + SIMD | simd_jpeg ycc_rgba_exhaustive_*; simd_bench yuv_* | covered |
 | Corpus: 8x8/16x16, 4K/8K, gray/RGB/subsampled, progressive/baseline, odd dims/strides, corrupt/truncated, repeated MT decode | corpus/jpeg (94 files incl. err_*); synth_4k_*, synth_8k_420_vs_djpeg, trunc_*, fuzz_*, mt_decode_*, idct_unaligned_and_stride | covered |
@@ -181,7 +181,7 @@ diffs two runs).
 | Bullet | Implemented by | Status |
 |---|---|---|
 | (1) Preservation across callbacks/transitions | See §3. This is the strongest area of the suite. | covered |
-| (2) Windows 11 GetThreadEnabledXStateFeatures / EnableProcessOptionalXStateFeatures (AMX) | xstate_windows thread_enabled_features_win11, enable_optional_features_child, init2_amx_tiledata; xcr0_probe api_thread_enabled_xstate_features, amx_eligibility_rule; feature_faults feat_amx_tilerelease/tilezero | **thin and unvalidated**: there is no LDTILECFG/TILELOADD anywhere. AMX tile state is never loaded, preserved, captured by GetThreadContext or checked across threads. The XFD first-use path is untested. |
+| (2) Windows 11 GetThreadEnabledXStateFeatures / EnableProcessOptionalXStateFeatures (AMX) | xstate_windows thread_enabled_features_win11, enable_optional_features_child, init2_amx_tiledata; xcr0_probe api_thread_enabled_xstate_features, amx_eligibility_rule; feature_faults feat_amx_tilerelease/tilezero | covered (unvalidated): amx_xstate (24 cases) executes LDTILECFG/TILELOADD/TDP*/TILERELEASE, the XFD first-use fault, EnableProcessOptionalXStateFeatures inheritance, preservation across preemption/suspend/exceptions/fibers, and TILECFG/TILEDATA through InitializeContext2/Get/SetThreadContext/CopyContext. Every case SKIPs without AMX hardware and Windows 11. |
 | (3) Hardware vs OS reporting disagreement, recorded and evaluated for impact | simd_dispatch detect_vs_*, misdetect_*; xstate_windows exec_*_matches_api; xcr0_probe api_*, kuser_shared_xstate_info | covered |
 
 ## Repository layout (§8) and scripts
@@ -189,8 +189,8 @@ diffs two runs).
 | Guidance item | State |
 |---|---|
 | common/{cpuid,feature_detect,timing,report,test_helpers}.c | present under other names (t.c = report, util.c/pattern.c/child.c = helpers) |
-| tests/*.c one per exe | present (22 + smoke_selftest) |
-| **benchmarks/{simd_bench,memory_bench,context_bench,jpeg_bench}.c** | **MISSING** (simd_bench is in tests/) |
+| tests/*.c one per exe | present (26 tests + cxx_exceptions.cpp + smoke_selftest) |
+| benchmarks/{simd_bench,memory_bench,context_bench,jpeg_bench}.c | present: memory_bench, context_bench, jpeg_bench in benchmarks/; simd_bench stays in tests/ (shared kernels), mapping in README "Benchmarks"; scripts/bench_table.py renders the section 5 table |
 | corpus/jpeg, corpus/reference_vectors | present (reference_vectors holds only simd_jpeg_refs.txt; other vectors are embedded in sources) |
 | scripts/run_all.ps1, compare_results.py | present (+ run_all.sh) |
 | CMakeLists.txt | present (best effort, not built here) |
@@ -218,23 +218,18 @@ against the decomp or documentation cited in the source.
 ## Open work (most valuable first)
 
 1. **Nothing has been validated on real Windows.** Every hard check derived from a decomp or the
-   documentation has only ever run under Wine. Run scripts/run_all.ps1 on Windows 10 22H2 and Windows 11
-   24H2 (x64 + WOW64), keep the baselines, and triage every check that differs. The tooling is in
-   place: `run_all.ps1 -Baseline auto` records a run under results/baselines/<os>-<cpu>/,
-   `compare_results.py --triage` lists every FAIL/CRASH/XFAIL and checks the "Expected on Windows"
-   rows above (machine-readable in results/baselines/expect_windows.json), and
-   `compare_results.py --baseline` diffs a run against the closest committed baseline. Only the
-   Wine plumbing baseline is committed so far; no Windows host was reachable from the build machine.
-2. **214 AVX-512 cases (x64) have never executed.** zmm_registers has 111 of them, simd_memory 24,
-   simd_bench 16 and alignment 13. The disabled/hidden-feature #UD paths also never ran. Use an emulator
-   (Intel SDE) or a lab host with AVX-512.
-3. **AMX tile state** (TILECFG/TILEDATA, XFD, EnableProcessOptionalXStateFeatures) is not exercised.
-4. **Context of a thread blocked in a syscall** is untested. Get/SetThreadContext have only been tested
-   against user-mode spinners.
-5. **C++ exceptions** through the OS unwinder (UWOP_SAVE_XMM128) are MISSING.
-6. **WOW64 cross-architecture context** (Wow64Get/SetThreadContext) has never run.
-7. **libpng/zlib decoder and an independent decoder reference** (§6) are MISSING.
-8. **benchmarks/ split and §5 table script** are MISSING. The stale T_VERSION stamp also needs fixing.
-9. **APX** (XCR0 bit 19, EGPR R16-R31) and **CET_U** (supervisor XSTATE, user shadow stack) are only
-   reported, never tested.
-10. **AVX-512 FP16/BF16 and the VEX-encoded VNNI/IFMA arithmetic** have no reference vectors.
+   documentation has only ever run under Wine (and SDE + Wine). Follow [HANDOFF.md](../HANDOFF.md): run
+   `scripts/run_baseline.cmd` on Windows 10 22H2 and Windows 11 24H2 (x64 + WOW64), commit the baselines,
+   and triage every check that differs with `compare_results.py --triage` (it also checks the
+   "Expected on Windows" rows above, machine-readable in results/baselines/expect_windows.json).
+2. **AVX-512 on hardware.** About 227 cases per arch SKIP on the validation host. They were exercised under
+   Intel SDE (`tools/sde_run.sh --cpu=spr`, known emulator artifacts in README), but never on an AVX-512
+   CPU under Windows.
+3. **AMX, APX and CET shadow stacks** (amx_xstate, apx_xstate, cet_xstate) are implemented but need
+   hardware plus Windows 11 to run; on the validation host they SKIP (APX: only the #UD probes run).
+4. **WOW64 cross-architecture context** (Wow64Get/SetThreadContext) has only run against Wine's partial
+   implementation.
+5. **AVX-512 FP16/BF16/VBMI2/BITALG** have reference models in zmm_registers; AVX-IFMA, AVX-VNNI-INT8,
+   AVX-NE-CONVERT and CMPccXADD are still only exec-probed (cpu_features exec_*).
+6. libjpeg-turbo and libpng themselves are not vendored: simd_jpeg / simd_png use in-tree decoders
+   checked against libjpeg-turbo / Python zlib golden data, with stb_image as the independent JPEG reference.
