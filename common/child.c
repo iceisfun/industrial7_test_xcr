@@ -32,7 +32,7 @@ int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r) {
 
     SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
     HANDLE rd = NULL, wr = NULL;
-    if (!CreatePipe(&rd, &wr, &sa, 1 << 16)) { free(cmd); return 0; }
+    if (!CreatePipe(&rd, &wr, &sa, 1 << 16)) { r->spawn_error = GetLastError(); free(cmd); return 0; }
     SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
     HANDLE nul = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
 
@@ -44,11 +44,17 @@ int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r) {
     memset(&pi, 0, sizeof pi);
     HANDLE job = make_job();
     LARGE_INTEGER t0, t1, f; QueryPerformanceCounter(&t0); QueryPerformanceFrequency(&f);
-    BOOL ok = CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, NULL, &si, &pi);
+    BOOL ok = FALSE;
+    for (int attempt = 0; attempt < 3 && !ok; attempt++) {   /* tolerate transient failures on loaded hosts */
+        if (attempt) Sleep(200);
+        ok = CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, NULL, &si, &pi);
+        if (!ok) { r->spawn_error = GetLastError(); t_log("CreateProcess failed (attempt %d): error %lu", attempt + 1, r->spawn_error); }
+    }
     free(cmd);
     CloseHandle(wr);
     if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
     if (!ok) { CloseHandle(rd); if (job) CloseHandle(job); return 0; }
+    r->spawn_error = 0;
     if (job && !AssignProcessToJobObject(job, pi.hProcess)) { CloseHandle(job); job = NULL; }  /* nested jobs unsupported: fine */
     ResumeThread(pi.hThread);
     r->started = 1;

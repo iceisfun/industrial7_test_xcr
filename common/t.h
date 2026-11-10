@@ -126,6 +126,7 @@ int         t_on_case_thread(void);   /* 1 on the thread running the case */
 #define T_CHILD_UNKNOWN 0x7E57C0DEu   /* exit code when --child=<name> is not registered */
 typedef struct t_child_result {
     int      started;       /* CreateProcess succeeded */
+    DWORD    spawn_error;   /* GetLastError of the last failed CreatePipe/CreateProcess, else 0 */
     int      timed_out;     /* exceeded timeout and was killed */
     DWORD    exit_code;     /* raw process exit code (exception code when it crashed) */
     DWORD    exc_code;      /* exception code if the child died of an exception, else 0 */

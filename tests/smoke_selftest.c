@@ -151,7 +151,7 @@ TEST(harness_result_kinds) {
     t_tmpfile(json, sizeof json, "demo.json");
     snprintf(args, sizeof args, "--include-manual --filter=demo_ --case-timeout=30 \"--json=%s\"", json);
     static t_child_result r;
-    REQUIRE(t_run_self(args, 60000, &r));
+    REQUIREF(t_run_self(args, 60000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK(!r.timed_out);
     CHECK_EQ(r.exit_code, 1);                          /* FAIL and CRASH present */
     char sum[512] = "";
@@ -210,15 +210,15 @@ TEST(harness_result_kinds) {
 
 TEST(harness_list_and_cli) {
     static t_child_result r;
-    REQUIRE(t_run_self("--list", 20000, &r));
+    REQUIREF(t_run_self("--list", 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK_EQ(r.exit_code, 0);
     CHECK(strstr(r.out, "harness_result_kinds") != NULL);
     CHECK(strstr(r.out, "demo_crash_av [manual]") != NULL);
-    REQUIRE(t_run_self("--no-such-option", 20000, &r));
+    REQUIREF(t_run_self("--no-such-option", 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK_EQ(r.exit_code, 2);
-    REQUIRE(t_run_self("--filter=no_case_matches_this", 20000, &r));
+    REQUIREF(t_run_self("--filter=no_case_matches_this", 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK_EQ(r.exit_code, 2);
-    REQUIRE(t_run_self("--filter=demo_pass,demo_skip --include-manual", 20000, &r));
+    REQUIREF(t_run_self("--filter=demo_pass,demo_skip --include-manual", 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK_EQ(r.exit_code, 0);                          /* SKIP does not fail the run */
     CHECK(strstr(r.out, "total=2 pass=1 fail=0 crash=0 skip=1") != NULL);
 }
@@ -232,7 +232,7 @@ CHILD(hang) { (void)argc; (void)argv; printf("HANGING\n"); fflush(stdout); Sleep
 
 TEST(child_exit_code) {
     static t_child_result r;
-    REQUIRE(t_child_run("exit7", NULL, 20000, &r));
+    REQUIREF(t_child_run("exit7", NULL, 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK(r.started);
     CHECK(!r.timed_out);
     CHECK_EQ(r.exit_code, 7);
@@ -241,7 +241,7 @@ TEST(child_exit_code) {
 TEST(child_output_capture) {
     static t_child_result r;
     char v[64];
-    REQUIRE(t_child_run("echo", "alpha \"b c\"", 20000, &r));
+    REQUIREF(t_child_run("echo", "alpha \"b c\"", 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK_EQ(r.exit_code, 0);
     CHECK(t_child_find(&r, "ARG0=", v, sizeof v) && !strcmp(v, "echo"));
     CHECK(t_child_find(&r, "ARG1=", v, sizeof v) && !strcmp(v, "alpha"));
@@ -250,7 +250,7 @@ TEST(child_output_capture) {
 }
 TEST(child_access_violation) {
     static t_child_result r;
-    REQUIRE(t_child_run("av", NULL, 20000, &r));
+    REQUIREF(t_child_run("av", NULL, 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK(!r.timed_out);
     CHECK_EQ(r.exc_code, 0xC0000005u);
     CHECK_EQ(r.exit_code, 0xC0000005u);
@@ -258,13 +258,13 @@ TEST(child_access_violation) {
 }
 TEST(child_illegal_instruction) {
     static t_child_result r;
-    REQUIRE(t_child_run("ud", NULL, 20000, &r));
+    REQUIREF(t_child_run("ud", NULL, 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK_EQ(r.exc_code, 0xC000001Du);
     CHECK(r.exc_addr != 0);
 }
 TEST(child_timeout_kill) {
     static t_child_result r;
-    REQUIRE(t_child_run("hang", NULL, 1500, &r));
+    REQUIREF(t_child_run("hang", NULL, 1500, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK(r.timed_out);
     CHECK(r.ms >= 1400 && r.ms < 15000);
     CHECK(strstr(r.out, "HANGING") != NULL);
@@ -272,7 +272,7 @@ TEST(child_timeout_kill) {
 }
 TEST(child_unknown_name) {
     static t_child_result r;
-    REQUIRE(t_child_run("no_such_child", NULL, 20000, &r));
+    REQUIREF(t_child_run("no_such_child", NULL, 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK_EQ(r.exit_code, T_CHILD_UNKNOWN);
 }
 
@@ -424,7 +424,7 @@ TEST(util_helpers) {
     CHECK(t_proc("kernel32.dll", "NoSuchExport_xyz") == NULL);
     CHECK(t_proc("no_such_dll_xyz.dll", "x") == NULL);
     static t_child_result r;
-    REQUIRE(t_child_run("guard_overrun", NULL, 20000, &r));
+    REQUIREF(t_child_run("guard_overrun", NULL, 20000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK(strstr(r.out, "WRITES_OK") != NULL);
     CHECK_EQ(r.exc_code, 0xC0000005u);
     char a[MAX_PATH], b[MAX_PATH];
@@ -445,7 +445,7 @@ TEST(harness_fatal_paths) {
     char json[MAX_PATH], args[MAX_PATH + 128];
     t_tmpfile(json, sizeof json, "wd.json");
     snprintf(args, sizeof args, "--include-manual --filter=wd_hang --case-timeout=1 \"--json=%s\"", json);
-    REQUIRE(t_run_self(args, 15000, &r));
+    REQUIREF(t_run_self(args, 15000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK(!r.timed_out);
     CHECK_EQ(r.exit_code, 1);
     CHECK(r.ms < 10000);
@@ -455,7 +455,7 @@ TEST(harness_fatal_paths) {
     CHECK(buf && strstr(buf, "\"result\":\"CRASH\"") && strstr(buf, "\"type\":\"summary\""));
     free(buf); DeleteFileA(json);
 
-    REQUIRE(t_run_self("--include-manual --filter=wt_crash", 15000, &r));
+    REQUIREF(t_run_self("--include-manual --filter=wt_crash", 15000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK(!r.timed_out);
     CHECK_EQ(r.exit_code, 1);
     CHECK(strstr(r.out, "CRASH wt_crash") && strstr(r.out, "not the case thread"));
