@@ -1481,9 +1481,10 @@ static int sapc_hijack(sapc *s, DWORD64 xmask, DWORD *err) {
     if (s->hj_n >= (int)T_COUNTOF(s->hj_buf)) return 0;
     __typeof__(&InitializeContext) ic = xmask ? T_PROC("kernel32.dll", InitializeContext) : NULL;
     __typeof__(&SetXStateFeaturesMask) sm = xmask ? T_PROC("kernel32.dll", SetXStateFeaturesMask) : NULL;
-    DWORD flags = SAPC_HJ_FLAGS | (ic && sm ? SAPC_CONTEXT_XSTATE : 0), len = 0;
+    int xs = ic && sm;   /* not (flags & SAPC_CONTEXT_XSTATE): that shares the architecture bit with every CONTEXT_* */
+    DWORD flags = SAPC_HJ_FLAGS | (xs ? SAPC_CONTEXT_XSTATE : 0), len = 0;
     void *buf; CONTEXT *c = NULL;
-    if (flags & SAPC_CONTEXT_XSTATE) {
+    if (xs) {
         ic(NULL, flags, NULL, &len);
         buf = len ? calloc(1, len) : NULL;
         if (!buf || !ic(buf, flags, &c, &len) || !c || !sm(c, xmask)) { free(buf); *err = GetLastError(); return -1; }

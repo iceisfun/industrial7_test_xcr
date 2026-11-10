@@ -168,7 +168,14 @@ static void need_core_api(void) {
         !X.GetXStateFeaturesMask || !X.SetXStateFeaturesMask || !X.CopyContext)
         SKIP("XSTATE context API (Windows 7 SP1 set) not exported by kernel32");
 }
-static DWORD64 enabled(void) { need_core_api(); return X.GetEnabledXStateFeatures(); }
+/* Wine 9 returns RtlGetEnabledExtendedFeatures(~0) unchanged, i.e. 0 on a CPU without XSAVE (Windows 10
+ * kernelbase!GetEnabledXStateFeatures returns 3 then): documented Wine gap, checks unchanged. */
+static DWORD64 enabled(void) {
+    need_core_api();
+    DWORD64 en = X.GetEnabledXStateFeatures();
+    if (en == 0 && t_is_wine()) t_expect_fail("Wine %s: GetEnabledXStateFeatures returns 0 without XSAVE", t_wine_version());
+    return en;
+}
 static void need_avx_api(void) {
     if (!(enabled() & T_XS_AVX)) SKIP("GetEnabledXStateFeatures() does not report AVX (0x%llx)", (unsigned long long)enabled());
 }
@@ -681,7 +688,9 @@ TEST(init_context_all_and_full) {
         int ok = xctx_new(&x, fl[i]);
         CHECKF(ok, "InitializeContext(0x%lx) failed (%lu)", (unsigned long)fl[i], GetLastError());
         if (!ok) continue;
-        CHECKF(x.ctx->ContextFlags == fl[i], "ContextFlags 0x%lx want 0x%lx", (unsigned long)x.ctx->ContextFlags, (unsigned long)fl[i]);
+        /* kernelbase!InitializeContext2 strips CONTEXT_XSTATE (0x40) when no XSTATE is enabled at all */
+        DWORD want = os_xstate() ? fl[i] : (fl[i] & ~0x40u);
+        CHECKF(x.ctx->ContextFlags == want, "ContextFlags 0x%lx want 0x%lx", (unsigned long)x.ctx->ContextFlags, (unsigned long)want);
         xctx_free(&x);
     }
 }
@@ -691,7 +700,7 @@ TEST(init_context_all_and_full) {
 TEST(init_xstate_stripped_without_os_xstate) {
     need_core_api();
     if (os_xstate()) SKIP("OS enables XSAVE-managed state: the CONTEXT_XSTATE stripping path does not apply");
-    CHECK_EQ(X.GetEnabledXStateFeatures(), 3);
+    CHECK_EQ(enabled(), 3);
     DWORD plain = init_len(XA_ALL), xs = init_len(XA_ALL | XA_XSTATE);
     CHECKF(plain && xs == plain, "XSTATE length %lu != plain %lu although XSTATE is unsupported", xs, plain);
     xctx x; XCTX_REQ(&x, XA_ALL | XA_XSTATE);

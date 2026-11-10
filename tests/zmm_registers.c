@@ -226,6 +226,15 @@ static int zx_api_get(zx_api *a) {
 #define NEED_API(a) do { if (!zx_api_get(a)) SKIP("XSTATE context APIs (GetEnabledXStateFeatures, InitializeContext, " \
     "Get/SetXStateFeaturesMask, LocateXStateFeature) not all exported"); } while (0)
 #define ZX_XFLAGS (CONTEXT_ALL | CONTEXT_XSTATE)
+/* No XSTATE support at all (RtlGetEnabledExtendedFeatures(~0) == 0, a CPU without XSAVE): Windows 10
+ * kernelbase!InitializeContext2 (reference decomp) then clears CONTEXT_XSTATE from the requested flags, so the
+ * context has no XSTATE area to mask or locate in. */
+static int zx_xstate_off(void) {
+    DWORD64 (WINAPI *rg)(DWORD64) = (DWORD64 (WINAPI *)(DWORD64))t_proc("ntdll.dll", "RtlGetEnabledExtendedFeatures");
+    return rg && rg(~0ull) == 0;
+}
+#define NEED_XSTATE_ON() do { if (zx_xstate_off()) SKIP("no XSTATE support (RtlGetEnabledExtendedFeatures = 0): " \
+    "InitializeContext drops CONTEXT_XSTATE"); } while (0)
 #define ZX_CTXBUF 65536
 static uint8_t T_ALIGN(64) g_ctxbuf[2][ZX_CTXBUF];
 
@@ -392,6 +401,8 @@ TEST(zmm_api_enabled_features_avx512) {
     CHECK_EQ(api, again);
     CHECK_EQ(api, t_env_get()->api_xstate_features);
     t_info("api_enabled_features", "0x%llx", (unsigned long long)api);
+    if (api == 0 && t_is_wine())   /* Windows 10 kernelbase returns 3 when RtlGetEnabledExtendedFeatures(~0) is 0 */
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures returns 0 without XSAVE", t_wine_version());
     CHECKF((api & 3) == 3, "GetEnabledXStateFeatures()=0x%llx lacks XSTATE_MASK_LEGACY", (unsigned long long)api);
     uint64_t a = api & ZX_AVX512, x = c->osxsave ? (c->xcr0 & ZX_AVX512) : 0;
     CHECKF(a == 0 || a == ZX_AVX512, "API reports a partial AVX-512 mask 0x%llx", (unsigned long long)a);
@@ -436,11 +447,12 @@ TEST(zmm_api_initialize_context_length) {
     ok = a.init(g_ctxbuf[0], ZX_XFLAGS, &ctx, &l2);
     REQUIRE(ok && ctx);
     CHECK((uint8_t *)ctx >= g_ctxbuf[0] && (uint8_t *)ctx + sizeof(CONTEXT) <= g_ctxbuf[0] + len);
-    CHECK_EQ(ctx->ContextFlags & ZX_XFLAGS, ZX_XFLAGS);
+    DWORD want = zx_xstate_off() ? (ZX_XFLAGS & ~0x40u) : ZX_XFLAGS;
+    CHECK_EQ(ctx->ContextFlags & ZX_XFLAGS, want);
 }
 
 TEST(zmm_api_set_mask_filters_disabled) {
-    zx_api a; NEED_API(&a);
+    zx_api a; NEED_API(&a); NEED_XSTATE_ON();
     DWORD64 en = a.en();
     const char *why = ""; CONTEXT *ctx = zx_context_new(&a, g_ctxbuf[0], ZX_XFLAGS, NULL, &why);
     REQUIREF(ctx, "%s", why);
@@ -457,7 +469,7 @@ TEST(zmm_api_set_mask_filters_disabled) {
 }
 
 TEST(zmm_api_locate_avx512_features) {
-    zx_api a; NEED_API(&a);
+    zx_api a; NEED_API(&a); NEED_XSTATE_ON();
     DWORD64 en = a.en();
     DWORD len = 0; const char *why = "";
     CONTEXT *ctx = zx_context_new(&a, g_ctxbuf[0], ZX_XFLAGS, &len, &why);
@@ -501,7 +513,7 @@ TEST(zmm_api_locate_invalid_ids) {
 }
 
 TEST(zmm_api_locate_not_enabled_id) {
-    zx_api a; NEED_API(&a);
+    zx_api a; NEED_API(&a); NEED_XSTATE_ON();
     DWORD64 en = a.en();
     const char *why = "";
     CONTEXT *ctx = zx_context_new(&a, g_ctxbuf[0], ZX_XFLAGS, NULL, &why);
