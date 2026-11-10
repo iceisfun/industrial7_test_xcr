@@ -31,6 +31,11 @@
  *     decomp, Win10 19041): a NULL buffer returns FALSE / ERROR_INSUFFICIENT_BUFFER (0x7a) with the
  *     length; the length covers any buffer alignment; the CONTEXT is placed at (buf+15)&~15 on x64
  *     (CONTEXT_AMD64) / (buf+3)&~3 on x86 (CONTEXT_i386), the XSAVE header region at a 64-byte boundary.
+ *   - Accesses that START in an inaccessible page report an address in that page; FXSAVE/XSAVE areas
+ *     running into one fault as writes (only bytes the instruction must write are hard-checked).
+ *   - VPGATHERDD into an inaccessible page: restartable after the handler fixes the page; on Intel the
+ *     exception CONTEXT shows right-to-left progress (lower elements done, mask bits cleared).
+ *   - MMX m64 and x87 m16..m80 operands have no alignment requirement; TLS callbacks get an ABI stack.
  * Result policy: feature absent -> SKIP; advertised but wrong -> FAIL; observed-but-variable -> t_note/t_info.
  * Deliberately faulting operations run in CHILD() processes (al_probe & co) with a vectored handler that
  * records the exception and resumes after the faulting instruction (stubs below have known labels). */
@@ -121,6 +126,16 @@ __asm__(
     AL_STUB("al_avx2_vpaddd_y_ld",  PRE_Y, "vpaddd "   MEM ", %ymm0, %ymm0", POST_Y)
     AL_STUB("al_avx_vmaskmovps_ld", PRE_Y "\n\tvmovdqu 128(" RA "), %ymm1", "vmaskmovps " MEM ", %ymm1, %ymm0", POST_Y)
     AL_STUB("al_avx_vmaskmovps_st", PRE_Y "\n\tvmovdqu 128(" RA "), %ymm1", "vmaskmovps %ymm0, %ymm1, " MEM, "vzeroupper")
+    AL_STUB("al_avx2_vpmaskmovd_ld", PRE_Y "\n\tvmovdqu 128(" RA "), %ymm1", "vpmaskmovd " MEM ", %ymm1, %ymm0", POST_Y)
+    AL_STUB("al_avx2_vpmaskmovd_st", PRE_Y "\n\tvmovdqu 128(" RA "), %ymm1", "vpmaskmovd %ymm0, %ymm1, " MEM, "vzeroupper")
+    /* AVX2 gather: ymm0 = aux[0..32) (merge target), ymm1 = dword indices aux[128..160), ymm2 = all-ones mask;
+     * after: aux[64..96) = ymm0, aux[96..128) = ymm2 (the mask is cleared element by element) */
+    AL_STUB("al_avx2_gpf", PRE_Y "\n\tvmovdqu 128(" RA "), %ymm1\n\tvpcmpeqd %ymm2, %ymm2, %ymm2",
+            "vpgatherdd %ymm2, (" RP ",%ymm1,1), %ymm0",
+            "vmovdqu %ymm0, 64(" RA ")\n\tvmovdqu %ymm2, 96(" RA ")\n\tvzeroupper")
+    /* MMX m64 (no alignment requirement) */
+    AL_STUB("al_mmx_movq_ld", "", "movq " MEM ", %mm0", "emms")
+    AL_STUB("al_mmx_movq_st", "movq (" RA "), %mm0", "movq %mm0, " MEM, "emms")
     /* EVEX */
     AL_STUB("al_avx512_vmovdqa64_z_ld", PRE_Z, "vmovdqa64 " MEM ", %zmm0", POST_Z)
     AL_STUB("al_avx512_vmovdqa64_z_st", PRE_Z, "vmovdqa64 %zmm0, " MEM, "vzeroupper")
@@ -150,12 +165,18 @@ __asm__(
     /* stack-alignment thunk: record RSP at entry, tail-jump to the real callback */
     "\t.p2align 4\n\t.globl al_sp_thunk\nal_sp_thunk:\n\tmov %rsp, al_sp_slot(%rip)\n\tjmp *al_sp_target(%rip)\n"
     "\t.globl al_get_sp\nal_get_sp:\n\tmov %rsp, %rax\n\tret\n"
+    /* TLS callback (loader-invoked, any thread): histogram of RSP % 16 at entry, no stack use */
+    "\t.p2align 4\n\t.globl al_tls_thunk\nal_tls_thunk:\n\tmov %rsp, %rax\n\tand $15, %eax\n"
+    "\tlea al_tls_hist(%rip), %r8\n\tlock incl (%r8,%rax,4)\n\tret\n"
 #else
     "\t.p2align 4\n\t.globl al_repmovsb_entry\nal_repmovsb_entry:\n\tpush %edi\n\tpush %esi\n"
     "\tmov 12(%esp), %edi\n\tmov 16(%esp), %esi\n\tmov 20(%esp), %ecx\n"
     "\t.globl al_repmovsb\nal_repmovsb:\n\trep movsb\n\t.globl al_repmovsb_end\nal_repmovsb_end:\n\tpop %esi\n\tpop %edi\n\tret\n"
     "\t.p2align 4\n\t.globl al_sp_thunk\nal_sp_thunk:\n\tmov %esp, al_sp_slot\n\tjmp *al_sp_target\n"
     "\t.globl al_get_sp\nal_get_sp:\n\tmov %esp, %eax\n\tret\n"
+    /* TLS callback is stdcall(PVOID, DWORD, PVOID) on x86 */
+    "\t.p2align 4\n\t.globl al_tls_thunk\nal_tls_thunk:\n\tmov %esp, %eax\n\tand $15, %eax\n"
+    "\tlock incl al_tls_hist(,%eax,4)\n\tret $12\n"
 #endif
 );
 
@@ -174,9 +195,15 @@ AL_DECL(al_avx512_vmovdqu64_z_ld) AL_DECL(al_avx512_vmovdqu64_z_st) AL_DECL(al_a
 AL_DECL(al_avx512_vmovdqu32_kz_ld) AL_DECL(al_avx512_vmovdqu32_k_st)
 AL_DECL(al_fxsave) AL_DECL(al_fxrstor) AL_DECL(al_xsave) AL_DECL(al_xrstor) AL_DECL(al_xsaveopt) AL_DECL(al_xsavec)
 AL_DECL(al_acprobe) AL_DECL(al_repmovsb)
+AL_DECL(al_avx2_vpmaskmovd_ld) AL_DECL(al_avx2_vpmaskmovd_st) AL_DECL(al_avx2_gpf)
+AL_DECL(al_mmx_movq_ld) AL_DECL(al_mmx_movq_st)
 #ifdef T_X64
 AL_DECL(al_cmpxchg16b)
 #endif
+extern void NTAPI al_tls_thunk(PVOID, DWORD, PVOID) __asm__("al_tls_thunk");
+volatile LONG al_tls_hist[16] __asm__("al_tls_hist");
+/* loader-invoked TLS callback (process/thread attach/detach): .CRT$XLF lands between mingw's __xl_a/__xl_z */
+__attribute__((section(".CRT$XLF"), used)) const PIMAGE_TLS_CALLBACK al_tls_cb_ptr = al_tls_thunk;
 extern void al_sp_thunk(void) __asm__("al_sp_thunk");
 extern uintptr_t al_get_sp(void) __asm__("al_get_sp");
 volatile uintptr_t al_sp_slot __asm__("al_sp_slot");
@@ -233,6 +260,11 @@ static const al_stub g_stubs[] = {
     STB(al_avx2_vpaddd_y_ld, 32, SK_LOAD, 32, 0, 0, 0, F_AVX2),
     STB(al_avx_vmaskmovps_ld, 32, SK_LOAD, 32, 0, 0, 0, F_AVX),
     STB(al_avx_vmaskmovps_st, 32, SK_STORE, 0, 0, 0, 0, F_AVX),
+    STB(al_avx2_vpmaskmovd_ld, 32, SK_LOAD, 32, 0, 0, 0, F_AVX2),
+    STB(al_avx2_vpmaskmovd_st, 32, SK_STORE, 0, 0, 0, 0, F_AVX2),
+    STB(al_avx2_gpf, 32, SK_LOAD, 0, 0, 0, 0, F_AVX2),
+    STB(al_mmx_movq_ld, 8, SK_LOAD, 0, 0, 0, 0, F_MMX),
+    STB(al_mmx_movq_st, 8, SK_STORE, 0, 0, 0, 0, F_MMX),
     STB(al_avx512_vmovdqa64_z_ld, 64, SK_LOAD, 64, 1, 0, 0, F_AVX512F),
     STB(al_avx512_vmovdqa64_z_st, 64, SK_STORE, 0, 0, 0, 0, F_AVX512F),
     STB(al_avx512_vmovntdq_z_st, 64, SK_STORE, 0, 0, 0, 0, F_AVX512F),
@@ -267,7 +299,9 @@ static struct {
     int action;
     void *up; SIZE_T up_len;
     DWORD code, np; ULONG_PTR i0, i1;
-    int ipok, xmm_valid; uint8_t xmm0[16];
+    int ipok, xmm_valid; uint8_t xmm0[16], xmm2[16];
+    int ymmh_valid; uint8_t ymmh0[16], ymmh2[16];   /* upper YMM halves from the CONTEXT XSTATE area */
+    PVOID (WINAPI *locate)(PCONTEXT, DWORD, PDWORD);
     uintptr_t ax, cx, di, si;
     const uint8_t *rep_dst, *rep_src; long long rep_lim; int rep_pre;
 } g_v;
@@ -288,13 +322,19 @@ static LONG CALLBACK al_veh(EXCEPTION_POINTERS *ep) {
     g_v.ipok = c->Rip == ip;
     g_v.ax = c->Rax; g_v.cx = c->Rcx; g_v.di = c->Rdi; g_v.si = c->Rsi;
     g_v.xmm_valid = (c->ContextFlags & CONTEXT_FLOATING_POINT) == CONTEXT_FLOATING_POINT;
-    if (g_v.xmm_valid) memcpy(g_v.xmm0, &c->FltSave.XmmRegisters[0], 16);
+    if (g_v.xmm_valid) { memcpy(g_v.xmm0, &c->FltSave.XmmRegisters[0], 16); memcpy(g_v.xmm2, &c->FltSave.XmmRegisters[2], 16); }
 #else
     g_v.ipok = c->Eip == ip;
     g_v.ax = c->Eax; g_v.cx = c->Ecx; g_v.di = c->Edi; g_v.si = c->Esi;
     g_v.xmm_valid = (c->ContextFlags & CONTEXT_EXTENDED_REGISTERS) == CONTEXT_EXTENDED_REGISTERS;
-    if (g_v.xmm_valid) memcpy(g_v.xmm0, c->ExtendedRegisters + 160, 16);
+    if (g_v.xmm_valid) { memcpy(g_v.xmm0, c->ExtendedRegisters + 160, 16); memcpy(g_v.xmm2, c->ExtendedRegisters + 160 + 32, 16); }
 #endif
+    g_v.ymmh_valid = 0;
+    if (g_v.locate && (c->ContextFlags & CONTEXT_XSTATE) == CONTEXT_XSTATE) {
+        DWORD len = 0;
+        const uint8_t *yh = (const uint8_t *)g_v.locate(c, XSTATE_AVX, &len);   /* YMM_H: 16 bytes per register */
+        if (yh && len >= 48) { memcpy(g_v.ymmh0, yh, 16); memcpy(g_v.ymmh2, yh + 32, 16); g_v.ymmh_valid = 1; }
+    }
     if (g_v.action == ACT_SKIP) {
 #ifdef T_X64
         c->Rip = g_v.end;
@@ -323,8 +363,10 @@ static int al_call(const al_stub *s, void *p) {
 
 static uint8_t al_pat(size_t i) { return (uint8_t)(0x5Au ^ (i * 29u) ^ (i >> 7) ^ ((i >> 12) * 0x33u)); }
 
-enum { M_HEAP, M_NOACCESS, M_READONLY, M_RESERVE, M_GUARD };
-static const char *const g_mode_names[] = { "heap", "noaccess", "readonly", "reserve", "guard" };
+/* M_NOACCESS_LO: the page BELOW ref is PAGE_NOACCESS and ref's page is accessible (accesses that start in
+ * the bad page and end in a good one); every other mode protects the page AT ref. */
+enum { M_HEAP, M_NOACCESS, M_READONLY, M_RESERVE, M_GUARD, M_NOACCESS_LO };
+static const char *const g_mode_names[] = { "heap", "noaccess", "readonly", "reserve", "guard", "noaccess_lo" };
 typedef struct { uint8_t *base, *ref; int mode; } al_mem;
 
 static int al_mem_setup(al_mem *m, int mode) {
@@ -339,6 +381,7 @@ static int al_mem_setup(al_mem *m, int mode) {
     } else {
         m->base = (uint8_t *)VirtualAlloc(NULL, 2 * PG, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (m->base && mode == M_NOACCESS && !VirtualProtect(m->base + PG, PG, PAGE_NOACCESS, &old)) return 0;
+        if (m->base && mode == M_NOACCESS_LO && !VirtualProtect(m->base, PG, PAGE_NOACCESS, &old)) return 0;
     }
     if (!m->base) return 0;
     m->ref = m->base + PG;
@@ -350,13 +393,14 @@ static int al_readable(const al_mem *m, const uint8_t *a) {
     size_t o = (size_t)(a - m->base);
     if (m->mode == M_HEAP) return o < 3 * PG;
     if (m->mode == M_READONLY) return o < 2 * PG;
+    if (m->mode == M_NOACCESS_LO) return o >= PG && o < 2 * PG;
     return o < PG;
 }
 static void al_mem_refill(al_mem *m) {
     DWORD old;
-    size_t n = m->mode == M_HEAP ? 3 * PG : (m->mode == M_READONLY || m->mode == M_GUARD) ? 2 * PG : PG;
+    size_t n = m->mode == M_HEAP ? 3 * PG : (m->mode == M_READONLY || m->mode == M_GUARD || m->mode == M_NOACCESS_LO) ? 2 * PG : PG;
     if (m->mode == M_READONLY || m->mode == M_GUARD) VirtualProtect(m->ref, PG, PAGE_READWRITE, &old);
-    for (size_t i = 0; i < n; i++) m->base[i] = al_pat(i);
+    for (size_t i = m->mode == M_NOACCESS_LO ? PG : 0; i < n; i++) m->base[i] = al_pat(i);
     if (m->mode == M_READONLY) VirtualProtect(m->ref, PG, PAGE_READONLY, &old);
     if (m->mode == M_GUARD) VirtualProtect(m->ref, PG, PAGE_READWRITE | PAGE_GUARD, &old);
 }
@@ -535,6 +579,104 @@ CHILD(al_unhandled) {
     return 0;
 }
 
+/* --child=al_gatherfault <badmask>...
+ * VPGATHERDD of 8 dwords; lanes in <badmask> index into a PAGE_NOACCESS page, the others into the page
+ * below. The handler records the exception CONTEXT (mask ymm2 / destination ymm0 progress), makes the
+ * page accessible and continues: the restarted gather must complete. Intel SDM VPGATHERDD: faults are
+ * delivered right-to-left, every element below the faulting one is complete (mask bit cleared).
+ * prints: G bad f code i0 i1rel ymmh below_ok faultlane_set fin */
+CHILD(al_gatherfault) {
+    if (!cpu_has(F_AVX2)) { printf("UNSUPPORTED\n"); return 5; }
+    al_mem m;
+    if (!al_mem_setup(&m, M_NOACCESS)) return 6;
+    g_v.locate = (PVOID (WINAPI *)(PCONTEXT, DWORD, PDWORD))t_proc("kernel32.dll", "LocateXStateFeature");
+    if (!AddVectoredExceptionHandler(1, al_veh)) return 7;
+    for (int a = 1; a < argc; a++) {
+        unsigned bad = (unsigned)strtoul(argv[a], NULL, 0) & 0xFF;
+        DWORD old;
+        int32_t idx[8];
+        VirtualProtect(m.ref, PG, PAGE_READWRITE, &old);
+        al_mem_refill(&m);
+        for (int i = 0; i < PG; i++) m.ref[i] = (uint8_t)(al_pat((size_t)i + 77) ^ 0x96);
+        VirtualProtect(m.ref, PG, PAGE_NOACCESS, &old);
+        for (int i = 0; i < 8; i++) idx[i] = (bad >> i & 1) ? 4 * i + 64 : -256 + 4 * i;
+        al_aux_init();
+        memcpy(g_aux + 128, idx, sizeof idx);
+        g_v.fault = (uintptr_t)al_avx2_gpf; g_v.end = (uintptr_t)al_avx2_gpf_end;
+        g_v.action = ACT_UNPROTECT; g_v.up = m.ref; g_v.up_len = PG; g_v.rep_dst = NULL;
+        g_v.hit = 0; g_v.ipok = 0; g_v.xmm_valid = 0; g_v.ymmh_valid = 0;
+        g_v.armed = 1;
+        ((al_fn2)(void *)al_avx2_gpf_entry)(m.ref, g_aux);
+        g_v.armed = 0;
+        int f = g_v.hit, first = -1;
+        for (int i = 0; i < 8 && first < 0; i++) if (bad >> i & 1) first = i;
+        /* CONTEXT view at the fault: lanes 0-3 in XMM (FltSave), 4-7 in the XSTATE YMM_H area */
+        uint8_t ctx_dst[32], ctx_msk[32];
+        memcpy(ctx_dst, g_v.xmm0, 16); memcpy(ctx_dst + 16, g_v.ymmh0, 16);
+        memcpy(ctx_msk, g_v.xmm2, 16); memcpy(ctx_msk + 16, g_v.ymmh2, 16);
+        int below_ok = -1, fl_set = -1;
+        if (f && first >= 0 && g_v.xmm_valid && (first <= 4 || g_v.ymmh_valid)) {
+            below_ok = 1;
+            for (int i = 0; i < first; i++) {
+                uint32_t mk, d, want; memcpy(&mk, ctx_msk + 4 * i, 4); memcpy(&d, ctx_dst + 4 * i, 4);
+                memcpy(&want, m.ref + idx[i], 4);
+                if (mk != 0 || d != want) below_ok = 0;
+            }
+        }
+        if (f && first >= 0 && g_v.xmm_valid && (first < 4 || g_v.ymmh_valid)) {
+            uint32_t mk; memcpy(&mk, ctx_msk + 4 * first, 4);
+            fl_set = (mk >> 31) & 1;
+        }
+        int fin = 1;
+        for (int i = 0; i < 8; i++) {
+            uint32_t d, mk, want; memcpy(&d, g_aux + 64 + 4 * i, 4); memcpy(&mk, g_aux + 96 + 4 * i, 4);
+            memcpy(&want, m.ref + idx[i], 4);
+            if (d != want || mk != 0) fin = 0;
+        }
+        printf("G %u %d %08lx %llx %lld %d %d %d %d\n", bad, f, (unsigned long)(f ? g_v.code : 0),
+               (unsigned long long)(f ? g_v.i0 : 0), f ? (long long)(g_v.i1 - (uintptr_t)m.ref) : 0LL,
+               g_v.ymmh_valid, below_ok, fl_set, fin);
+        VirtualProtect(m.ref, PG, PAGE_NOACCESS, &old);
+    }
+    printf("DONE\n");
+    fflush(stdout);
+    return 0;
+}
+
+/* --child=al_ctxmisalign : GetThreadContext into a CONTEXT that is not 16-byte aligned (x64 requires
+ * 16; Windows documents the alignment but no error code). Prints: CM off ok err outside_written rip_ok */
+static DWORD WINAPI al_sleeper(void *a) { (void)a; for (;;) Sleep(50); return 0; }
+CHILD(al_ctxmisalign) {
+    HANDLE th = CreateThread(NULL, 0, al_sleeper, NULL, 0, NULL);
+    if (!th) return 6;
+    Sleep(20);
+    if (SuspendThread(th) == (DWORD)-1) return 7;
+    static T_ALIGN(64) uint8_t buf[sizeof(CONTEXT) + 256];
+    static const int offs[] = { 0, 4, 8, 12 };
+    for (size_t i = 0; i < T_COUNTOF(offs); i++) {
+        memset(buf, 0xCD, sizeof buf);
+        CONTEXT *c = (CONTEXT *)(buf + 64 + offs[i]);
+        c->ContextFlags = CONTEXT_FULL;
+        SetLastError(0);
+        BOOL ok = GetThreadContext(th, c);
+        DWORD err = ok ? 0 : GetLastError();
+        int outside = 0;
+        for (int k = 0; k < 64 + offs[i]; k++) if (buf[k] != 0xCD) outside = 1;
+        for (size_t k = 64 + offs[i] + sizeof(CONTEXT); k < sizeof buf; k++) if (buf[k] != 0xCD) outside = 1;
+#ifdef T_X64
+        int ipok = ok ? c->Rip != 0 && c->Rsp != 0 : -1;
+#else
+        int ipok = ok ? c->Eip != 0 && c->Esp != 0 : -1;
+#endif
+        printf("CM %d %d %lu %d %d\n", offs[i], ok ? 1 : 0, (unsigned long)err, outside, ipok);
+    }
+    TerminateThread(th, 0);
+    CloseHandle(th);
+    printf("DONE\n");
+    fflush(stdout);
+    return 0;
+}
+
 /* --child=al_acflag : EFLAGS.AC=1 + misaligned load (INFO only: whether alignment checking is enabled is OS policy) */
 CHILD(al_acflag) {
     static T_ALIGN(64) uint8_t buf[64];
@@ -644,21 +786,35 @@ static void al_expect_align(const char *stub, int align, int hi) {
 }
 
 /* Offsets around a boundary page whose protection is `mode`. Straddling accesses fault (except loads
- * from a PAGE_READONLY page). Checks exception code, read/write flag, address range and precision. */
-static void al_expect_boundary(const char *stub, const char *mode) {
+ * from a PAGE_READONLY page). Checks exception code, read/write flag, address range and precision.
+ *   lo/hi/step : offsets relative to the page boundary (step keeps save areas aligned)
+ *   wr         : 1 = the access is a write (ExceptionInformation[0]); -1 = derive from the stub kind
+ *   lastw      : the access is only certain to touch bytes [0,lastw) of its w-byte operand (FXSAVE/XSAVE do
+ *                not write reserved/unused bytes); a straddle that only reaches [lastw,w) may or may not
+ *                fault -> recorded, not checked. lastw = w for ordinary operands.
+ * Mode noaccess_lo: the page BELOW the boundary is inaccessible; accesses that start there fault. */
+static void al_expect_boundary_ex(const char *stub, const char *mode, int lo, int hi, int step, int wr, int lastw) {
     const al_stub *s = al_find_stub(stub);
     REQUIREF(s, "unknown stub %s", stub);
     if (!cpu_has((t_feature)s->feat)) SKIP("%s not usable on this CPU/OS", cpu_feature_name((t_feature)s->feat));
-    int w = s->w, is_store = s->kind == SK_STORE;
-    int ro = !strcmp(mode, "readonly"), guard = !strcmp(mode, "guard");
-    int n = al_probe(stub, mode, -(w + 4), 1, 1), partial = 0, first = 1, faults = 0;
+    int w = s->w, is_store = wr >= 0 ? wr : s->kind == SK_STORE;
+    int ro = !strcmp(mode, "readonly"), guard = !strcmp(mode, "guard"), below = !strcmp(mode, "noaccess_lo");
+    int n = al_probe(stub, mode, lo, hi, step), partial = 0, first = 1, maybe = 0, maybe_f = 0;
     for (int i = 0; i < n; i++) {
         const al_row *r = &g_rows[i];
-        int straddle = r->off + w > 0;
+        /* inaccessible part of the access, relative to the boundary: [blo, bhi) */
+        long long blo = below ? r->off : (r->off > 0 ? r->off : 0);
+        long long bhi = below ? (r->off + w < 0 ? r->off + w : 0) : r->off + w;
+        int straddle = blo < bhi;
+        int certain = straddle && (below ? r->off < 0 : (long long)r->off + lastw > 0);
         int want = straddle && !(ro && !is_store);
-        CHECKF(r->f == want, "%s/%s off=%d: %s", stub, mode, r->off, want ? "access into the protected page did not fault" : "unexpected fault");
+        if (want && !certain) {   /* only bytes the instruction need not touch are inaccessible */
+            maybe++; maybe_f += r->f;
+            if (!r->f) continue;
+        } else {
+            CHECKF(r->f == want, "%s/%s off=%d: %s", stub, mode, r->off, want ? "access into the protected page did not fault" : "unexpected fault");
+        }
         if (r->f) {
-            faults++;
             if (first) {
                 char k[96]; snprintf(k, sizeof k, "%s/%s", stub, mode);
                 t_info(k, "code=0x%08lx np=%lu info0=0x%llx info1-boundary=%lld (off %d)", r->code, r->np, r->i0, r->i1rel, r->off);
@@ -668,15 +824,14 @@ static void al_expect_boundary(const char *stub, const char *mode) {
             if (guard) {
                 CHECKF(r->code == 0x80000001ul, "%s/guard off=%d: code 0x%08lx, want STATUS_GUARD_PAGE_VIOLATION", stub, r->off, r->code);
                 CHECKF(r->retry == 1, "%s/guard off=%d: retry after the guard exception faulted again (PAGE_GUARD must be one-shot)", stub, r->off);
-                if (r->np >= 2 && !(r->i1rel >= (r->off > 0 ? r->off : 0) && r->i1rel < r->off + w))
+                if (r->np >= 2 && !(r->i1rel >= blo && r->i1rel < bhi))
                     t_note("%s/guard off=%d: guard-page address info1-boundary=%lld outside the access", stub, r->off, r->i1rel);
             } else {
                 CHECKF(r->code == 0xC0000005ul, "%s/%s off=%d: code 0x%08lx, want STATUS_ACCESS_VIOLATION", stub, mode, r->off, r->code);
                 CHECKF(r->np >= 2, "%s/%s off=%d: NumberParameters %lu < 2", stub, mode, r->off, r->np);
                 CHECKF(r->i0 == (unsigned long long)is_store, "%s/%s off=%d: ExceptionInformation[0]=%llu, want %d (%s)", stub, mode, r->off, r->i0, is_store, is_store ? "write" : "read");
-                long long lo = r->off > 0 ? r->off : 0;
-                CHECKF(r->i1rel >= lo && r->i1rel < r->off + w, "%s/%s off=%d: fault address boundary%+lld not within the inaccessible part of the access [%lld,%d)",
-                       stub, mode, r->off, r->i1rel, lo, r->off + w);
+                CHECKF(r->i1rel >= blo && r->i1rel < bhi, "%s/%s off=%d: fault address boundary%+lld not within the inaccessible part of the access [%lld,%lld)",
+                       stub, mode, r->off, r->i1rel, blo, bhi);
             }
             if (r->post >= 0) CHECKF(r->post == 1, "%s/%s off=%d: destination register changed by the faulting load", stub, mode, r->off);
             if (r->reg >= 0) CHECKF(r->reg == 1, "%s/%s off=%d: CONTEXT register differs from the pre-fault value", stub, mode, r->off);
@@ -684,8 +839,17 @@ static void al_expect_boundary(const char *stub, const char *mode) {
         }
         if (r->data >= 0) CHECKF(r->data == 1, "%s/%s off=%d: wrong data after a %s access", stub, mode, r->off, r->f ? "retried" : "non-faulting");
     }
+    if (maybe) {
+        char k[96]; snprintf(k, sizeof k, "%s/%s_untouched_bytes_straddle", stub, mode);
+        t_info(k, "%d of %d offsets faulted (only bytes the instruction need not access were inaccessible)", maybe_f, maybe);
+    }
     if (is_store && partial) t_note("%s/%s: %d faulting straddling stores wrote part of the accessible page (allowed, implementation-specific)", stub, mode, partial);
-    (void)faults;
+}
+static void al_expect_boundary(const char *stub, const char *mode) {
+    const al_stub *s = al_find_stub(stub);
+    REQUIREF(s, "unknown stub %s", stub);
+    if (!strcmp(mode, "noaccess_lo")) al_expect_boundary_ex(stub, mode, -(s->w + 4), 4, 1, -1, s->w);
+    else al_expect_boundary_ex(stub, mode, -(s->w + 4), 1, 1, -1, s->w);
 }
 
 /* ======================================================================================
@@ -746,6 +910,27 @@ static const al_io g_ld_gpr[] = {
     { "movq_gpr", ld_gpr64, 8, 8, 0, F_SSE2 },
 #endif
 };
+/* MMX m64 and x87 integer loads: no alignment requirement. FILD/FISTP round-trip every bit pattern exactly
+ * (integer conversion is exact; x87 precision control affects only arithmetic, not FILD/FIST). */
+#define AL_FP(fn, body) static T_NOINLINE void fn(void *p, void *o) { __asm__ volatile(body :: "r"(p), "r"(o) : "mm0", "st", "memory"); }
+AL_FP(ld_mmx_movq,  "movq (%0), %%mm0\n\tmovq %%mm0, (%1)\n\temms")
+AL_FP(ld_mmx_paddb, "pxor %%mm0, %%mm0\n\tpaddb (%0), %%mm0\n\tmovq %%mm0, (%1)\n\temms")
+AL_FP(ld_x87_fild16, "filds (%0)\n\tfistps (%1)")
+AL_FP(ld_x87_fild32, "fildl (%0)\n\tfistpl (%1)")
+AL_FP(ld_x87_fild64, "fildll (%0)\n\tfistpll (%1)")
+static const al_io g_ld_mmx_x87[] = {
+    { "mmx_movq", ld_mmx_movq, 8, 8, 0, F_MMX }, { "mmx_paddb_m64", ld_mmx_paddb, 8, 8, 0, F_MMX },
+    { "fild_m16", ld_x87_fild16, 2, 2, 0, F_FPU }, { "fild_m32", ld_x87_fild32, 4, 4, 0, F_FPU },
+    { "fild_m64", ld_x87_fild64, 8, 8, 0, F_FPU },
+};
+AL_FP(st_mmx_movq, "movq (%1), %%mm0\n\tmovq %%mm0, (%0)\n\temms")
+AL_FP(st_x87_fistp64, "fildll (%1)\n\tfistpll (%0)")
+AL_FP(st_x87_fistp32, "fildl (%1)\n\tfistpl (%0)")
+static const al_io g_st_mmx_x87[] = {
+    { "mmx_movq", st_mmx_movq, 8, 0, 0, F_MMX }, { "fistp_m64", st_x87_fistp64, 8, 0, 0, F_FPU },
+    { "fistp_m32", st_x87_fistp32, 4, 0, 0, F_FPU },
+};
+
 static const al_io g_ld_avx[] = {
     { "vmovups_ymm", ld_avx_vmovups_y, 32, 32, 0, F_AVX }, { "vmovdqu_ymm", ld_avx_vmovdqu_y, 32, 32, 0, F_AVX },
     { "vlddqu_ymm", ld_avx_vlddqu_y, 32, 32, 0, F_AVX }, { "vmovdqu_xmm", ld_avx_vmovdqu_x, 16, 32, 0, F_AVX },
@@ -944,6 +1129,41 @@ TEST(unaligned_avx512_stores_all_offsets) {
     al_st_all_offsets(g_st_avx512, T_COUNTOF(g_st_avx512));
 }
 
+TEST(unaligned_mmx_x87_loads_stores_all_offsets) {
+    al_ld_all_offsets(g_ld_mmx_x87, T_COUNTOF(g_ld_mmx_x87));
+    al_st_all_offsets(g_st_mmx_x87, T_COUNTOF(g_st_mmx_x87));
+}
+TEST(unaligned_x87_float_formats_all_offsets) {
+    /* FLD/FSTP m32/m64/m80 at every offset with values that round-trip exactly (normal finite numbers;
+     * loads and stores of the same format are exact regardless of the precision-control field) */
+    static T_ALIGN(64) uint8_t buf[192], out[16];
+    static const double dv[] = { 1.0, -2.5, 3.141592653589793, 1e300, -7.0e-300 };
+    static const float fv[] = { 1.0f, -2.5f, 3.1415927f, 1e30f, -7.0e-30f };
+    static const uint8_t m80[][10] = {   /* 1.0, -pi (full 64-bit mantissa), tiny normal 2^-16256, max finite */
+        { 0, 0, 0, 0, 0, 0, 0, 0x80, 0xFF, 0x3F }, { 0x35, 0xC2, 0x68, 0x21, 0xA2, 0xDA, 0x0F, 0xC9, 0x00, 0xC0 },
+        { 0x01, 0, 0, 0, 0, 0, 0, 0x80, 0x7F, 0x00 }, { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE, 0x7F } };
+    for (int off = 0; off < 64; off++) {
+        uint8_t *p = buf + 64 + off;
+        for (size_t k = 0; k < T_COUNTOF(dv); k++) {
+            memset(buf, 0x5C, sizeof buf); memset(out, 0, sizeof out);
+            memcpy(p, &dv[k], 8);
+            __asm__ volatile("fldl (%0)\n\tfstpl (%1)" :: "r"(p), "r"(out) : "st", "memory");
+            CHECKF(memcmp(out, &dv[k], 8) == 0, "fld/fstp m64 at +%d (value %d)", off, (int)k);
+            memcpy(p, &fv[k], 4);
+            __asm__ volatile("flds (%0)\n\tfstps (%1)" :: "r"(p), "r"(out) : "st", "memory");
+            CHECKF(memcmp(out, &fv[k], 4) == 0, "fld/fstp m32 at +%d (value %d)", off, (int)k);
+        }
+        for (size_t k = 0; k < T_COUNTOF(m80); k++) {
+            memset(buf, 0x5C, sizeof buf); memset(out, 0, sizeof out);
+            /* load from an aligned copy, store unaligned; then load unaligned, store aligned */
+            __asm__ volatile("fldt (%1)\n\tfstpt (%0)" :: "r"(p), "r"(m80[k]) : "st", "memory");
+            CHECKF(memcmp(p, m80[k], 10) == 0, "fstp m80 at +%d (value %d)", off, (int)k);
+            CHECKF(p[-1] == 0x5C && p[10] == 0x5C, "fstp m80 at +%d wrote outside its 10 bytes", off);
+            __asm__ volatile("fldt (%0)\n\tfstpt (%1)" :: "r"(p), "r"(out) : "st", "memory");
+            CHECKF(memcmp(out, m80[k], 10) == 0, "fld m80 at +%d (value %d)", off, (int)k);
+        }
+    }
+}
 /* ---- ALU memory operands without an alignment requirement: unaligned result == aligned result ---- */
 typedef void (*al_op_fn)(const void *p, void *o, const void *init);
 typedef struct { const char *name; al_op_fn fn; int rd, feat; } al_op;
@@ -1248,6 +1468,8 @@ TEST(straddle_committed_gpr_loads_stores) {
     uint8_t *b = al_two_pages(); REQUIRE(b);
     al_ld_straddle(g_ld_gpr, T_COUNTOF(g_ld_gpr), b + PG, "straddle");
     al_st_straddle(g_st_gpr, T_COUNTOF(g_st_gpr), b + PG, "straddle");
+    al_ld_straddle(g_ld_mmx_x87, T_COUNTOF(g_ld_mmx_x87), b + PG, "straddle");
+    al_st_straddle(g_st_mmx_x87, T_COUNTOF(g_st_mmx_x87), b + PG, "straddle");
     VirtualFree(b, 0, MEM_RELEASE);
 }
 TEST(straddle_committed_sse_loads_stores) {
@@ -1336,17 +1558,17 @@ TEST(page_end_exact_accesses_do_not_fault) {
     REQUIRE(end);
     end += PG;   /* first inaccessible byte */
     for (int i = 0; i < PG; i++) end[i - PG] = al_pat((size_t)i);
-    const al_io *lg[] = { g_ld_gpr, g_ld_sse_full, g_ld_sse_part, g_ld_avx, g_ld_avx512 };
-    size_t lc[] = { T_COUNTOF(g_ld_gpr), T_COUNTOF(g_ld_sse_full), T_COUNTOF(g_ld_sse_part), T_COUNTOF(g_ld_avx), T_COUNTOF(g_ld_avx512) };
-    for (int gi = 0; gi < 5; gi++)
+    const al_io *lg[] = { g_ld_gpr, g_ld_sse_full, g_ld_sse_part, g_ld_avx, g_ld_avx512, g_ld_mmx_x87 };
+    size_t lc[] = { T_COUNTOF(g_ld_gpr), T_COUNTOF(g_ld_sse_full), T_COUNTOF(g_ld_sse_part), T_COUNTOF(g_ld_avx), T_COUNTOF(g_ld_avx512), T_COUNTOF(g_ld_mmx_x87) };
+    for (int gi = 0; gi < 6; gi++)
         for (size_t i = 0; i < lc[gi]; i++) {
             const al_io *e = &lg[gi][i];
             if (!cpu_has((t_feature)e->feat)) continue;
             for (int back = e->w; back <= e->w + 3; back++) al_ld_check(e, end - back, "page-end", -back);
         }
-    const al_io *sg[] = { g_st_gpr, g_st_sse, g_st_sse_part, g_st_avx, g_st_avx512 };
-    size_t sc[] = { T_COUNTOF(g_st_gpr), T_COUNTOF(g_st_sse), T_COUNTOF(g_st_sse_part), T_COUNTOF(g_st_avx), T_COUNTOF(g_st_avx512) };
-    for (int gi = 0; gi < 5; gi++)
+    const al_io *sg[] = { g_st_gpr, g_st_sse, g_st_sse_part, g_st_avx, g_st_avx512, g_st_mmx_x87 };
+    size_t sc[] = { T_COUNTOF(g_st_gpr), T_COUNTOF(g_st_sse), T_COUNTOF(g_st_sse_part), T_COUNTOF(g_st_avx), T_COUNTOF(g_st_avx512), T_COUNTOF(g_st_mmx_x87) };
+    for (int gi = 0; gi < 6; gi++)
         for (size_t i = 0; i < sc[gi]; i++) {
             const al_io *e = &sg[gi][i];
             if (!cpu_has((t_feature)e->feat)) continue;
@@ -1361,9 +1583,9 @@ TEST(page_start_after_noaccess_page_accesses_do_not_fault) {
     REQUIRE(VirtualProtect(b, PG, PAGE_NOACCESS, &old));
     uint8_t *st = b + PG;
     for (int i = 0; i < PG; i++) st[i] = al_pat((size_t)i + 5);
-    const al_io *lg[] = { g_ld_gpr, g_ld_sse_full, g_ld_sse_part, g_ld_avx, g_ld_avx512 };
-    size_t lc[] = { T_COUNTOF(g_ld_gpr), T_COUNTOF(g_ld_sse_full), T_COUNTOF(g_ld_sse_part), T_COUNTOF(g_ld_avx), T_COUNTOF(g_ld_avx512) };
-    for (int gi = 0; gi < 5; gi++)
+    const al_io *lg[] = { g_ld_gpr, g_ld_sse_full, g_ld_sse_part, g_ld_avx, g_ld_avx512, g_ld_mmx_x87 };
+    size_t lc[] = { T_COUNTOF(g_ld_gpr), T_COUNTOF(g_ld_sse_full), T_COUNTOF(g_ld_sse_part), T_COUNTOF(g_ld_avx), T_COUNTOF(g_ld_avx512), T_COUNTOF(g_ld_mmx_x87) };
+    for (int gi = 0; gi < 6; gi++)
         for (size_t i = 0; i < lc[gi]; i++) {
             const al_io *e = &lg[gi][i];
             if (!cpu_has((t_feature)e->feat)) continue;
@@ -1412,7 +1634,46 @@ TEST(boundary_guard_page_one_shot) {
     if (cpu_has(F_AVX)) al_expect_boundary("al_avx_vmovdqu_y_ld", "guard");
 }
 
-/* ---- masked accesses: masked-out elements in an inaccessible page must not fault ---- */
+TEST(boundary_noaccess_mmx_movq_load_store) {
+    al_expect_boundary("al_mmx_movq_ld", "noaccess");
+    al_expect_boundary("al_mmx_movq_st", "noaccess");
+}
+/* accesses that START in an inaccessible page and end in an accessible one: the reported address must lie
+ * in the inaccessible (first) part, a load must not change its register, a store must not be "half done"
+ * in a way that is reported as success */
+TEST(boundary_noaccess_below_sse_gpr) {
+    al_expect_boundary("al_movdqu_ld", "noaccess_lo");
+    al_expect_boundary("al_movdqu_st", "noaccess_lo");
+    al_expect_boundary("al_gpr_ld", "noaccess_lo");
+    al_expect_boundary("al_gpr_st", "noaccess_lo");
+    al_expect_boundary("al_movq_ld", "noaccess_lo");
+}
+TEST(boundary_noaccess_below_avx_ymm) {
+    if (!cpu_has(F_AVX)) SKIP("AVX not usable");
+    al_expect_boundary("al_avx_vmovdqu_y_ld", "noaccess_lo");
+    al_expect_boundary("al_avx_vmovdqu_y_st", "noaccess_lo");
+    al_expect_boundary("al_avx_vaddps_y_ld", "noaccess_lo");
+}
+TEST(boundary_noaccess_below_avx512_zmm) {
+    if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
+    al_expect_boundary("al_avx512_vmovdqu64_z_ld", "noaccess_lo");
+    al_expect_boundary("al_avx512_vmovdqu64_z_st", "noaccess_lo");
+}
+/* save areas (correctly aligned) that run into a PAGE_NOACCESS page: a write fault (info0 = 1) whose
+ * address lies inside the area and the inaccessible page. FXSAVE writes bytes [0,288) in 32-bit mode and
+ * [0,416) in 64-bit mode (XMM8-15); XSAVE with RFBM=3 writes the legacy area and XSTATE_BV at [512,520).
+ * A straddle that only reaches bytes the instruction need not write is recorded, not checked. */
+TEST(boundary_noaccess_fxsave_area) {
+#ifdef T_X64
+    al_expect_boundary_ex("al_fxsave", "noaccess", -(512 + 32), 0, 16, 1, 416);
+#else
+    al_expect_boundary_ex("al_fxsave", "noaccess", -(512 + 32), 0, 16, 1, 288);
+#endif
+}
+TEST(boundary_noaccess_xsave_area) { al_expect_boundary_ex("al_xsave", "noaccess", -(576 + 128), 0, 64, 1, 520); }
+TEST(boundary_noaccess_xsavec_area) { al_expect_boundary_ex("al_xsavec", "noaccess", -(576 + 128), 0, 64, 1, 520); }
+
+
 static void al_expect_maskpage(const char *stub, int lanes, int hard) {
     const al_stub *s = al_find_stub(stub);
     REQUIRE(s);
@@ -1451,6 +1712,43 @@ TEST(masked_avx_vmaskmovps_load_page_end) {
 TEST(masked_avx_vmaskmovps_store_page_end) {
     if (!cpu_has(F_AVX)) SKIP("AVX not usable");
     al_expect_maskpage("al_avx_vmaskmovps_st", 8, cpu()->is_intel);
+}
+TEST(masked_avx2_vpmaskmovd_load_page_end) {
+    if (!cpu_has(F_AVX2)) SKIP("AVX2 not usable");
+    al_expect_maskpage("al_avx2_vpmaskmovd_ld", 8, cpu()->is_intel);
+}
+TEST(masked_avx2_vpmaskmovd_store_page_end) {
+    if (!cpu_has(F_AVX2)) SKIP("AVX2 not usable");
+    al_expect_maskpage("al_avx2_vpmaskmovd_st", 8, cpu()->is_intel);
+}
+TEST(masked_avx2_gather_fault_restart) {
+    /* a gather whose elements reach into a PAGE_NOACCESS page: precise fault, the CONTEXT shows the partial
+     * progress (mask/destination), and resuming after the page is fixed completes the gather */
+    if (!cpu_has(F_AVX2)) SKIP("AVX2 not usable");
+    t_child_run("al_gatherfault", "0xF0 0x80 0x01 0xAA 0xFF 0x10 0x08 0x0E", 20000, &g_cr);
+    al_child_ok("al_gatherfault");
+    int rows = 0, hard = cpu()->is_intel, no_xs = 0, soft_bad = 0;
+    for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
+        unsigned bad; int f, ymmh, below, flset, fin; unsigned long code; unsigned long long i0; long long i1rel;
+        if (l[0] != 'G' || sscanf(l + 2, "%u %d %lx %llx %lld %d %d %d %d", &bad, &f, &code, &i0, &i1rel, &ymmh, &below, &flset, &fin) != 9) continue;
+        rows++;
+        CHECKF(f == 1, "gather bad=0x%02x: %d faults, want exactly 1", bad, f);
+        if (f != 1) continue;
+        CHECKF(code == 0xC0000005ul && i0 == 0, "gather bad=0x%02x: code 0x%08lx info0 %llu, want read access violation", bad, code, i0);
+        int inlane = 0;
+        for (int i = 0; i < 8; i++) if ((bad >> i & 1) && i1rel >= 64 + 4 * i && i1rel < 68 + 4 * i) inlane = 1;
+        CHECKF(inlane, "gather bad=0x%02x: fault address ref%+lld is not inside an element in the inaccessible page", bad, i1rel);
+        CHECKF(fin == 1, "gather bad=0x%02x: after the page was made accessible and execution continued, destination/mask are wrong", bad);
+        if (!ymmh) no_xs++;
+        if (below >= 0 || flset >= 0) {
+            int ok = below != 0 && flset != 0;
+            if (hard) CHECKF(ok, "gather bad=0x%02x: exception CONTEXT does not show the right-to-left progress (lower elements done=%d, faulting element mask set=%d)", bad, below, flset);
+            else if (!ok) soft_bad++;
+        }
+    }
+    CHECK_EQ(rows, 8);
+    if (no_xs) t_note("%d gather exceptions had no YMM upper halves in the CONTEXT (no CONTEXT_XSTATE); lanes 4-7 not inspected", no_xs);
+    if (soft_bad) t_note("non-Intel CPU: %d gathers did not show Intel's right-to-left progress in the CONTEXT (vendor-specific)", soft_bad);
 }
 TEST(masked_avx512_vmovdqu32_load_page_end) {
     if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
@@ -1624,8 +1922,9 @@ TEST(atomic_lock_on_misaligned_within_cacheline) {
     HANDLE th[4]; int nt = 0;
     for (int i = 0; i < 4; i++) { th[nt] = CreateThread(NULL, 0, al_atomic_worker, NULL, 0, NULL); if (th[nt]) nt++; }
     if (!nt) SKIP("CreateThread failed");
-    WaitForMultipleObjects((DWORD)nt, th, TRUE, 20000);
+    DWORD wr = WaitForMultipleObjects((DWORD)nt, th, TRUE, 20000);
     for (int i = 0; i < nt; i++) CloseHandle(th[i]);
+    REQUIREF(wr < WAIT_OBJECT_0 + (DWORD)nt, "atomic workers did not finish (wait 0x%lx)", wr);
     CHECK_EQ(*g_atom32, 20000u * (unsigned)nt);
     CHECK_EQ(*g_atom64, 20000ull * (unsigned)nt);
 }
@@ -1793,6 +2092,51 @@ TEST(stack_alignment_fls_callback) {
     FlsFree(idx);
     if (!g_cb_hits) { t_note("FlsFree did not invoke the callback for the current fiber"); return; }
     al_check_cb("fls_callback");
+}
+
+static DWORD WINAPI al_nop_thread(void *a) { (void)a; return 0; }
+TEST(stack_alignment_tls_callback) {
+    /* the loader calls TLS callbacks on process and thread attach/detach (histogram of RSP % 16 at entry) */
+    HANDLE h = CreateThread(NULL, 0, al_nop_thread, NULL, 0, NULL);
+    if (h) { WaitForSingleObject(h, 10000); CloseHandle(h); }
+    LONG total = 0, bad = 0;
+    char hist[160]; int hl = 0;
+    for (int i = 0; i < 16; i++) {
+        LONG c = al_tls_hist[i];
+        total += c;
+        if (c && hl < (int)sizeof hist - 16) hl += snprintf(hist + hl, sizeof hist - (size_t)hl, "%d:%ld ", i, c);
+#ifdef T_X64
+        if (i != 8) bad += c;
+#else
+        if (i % 4) bad += c;
+#endif
+    }
+    t_info("tls_sp_mod16_histogram", "%s", hl ? hist : "(none)");
+    if (!total) SKIP("TLS callback never invoked (no TLS directory processing)");
+    CHECKF(bad == 0, "%ld of %ld TLS callback entries with misaligned stack (%s)", bad, total, hist);
+}
+TEST(context_misaligned_buffer_info) {
+    /* GetThreadContext into a CONTEXT that violates DECLSPEC_ALIGN(16) (x64): no documented error code, so
+     * only record the result; it must never write outside the CONTEXT */
+    t_child_run("al_ctxmisalign", NULL, 15000, &g_cr);
+    if (g_cr.started && g_cr.exc_code) {
+        t_info("result", "child died of exception 0x%08lx", g_cr.exc_code);
+        t_note("GetThreadContext on a misaligned CONTEXT raised 0x%08lx", g_cr.exc_code);
+        return;
+    }
+    al_child_ok("al_ctxmisalign");
+    int rows = 0;
+    for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
+        int off, ok, outside, ipok; unsigned long err;
+        if (strncmp(l, "CM ", 3) || sscanf(l + 3, "%d %d %lu %d %d", &off, &ok, &err, &outside, &ipok) != 5) continue;
+        rows++;
+        char k[32]; snprintf(k, sizeof k, "offset_%d", off);
+        t_info(k, "ok=%d error=%lu", ok, err);
+        CHECKF(!outside, "GetThreadContext(CONTEXT at +%d) wrote outside the CONTEXT", off);
+        if (off == 0) CHECKF(ok == 1 && ipok == 1, "GetThreadContext on an aligned CONTEXT failed (error %lu)", err);
+        else if (ok) CHECKF(ipok == 1, "GetThreadContext(CONTEXT at +%d) succeeded with empty RIP/RSP", off);
+    }
+    CHECK_EQ(rows, 4);
 }
 
 /* ======================================================================================
