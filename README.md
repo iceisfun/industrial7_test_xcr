@@ -181,7 +181,7 @@ XFAIL with SDE's message (`t_sde_killed_child`). Known artifacts of SDE 10.13 on
 | `-nhm`: F3 0F BD / F3 0F BC | run as the host's LZCNT/TZCNT instead of BSR/BSF |
 | reserved FXSAVE bytes in SetThreadContext | Pin asserts (case not run) |
 | SuspendThread/GetThreadContext controller plus cross-thread APCs (xstate_stress `ctl_*`) | the process hangs inside Pin (cases with APC injection not run); a controller can stay blocked past its stop timeout |
-| more than 256 threads in a 32-bit process | Pin asserts in CreateThreadData (thread_xstate `*_n1024` not run) |
+| more than 256 threads in a 32-bit process | Pin asserts in CreateThreadData (thread_xstate `*_n1024`, simd_jpeg `mt_decode_1024_*` not run) |
 
 ## Benchmarks
 

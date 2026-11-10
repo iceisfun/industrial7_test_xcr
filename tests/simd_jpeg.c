@@ -1130,6 +1130,10 @@ static void sj_mt_case(const uint8_t *d, size_t n, uint64_t want_int, int nthrea
 /* pin_cpu >= 0: every worker on that one logical CPU, so the OS must context-switch between threads that
  * are in the middle of AVX2, SSE2 and scalar/x87 decodes on the same core */
 static void sj_mt_case_ex(const uint8_t *d, size_t n, uint64_t want_int, int nthreads, int iters, int pin_cpu) {
+#ifdef T_X86
+    if (t_sde_model() && nthreads > 256)   /* emulator artifact, README "Emulated validation"; not run: it kills the process */
+        XFAIL("Intel SDE (%s): 32-bit Pin cannot allocate its per-thread data for %d threads (Pin assertion)", t_sde_model(), nthreads);
+#endif
     static sj_mt_shared sh;
     memset((void *)&sh, 0, sizeof sh);
     sh.d = d; sh.n = n; sh.want_int = want_int; sh.iters = iters;
