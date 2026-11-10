@@ -28,6 +28,13 @@
  *      the initial one (every callback, ours included, restores what it changed: ABI), keep their own
  *      register state, and never disturb the submitting thread's nonvolatile state.
  *
+ *   5. Observers and asynchronous delivery: GetThreadContext of a SUSPENDED spinning worker must show that
+ *      worker's own XMM / x87 / MMX values, never another thread's (and the worker's registers survive
+ *      the suspend/get/resume); the whole MXCSR, sticky status flags included, survives preemption;
+ *      alertable kernel-object waits (WaitForSingleObjectEx) deliver APCs like SleepEx; Windows 11
+ *      special user APCs (QueueUserAPC2) interrupt a NON-alertable spin and must restore its legacy
+ *      state exactly (extended YMM/ZMM state across them is INFO only: not documented).
+ *
  * Patterns: t_pattern_word(tag, reg, word) - every qword identifies (tag, reg, word), so a leaked value
  * is decoded in the failure notes ("pattern of worker 17 (phase 2)"). Tags change every iteration
  * (4 phases) so a stale restore of the thread's own older state is detected too.
@@ -475,12 +482,13 @@ static holder *holders_alloc(int k) {
  * the isolation engine
  * ==================================================================================== */
 enum { OP_NONE, OP_SLEEP0, OP_SWITCH, OP_EVENT_RING, OP_MUTEX, OP_SEM, OP_APC, OP_CONDVAR, OP_SRW, OP_CRITSEC,
-       OP_WAITADDR, OP_PIPE, OP_TIMER, OP_WFMO, OP_SOAW, OP_MIGRATE, OP_SYNCBAR, OP_CBAR, OP_COUNT };
+       OP_WAITADDR, OP_PIPE, OP_TIMER, OP_WFMO, OP_SOAW, OP_MIGRATE, OP_SYNCBAR, OP_CBAR, OP_APC_WAITEX, OP_COUNT };
 static const char *const g_opname[OP_COUNT] = {
     "preemption only", "Sleep(0)", "SwitchToThread", "event ring wait", "mutex wait", "semaphore wait",
     "SleepEx alertable + APC", "SleepConditionVariableSRW", "SRW lock", "critical section", "WaitOnAddress",
     "pipe ReadFile", "waitable timer wait", "WaitForMultipleObjects", "SignalObjectAndWait",
-    "SetThreadAffinityMask migration", "EnterSynchronizationBarrier", "SRW/condvar barrier" };
+    "SetThreadAffinityMask migration", "EnterSynchronizationBarrier", "SRW/condvar barrier",
+    "WaitForSingleObjectEx alertable + APC" };
 enum { PIN_NONE, PIN_ONE, PIN_SPREAD };
 enum { RF_VEC, RF_XMM_PEEK, RF_X87, RF_MMX, RF_MIX };
 
@@ -489,6 +497,7 @@ typedef VOID (WINAPI *wba_t)(PVOID);
 typedef BOOL (WINAPI *isb_t)(void *, LONG, LONG);
 typedef BOOL (WINAPI *esb_t)(void *, DWORD);
 typedef BOOL (WINAPI *dsb_t)(void *);
+typedef BOOL (WINAPI *qapc2_t)(PAPCFUNC, HANDLE, ULONG_PTR, int);   /* Windows 11: QueueUserAPC2 */
 
 typedef struct cbar { SRWLOCK l; CONDITION_VARIABLE cv; LONG count, n, gen, broken; } cbar;
 
@@ -503,15 +512,16 @@ typedef struct worker {
     uint32_t cur_tag;
     unsigned cur_mx; unsigned short cur_cw;
     unsigned long long iters, spins, bad_spin, bad_abi, bad_leak, bad_mx, bad_cw, vol_changed, timeouts,
-                       apc_runs, cpu_mismatch;
+                       apc_runs, cpu_mismatch, bad_mxflags;
     t_f80 xin[8], xout[8];
     uint64_t mmin[8], mmout[8];
 } worker;
 
 typedef struct scen {
     vdom d;
-    int op, n, pin, rf, kind, prio_mix, susp, mig_ext;
+    int op, n, pin, rf, kind, prio_mix, susp, mig_ext, getctx, mxflags;
     unsigned spin;
+    unsigned long long ctx_n, ctx_fail, ctx_own, ctx_leak;
     int fixed_iters;
     DWORD ms;
     volatile LONG stop, abort;
@@ -523,7 +533,7 @@ typedef struct scen {
     volatile LONG inside, readers, writer, excl_viol, api_fail, gen, apc_wrong, bar_viol, aff_fail, hung, resume_fail;
     __attribute__((aligned(16))) unsigned char syncbar[64];
     cbar cb;
-    woa_t woa; wba_t wba; esb_t esb;
+    woa_t woa; wba_t wba; esb_t esb; dsb_t dsb; int syncbar_init;
     DWORD_PTR cpus[64]; int ncpu;
     double secs;
     unsigned long long susp_ops, mig_ops;
@@ -584,6 +594,16 @@ static void op_apc(void *p) {
     if (!QueueUserAPC(apc_fn, nx->h, (ULONG_PTR)nx) && !sc->stop) InterlockedIncrement(&sc->api_fail);
     DWORD r = SleepEx(50, TRUE);
     if (r == 0) w->timeouts++;
+    else if (r != WAIT_IO_COMPLETION) InterlockedIncrement(&sc->api_fail);
+}
+/* same, but the alertable wait is a kernel object wait (never-signalled event): the APC is delivered from
+ * inside NtWaitForSingleObject and the wait returns WAIT_IO_COMPLETION (WaitForSingleObjectEx docs). */
+static void op_apc_waitex(void *p) {
+    worker *w = (worker *)p; scen *sc = w->sc;
+    worker *nx = &sc->w[(w->idx + 1) % sc->n];
+    if (!QueueUserAPC(apc_fn, nx->h, (ULONG_PTR)nx) && !sc->stop) InterlockedIncrement(&sc->api_fail);
+    DWORD r = WaitForSingleObjectEx(sc->ev_never, 50, TRUE);
+    if (r == WAIT_TIMEOUT) w->timeouts++;
     else if (r != WAIT_IO_COMPLETION) InterlockedIncrement(&sc->api_fail);
 }
 static void op_condvar(void *p) {
@@ -698,7 +718,7 @@ static void op_cbar(void *p) {
 }
 static void (*const g_ops[OP_COUNT])(void *) = {
     NULL, op_sleep0, op_switch, op_event_ring, op_mutex, op_sem, op_apc, op_condvar, op_srw, op_critsec,
-    op_waitaddr, op_pipe, op_timer, op_wfmo, op_soaw, op_migrate, op_syncbar, op_cbar };
+    op_waitaddr, op_pipe, op_timer, op_wfmo, op_soaw, op_migrate, op_syncbar, op_cbar, op_apc_waitex };
 
 static void make_f80(t_f80 *out, uint32_t tag) {
     for (int i = 0; i < 8; i++) {
@@ -735,7 +755,24 @@ static void worker_iter(worker *w, uint32_t tag) {
         int kind = w->rf == RF_VEC ? w->kind : T_VK_XMM;
         t_vregs_pattern(&w->in, kind, tag);
         if (sc->spin) {
+            /* mxflags: the sticky MXCSR status flags (5:0) are thread state too. Across a GPR-only spin
+             * (nothing but preemption in between, no SSE arithmetic) the WHOLE MXCSR must survive. */
+            unsigned fmx = 0;
+            if (sc->mxflags) {
+                fmx = w->cur_mx | ((((unsigned)w->idx * 7u + (unsigned)w->iters) % 63u) + 1u);
+                t_set_mxcsr(fmx);
+            }
             t_vregs_spin(kind, &w->in, &w->out, stop, sc->spin);
+            if (sc->mxflags) {
+                unsigned g = t_get_mxcsr();
+                t_set_mxcsr(w->cur_mx);
+                if (g != fmx) {
+                    w->bad_mxflags++;
+                    if (InterlockedIncrement(&sc->d.reported) <= REPORT_MAX)
+                        t_check(0, __FILE__, __LINE__, "whole MXCSR (incl. status flags) survives preemption",
+                                "worker %d: MXCSR 0x%04x after spin, loaded 0x%04x", w->idx, g, fmx);
+                }
+            }
             w->spins++;
             snprintf(who, sizeof who, "worker %d after preemptible spin", w->idx);
             if (verify_full(&sc->d, who, kind, &w->out, &w->in)) w->bad_spin++;
@@ -805,6 +842,47 @@ static DWORD WINAPI worker_main(void *p) {
     return 0;
 }
 
+/* GetThreadContext of a SUSPENDED worker (GetThreadContext also waits until the asynchronous suspension
+ * is complete). The legacy XMM image in the context must be the worker's own register state: never another
+ * thread's pattern (e.g. the controller's, whose pattern is live while it calls GetThreadContext).
+ * x64: CONTEXT.FltSave.XmmRegisters[16]; x86: CONTEXT_EXTENDED_REGISTERS = FXSAVE image, XMM0 at byte 160.
+ * Only called from the controller thread (static buffer). */
+static void ctx_probe(scen *sc, worker *w) {
+    static CONTEXT cx __attribute__((aligned(64)));
+    memset(&cx, 0, sizeof cx);
+#ifdef T_X64
+    cx.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT;
+#else
+    cx.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
+#endif
+    if (!GetThreadContext(w->h, &cx)) { sc->ctx_fail++; return; }
+    sc->ctx_n++;
+#ifdef T_X64
+    const uint8_t *fx = (const uint8_t *)&cx.FltSave; int nx = 16;
+#else
+    const uint8_t *fx = (const uint8_t *)cx.ExtendedRegisters; int nx = 8;
+#endif
+    const uint8_t *x = fx + 160;
+    int own = 0;
+    /* ST0-7 / MM0-7 slots (FXSAVE bytes 32..159; MMX and x87-mantissa patterns of RF_MIX workers) */
+    for (int i = 0; i < 8; i++) {
+        uint64_t fv = 0; uint32_t ft = 0; size_t fo = 0;
+        int f = scan_foreign(&sc->d, w->idx, w->cur_tag, fx + 32 + 16 * i, 8, &fv, &ft, &fo);
+        if (f) { sc->ctx_leak += (unsigned long long)f; report_leak(&sc->d, "GetThreadContext(suspended worker)", "st/mm", i, fv, ft, fo); }
+    }
+    for (int i = 0; i < nx; i++) {
+        uint64_t fv = 0; uint32_t ft = 0; size_t fo = 0;
+        int f = scan_foreign(&sc->d, w->idx, w->cur_tag, x + 16 * i, 16, &fv, &ft, &fo);
+        if (f) { sc->ctx_leak += (unsigned long long)f; report_leak(&sc->d, "GetThreadContext(suspended worker)", "xmm", i, fv, ft, fo); }
+        for (int q = 0; q < 2; q++) {
+            uint64_t v; memcpy(&v, x + 16 * i + 8 * q, 8);
+            uint32_t tg, r, wd;
+            if (qw_patternlike(v) && t_pattern_explain(v, sc->d.max_tag, &tg, &r, &wd) && dom_own(&sc->d, w->idx, w->cur_tag, tg)) own++;
+        }
+    }
+    if (own) sc->ctx_own++;
+}
+
 /* runs on the case thread INSIDE t_vregs_call (main pattern live in the registers): no SKIP/REQUIRE here */
 static void run_body(void *p) {
     scen *sc = (scen *)p;
@@ -859,6 +937,7 @@ static void run_body(void *p) {
                 for (int k = 0; k < 16 && k < sc->n; k++, rot++) {
                     worker *w = &sc->w[rot % (unsigned)sc->n];
                     if (SuspendThread(w->h) == (DWORD)-1) { InterlockedIncrement(&sc->api_fail); continue; }
+                    if (sc->getctx) ctx_probe(sc, w);
                     SwitchToThread();
                     if (ResumeThread(w->h) == (DWORD)-1) InterlockedIncrement(&sc->resume_fail);
                     sc->susp_ops++;
@@ -886,7 +965,7 @@ static void run_body(void *p) {
 }
 
 typedef struct cfg {
-    int op, n, pin, rf, prio_mix, susp, mig_ext, fixed_iters;
+    int op, n, pin, rf, prio_mix, susp, mig_ext, fixed_iters, getctx, mxflags;
     unsigned spin;
 } cfg;
 
@@ -902,6 +981,8 @@ static void scen_free(scen *sc) {
     if (sc->mutex) CloseHandle(sc->mutex);
     if (sc->sem) CloseHandle(sc->sem);
     if (sc->cs_init) DeleteCriticalSection(&sc->cs);
+    if (sc->syncbar_init && sc->dsb) sc->dsb(sc->syncbar);   /* releases the barrier's internal events */
+    sc->syncbar_init = 0;
 }
 
 static void run_cfg(const cfg *c) {
@@ -911,6 +992,7 @@ static void run_cfg(const cfg *c) {
     if (!cpu_has(F_SSE2)) SKIP("SSE2 not usable");
     sc->op = c->op; sc->n = c->n; sc->pin = c->pin; sc->rf = c->rf; sc->prio_mix = c->prio_mix;
     sc->susp = c->susp; sc->mig_ext = c->mig_ext; sc->fixed_iters = c->fixed_iters;
+    sc->getctx = c->getctx; sc->mxflags = c->mxflags;
     sc->spin = c->spin ? c->spin : (c->op == OP_NONE ? 30000u : 3000u);
     sc->ms = dur_ms(c->n);
     sc->kind = best_kind();
@@ -929,8 +1011,10 @@ static void run_cfg(const cfg *c) {
     if (c->op == OP_SYNCBAR) {
         isb_t isb = (isb_t)t_proc("kernel32.dll", "InitializeSynchronizationBarrier");
         sc->esb = (esb_t)t_proc("kernel32.dll", "EnterSynchronizationBarrier");
-        if (!isb || !sc->esb) SKIP("SynchronizationBarrier API not exported (pre-Windows 8)");
+        sc->dsb = (dsb_t)t_proc("kernel32.dll", "DeleteSynchronizationBarrier");
+        if (!isb || !sc->esb || !sc->dsb) SKIP("SynchronizationBarrier API not exported (pre-Windows 8)");
         REQUIREF(isb(sc->syncbar, c->n, -1), "InitializeSynchronizationBarrier err %lu", GetLastError());
+        sc->syncbar_init = 1;
     }
     if (c->op == OP_CBAR) { InitializeSRWLock(&sc->cb.l); InitializeConditionVariable(&sc->cb.cv); sc->cb.n = c->n; }
 
@@ -950,6 +1034,7 @@ static void run_cfg(const cfg *c) {
         sc->ev_never = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (!sc->ev || !sc->ev_never) fail_res = 1;
     }
+    if (c->op == OP_APC_WAITEX && !(sc->ev_never = CreateEventW(NULL, TRUE, FALSE, NULL))) fail_res = 1;
     if (c->op == OP_MUTEX && !(sc->mutex = CreateMutexW(NULL, FALSE, NULL))) fail_res = 1;
     if (c->op == OP_SEM) {
         sc->sem_cap = c->n / 4 > 1 ? c->n / 4 : 1;
@@ -988,19 +1073,22 @@ static void run_cfg(const cfg *c) {
 #ifdef T_X64
     t_vregs_check(&mout, &min_, T_VK_XMM, 6, 15, "main thread (nonvolatile) across the whole scenario");
 #endif
-    {
+    if (!sc->getctx) {
+        /* (getctx: the controller itself copies the workers' context images through its own volatile
+         * registers, so worker values there are expected; its XMM6-15 are still checked above) */
         unsigned long long ml = 0, ma = 0, mv = 0;
         verify_call(&sc->d, "main thread", sc->kind, -1, sc->d.main_tag, &mout, &min_, &ma, &ml, &mv);
         CHECKF(ml == 0, "main thread registers hold %llu foreign pattern qwords", ml);
     }
 
-    unsigned long long it = 0, bs = 0, ba = 0, bl = 0, bm = 0, bc = 0, vc = 0, to = 0, ar = 0, cm = 0, sp = 0, minit = ~0ull;
+    unsigned long long it = 0, bs = 0, ba = 0, bl = 0, bm = 0, bc = 0, vc = 0, to = 0, ar = 0, cm = 0, sp = 0, bf = 0, minit = ~0ull;
     for (int i = 0; i < sc->n; i++) {
         worker *w = &sc->w[i];
-        CHECKF(w->finished && !w->bad_spin && !w->bad_abi && !w->bad_leak && !w->bad_mx && !w->bad_cw,
-               "worker %d: finished=%ld iters=%llu spin_bad=%llu abi_bad=%llu leaked=%llu mxcsr_bad=%llu fcw_bad=%llu",
-               i, (long)w->finished, w->iters, w->bad_spin, w->bad_abi, w->bad_leak, w->bad_mx, w->bad_cw);
+        CHECKF(w->finished && !w->bad_spin && !w->bad_abi && !w->bad_leak && !w->bad_mx && !w->bad_cw && !w->bad_mxflags,
+               "worker %d: finished=%ld iters=%llu spin_bad=%llu abi_bad=%llu leaked=%llu mxcsr_bad=%llu fcw_bad=%llu mxcsr_flags_bad=%llu",
+               i, (long)w->finished, w->iters, w->bad_spin, w->bad_abi, w->bad_leak, w->bad_mx, w->bad_cw, w->bad_mxflags);
         it += w->iters; bs += w->bad_spin; ba += w->bad_abi; bl += w->bad_leak; bm += w->bad_mx; bc += w->bad_cw;
+        bf += w->bad_mxflags;
         vc += w->vol_changed; to += w->timeouts; ar += w->apc_runs; cm += w->cpu_mismatch; sp += w->spins;
         if (w->iters < minit) minit = w->iters;
     }
@@ -1015,7 +1103,17 @@ static void run_cfg(const cfg *c) {
     CHECKF(sc->aff_fail == 0, "%ld SetThreadAffinityMask failures", (long)sc->aff_fail);
     if (c->op == OP_MUTEX || c->op == OP_SEM || c->op == OP_CONDVAR || c->op == OP_SRW || c->op == OP_CRITSEC)
         CHECKF(sc->excl_viol == 0, "%ld mutual-exclusion violations in %s", (long)sc->excl_viol, g_opname[c->op]);
-    if (c->op == OP_APC) {
+    if (sc->mxflags) CHECKF(bf == 0, "%llu preemptible spins changed the MXCSR status flags", bf);
+    if (sc->getctx) {
+        CHECKF(sc->ctx_fail == 0, "GetThreadContext of a suspended worker failed %llu times", sc->ctx_fail);
+        CHECKF(sc->ctx_leak == 0, "%llu XMM qwords in GetThreadContext results held another thread's pattern", sc->ctx_leak);
+        /* method sanity: workers spend nearly all their time inside the spin with the pattern loaded */
+        if (sc->ctx_n >= 50)
+            CHECKF(sc->ctx_own > 0, "no GetThreadContext result (of %llu) showed the worker's own XMM pattern", sc->ctx_n);
+        t_info("contexts_captured", "%llu", sc->ctx_n);
+        t_info("contexts_with_own_pattern", "%llu", sc->ctx_own);
+    }
+    if (c->op == OP_APC || c->op == OP_APC_WAITEX) {
         CHECKF(sc->apc_wrong == 0, "%ld APCs ran on a thread other than the target", (long)sc->apc_wrong);
         CHECKF(ar > 0, "no APC was delivered during alertable SleepEx");
         t_info("apc_runs", "%llu", ar);
@@ -1247,6 +1345,175 @@ TEST(init_new_thread_after_terminate_spinning) {
     capstats_report(&s, "after TerminateThread");
 }
 
+TEST(init_new_thread_create_remote_thread_self) {
+    /* Same contract through the other documented creation path: CreateRemoteThreadEx on the current
+     * process (kernelbase builds the initial context itself, then NtCreateThreadEx). The creator runs
+     * with a non-default FP environment. */
+    if (!cpu_has(F_SSE2)) SKIP("SSE2 not usable");
+    static vdom d; memset((void *)&d, 0, sizeof d); d.max_tag = 64;
+    int kind = best_kind();
+    capstats s; memset(&s, 0, sizeof s);
+    for (unsigned v = 0; v < 16; v++) {
+        cap *c = cap_new(); REQUIRE(c);
+        unsigned pmx = mxcsr_variant(v + 1) | 0x3Fu; unsigned short pcw = cw_variant(v + 2);
+        t_set_mxcsr(pmx); t_set_x87_cw(pcw);
+        DWORD tid = 0;
+        HANDLE h = CreateRemoteThreadEx(GetCurrentProcess(), NULL, TX_STACK, cap_entry(kind), c,
+                                        STACK_SIZE_PARAM_IS_A_RESERVATION, NULL, &tid);
+        DWORD e = GetLastError();
+        DWORD w = h ? WaitForSingleObject(h, 10000) : WAIT_FAILED;
+        unsigned mx2 = t_get_mxcsr(); unsigned short cw2 = t_get_x87_cw();
+        t_set_mxcsr(MX_DEFAULT); t_set_x87_cw(CW_DEFAULT);
+        if (!h) { _aligned_free(c); SKIP("CreateRemoteThreadEx(self) failed (err %lu)", e); }
+        DWORD ec = 0; GetExitCodeThread(h, &ec);
+        CloseHandle(h);
+        CHECKF(w == WAIT_OBJECT_0 && ec == 0x600Du, "remote-created thread #%u: wait 0x%lx exit code 0x%lx", v, w, ec);
+        CHECKF(((mx2 ^ pmx) & MX_CTRL) == 0 && cw2 == pcw, "creator FP env changed: MXCSR 0x%04x (0x%04x) FCW 0x%04x (0x%04x)",
+               mx2, pmx, cw2, pcw);
+        char lab[64]; snprintf(lab, sizeof lab, "CreateRemoteThreadEx thread #%u", v);
+        cap_analyse(c, &d, kind, &s, lab);
+        _aligned_free(c);
+    }
+    capstats_report(&s, "CreateRemoteThreadEx(self)");
+}
+
+/* ======================================================================================
+ * 1b. special user-mode APC (Windows 11 QueueUserAPC2 + QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC):
+ *     delivered ASYNCHRONOUSLY to a thread that is not alertable - here a thread in the middle of a
+ *     GPR-only spin with live patterns. The APC routine loads its own pattern into every register.
+ *     Hard: the interrupted thread's integer-visible legacy state (XMM0-15 low 128 bits on x64,
+ *     XMM0-7 on x86, MXCSR, x87 CW) is back exactly, no register ever holds another thread's pattern,
+ *     the APC runs on its target. Upper YMM/ZMM bits and XMM16-31/k: Microsoft documents nothing
+ *     specific for asynchronous APCs, so a loss is recorded as INFO (a FOREIGN value is still a FAIL).
+ * ==================================================================================== */
+typedef struct sapc {
+    t_vregs in, out, ain, aout;
+    vdom *d;
+    int idx, kind;
+    HANDLE h; DWORD tid;
+    volatile LONG *stop;
+    volatile LONG apc_runs, apc_wrong, apc_bad;
+    unsigned long long chunks, bad_low, bad_ext, bad_leak, bad_env, ext_apc_value;
+    unsigned mx; unsigned short cw;
+} sapc;
+static void CALLBACK sapc_fn(ULONG_PTR p) {
+    sapc *s = (sapc *)p;
+    if (GetCurrentThreadId() != s->tid) { InterlockedIncrement(&s->apc_wrong); return; }
+    unsigned mx = t_get_mxcsr(); unsigned short cw = t_get_x87_cw();
+    t_set_mxcsr(mxcsr_variant((unsigned)s->idx + 9u)); t_set_x87_cw(cw_variant((unsigned)s->idx + 4u));
+    t_vregs_spin(s->kind, &s->ain, &s->aout, NULL, 50);
+    int n = t_vregs_count(s->kind);
+    for (int i = 0; i < n; i++) if (memcmp(s->ain.v[i], s->aout.v[i], (size_t)s->kind)) { InterlockedIncrement(&s->apc_bad); break; }
+    t_set_mxcsr(mx); t_set_x87_cw(cw);
+    InterlockedIncrement(&s->apc_runs);
+}
+static DWORD WINAPI sapc_main(void *p) {
+    sapc *s = (sapc *)p;
+    t_set_mxcsr(s->mx); t_set_x87_cw(s->cw);
+    unsigned n = (unsigned)s->d->eng_n;
+    int nr = t_vregs_count(s->kind);
+    for (unsigned long long it = 0; !*s->stop; it++) {
+        uint32_t tag = 1u + (uint32_t)s->idx + n * (uint32_t)(it & 3);
+        t_vregs_pattern(&s->in, s->kind, tag);
+        t_vregs_spin(s->kind, &s->in, &s->out, s->stop, 20000);
+        if (((t_get_mxcsr() ^ s->mx) & MX_CTRL) || t_get_x87_cw() != s->cw) {
+            s->bad_env++;
+            t_set_mxcsr(s->mx); t_set_x87_cw(s->cw);
+        }
+        s->chunks++;
+        for (int i = 0; i < nr; i++) {
+            uint64_t fv = 0; uint32_t ft = 0; size_t fo = 0;
+            int f = scan_foreign(s->d, s->idx, tag, s->out.v[i], (size_t)s->kind, &fv, &ft, &fo);
+            if (f) { s->bad_leak += (unsigned long long)f; report_leak(s->d, "spinner interrupted by special APCs", kind_name(s->kind), i, fv, ft, fo); }
+            int legacy = i < T_NXMM;            /* XMM0-15 (x64) / XMM0-7 (x86): in every CONTEXT */
+            if (legacy && memcmp(s->out.v[i], s->in.v[i], 16)) {
+                s->bad_low++;
+                report_reg(s->d, "spinner interrupted by special APCs", "xmm", i, s->out.v[i], s->in.v[i], 16);
+            } else if (memcmp(s->out.v[i], s->in.v[i], (size_t)s->kind)) {
+                s->bad_ext++;
+                uint64_t v; memcpy(&v, s->out.v[i] + (legacy ? 16 : 0), 8);
+                uint32_t tg, r, wd;
+                if (t_pattern_explain(v, s->d->max_tag, &tg, &r, &wd) && tg == 1u + 4u * n + (uint32_t)s->idx) s->ext_apc_value++;
+            }
+        }
+        if (s->kind == T_VK_ZMM) {
+            uint64_t m = cpu_has(F_AVX512BW) ? ~0ull : 0xFFFFull;
+            for (int i = 0; i < 8; i++) if ((s->out.k[i] ^ s->in.k[i]) & m) s->bad_ext++;
+        }
+    }
+    t_set_mxcsr(MX_DEFAULT); t_set_x87_cw(CW_DEFAULT);
+    return 0;
+}
+TEST(special_user_apc_async_interrupt) {
+    if (!cpu_has(F_SSE2)) SKIP("SSE2 not usable");
+    qapc2_t q2 = (qapc2_t)t_proc("kernel32.dll", "QueueUserAPC2");
+    if (!q2) q2 = (qapc2_t)t_proc("kernelbase.dll", "QueueUserAPC2");
+    if (!q2) SKIP("QueueUserAPC2 not exported (special user APCs need Windows 11)");
+    int kind = best_kind();
+    DWORD_PTR cpus[64]; int ncpu = cpu_masks(cpus, 64); if (ncpu < 1) ncpu = 1;
+    int k = ncpu + 1; if (k < 2) k = 2; if (k > 8) k = 8;
+    static vdom d; memset((void *)&d, 0, sizeof d);
+    d.eng_n = (uint32_t)k; d.main_tag = 5u * (uint32_t)k + 1u; d.max_tag = d.main_tag + 1u;
+    sapc *ss = (sapc *)_aligned_malloc(sizeof(sapc) * (size_t)k, 64); REQUIRE(ss);
+    memset(ss, 0, sizeof(sapc) * (size_t)k);
+    static volatile LONG stop; stop = 0;
+    int started = 0;
+    for (int i = 0; i < k; i++) {
+        sapc *s = &ss[i];
+        s->d = &d; s->idx = i; s->kind = kind; s->stop = &stop;
+        s->mx = mxcsr_variant((unsigned)i + 1u); s->cw = cw_variant((unsigned)i + 2u);
+        t_vregs_pattern(&s->ain, kind, 1u + 4u * (uint32_t)k + (uint32_t)i);
+        s->h = mk_thread(sapc_main, s, CREATE_SUSPENDED, &s->tid);
+        if (!s->h) break;
+        ResumeThread(s->h);
+        started++;
+    }
+    /* queue from the case thread for a bounded time; each spinner gets one special APC per round */
+    unsigned long long queued = 0; DWORD qerr = 0; int unsupported = 0;
+    if (started == k) {
+        uint64_t t0 = t_qpc();
+        while (!unsupported && t_qpc_ms(t0, t_qpc()) < (double)dur_ms(16)) {
+            for (int i = 0; i < k; i++) {
+                if (q2(sapc_fn, ss[i].h, (ULONG_PTR)&ss[i], 1 /* QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC */)) queued++;
+                else { qerr = GetLastError(); if (!queued) unsupported = 1; }
+            }
+            Sleep(1);
+        }
+    }
+    stop = 1;
+    int hung = 0;
+    for (int i = 0; i < started; i++) {
+        if (WaitForSingleObject(ss[i].h, 10000) != WAIT_OBJECT_0) { hung++; TerminateThread(ss[i].h, 1); WaitForSingleObject(ss[i].h, 2000); }
+        CloseHandle(ss[i].h);
+    }
+    if (started < k) { _aligned_free(ss); SKIP("CreateThread failed after %d of %d spinners", started, k); }
+    if (unsupported) { _aligned_free(ss); SKIP("QueueUserAPC2(SPECIAL_USER_APC) rejected (err %lu)", qerr); }
+    unsigned long long runs = 0, wrong = 0, abad = 0, low = 0, ext = 0, leak = 0, env = 0, chunks = 0, extapc = 0;
+    for (int i = 0; i < k; i++) {
+        sapc *s = &ss[i];
+        runs += (unsigned long long)s->apc_runs; wrong += (unsigned long long)s->apc_wrong; abad += (unsigned long long)s->apc_bad;
+        low += s->bad_low; ext += s->bad_ext; leak += s->bad_leak; env += s->bad_env; chunks += s->chunks; extapc += s->ext_apc_value;
+    }
+    _aligned_free(ss);
+    CHECKF(hung == 0, "%d spinners did not stop", hung);
+    CHECKF(qerr == 0, "QueueUserAPC2 failed after %llu successful calls (err %lu)", queued, qerr);
+    CHECKF(wrong == 0, "%llu special APCs ran on a thread other than the target", wrong);
+    CHECKF(abad == 0, "%llu special APC routines saw their own registers corrupted", abad);
+    CHECKF(leak == 0, "%llu register qwords held another thread's pattern", leak);
+    CHECKF(low == 0, "%llu legacy XMM registers of the interrupted spin not restored (low 128 bits)", low);
+    CHECKF(env == 0, "%llu spin chunks with MXCSR control / x87 CW changed by an asynchronous APC", env);
+    if (runs == 0 && t_is_wine()) t_expect_fail("wine: special user APC not delivered to a non-alertable thread");
+    CHECKF(runs > 0, "no special user APC was delivered to a spinning (non-alertable) thread (%llu queued)", queued);
+    t_info("kind", "%s", kind_name(kind));
+    t_info("spinners", "%d", k);
+    t_info("apcs_queued", "%llu", queued);
+    t_info("apcs_run", "%llu", runs);
+    t_info("spin_chunks", "%llu", chunks);
+    t_info("extended_state_mismatches", "%llu (upper YMM/ZMM, XMM16-31, k: not hard-checked)", ext);
+    t_info("extended_state_holding_apc_values", "%llu", extapc);
+    if (ext) t_note("extended (non-legacy) vector state of the interrupted thread changed across special APCs: %llu registers", ext);
+}
+
 /* ======================================================================================
  * 2. thread churn: create + join 1000 threads; parent state unchanged, children start clean
  * ==================================================================================== */
@@ -1399,6 +1666,14 @@ ISO(iso_migrate_external_n16, .op = OP_NONE, .n = 16, .mig_ext = 1, .spin = 5000
 ISO(iso_migrate_external_n64, .op = OP_NONE, .n = 64, .mig_ext = 1, .spin = 5000)
 ISO(iso_suspend_resume_n16,  .op = OP_NONE, .n = 16, .susp = 1, .spin = 5000)
 ISO(iso_suspend_resume_n64,  .op = OP_NONE, .n = 64, .susp = 1, .spin = 5000)
+ISO(iso_suspend_getcontext_n16,  .op = OP_NONE, .n = 16, .susp = 1, .getctx = 1, .spin = 5000)
+ISO(iso_suspend_getcontext_pin_one_n64, .op = OP_NONE, .n = 64, .pin = PIN_ONE, .susp = 1, .getctx = 1, .spin = 5000)
+ISO(iso_suspend_getcontext_mixed_n64, .op = OP_NONE, .n = 64, .susp = 1, .getctx = 1, .rf = RF_MIX, .spin = 5000)
+ISO(iso_preempt_mxcsr_flags_pin_one_n16, .op = OP_NONE, .n = 16, .pin = PIN_ONE, .mxflags = 1, .spin = 5000)
+ISO(iso_preempt_mxcsr_flags_n256,  .op = OP_NONE, .n = 256, .mxflags = 1, .spin = 5000)
+ISO(iso_apc_waitex_n2,    .op = OP_APC_WAITEX, .n = 2)
+ISO(iso_apc_waitex_n64,   .op = OP_APC_WAITEX, .n = 64)
+ISO(iso_apc_waitex_n1024, .op = OP_APC_WAITEX, .n = 1024)
 ISO(iso_priority_mix_n64,    .op = OP_SLEEP0, .n = 64, .prio_mix = 1)
 /* other register files and mixtures */
 ISO(iso_x87_stack_pin_one_n16,  .op = OP_NONE, .n = 16, .pin = PIN_ONE, .rf = RF_X87, .spin = 5000)
