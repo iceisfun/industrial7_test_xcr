@@ -860,6 +860,8 @@ TEST(ctx_api_reports_usable_features) {
     if (!c->xcr0_valid) SKIP("XCR0 not readable (OSXSAVE clear)");
     if (cpu_has(F_AVX)) CHECKF(e & T_XS_AVX, "AVX usable (XCR0 0x%llx) but GetEnabledXStateFeatures 0x%llx lacks bit 2",
                                (unsigned long long)c->xcr0, (unsigned long long)e);
+    if (cpu_has(F_AVX512F) && (e & T_XS_ZMM_STATE) != T_XS_ZMM_STATE && t_is_wine())   /* known Wine gap (seen with Wine 9 on an AVX-512 CPU model): AVX-512 runs but the API does not report it */
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures does not report AVX-512 state", t_wine_version());
     if (cpu_has(F_AVX512F)) CHECKF((e & T_XS_ZMM_STATE) == T_XS_ZMM_STATE, "AVX-512 usable but API mask 0x%llx lacks 0xE0",
                                    (unsigned long long)e);
     /* Any user component reported by the API must be enabled in XCR0 (else contexts would carry state the
@@ -2117,6 +2119,8 @@ TEST(setctx_mxcsr_reserved_bits) {
 }
 
 TEST(setctx_fxsave_reserved_bytes_ignored) {
+    if (t_sde_model())   /* emulator artifact (README "Emulated validation"): the whole process would die */
+        XFAIL("Intel SDE (%s): Pin asserts on the reserved FXSAVE bytes this case writes into the signal frame", t_sde_model());
     /* The FXSAVE image in a CONTEXT has reserved / software-available bytes (x64: 416-511, x86: 288-511).
      * Callers commonly leave them uninitialized (InitializeContext does not clear them, CopyContext does not
      * copy them); FXRSTOR/XRSTOR ignore them, so SetThreadContext must too: the thread keeps exact XMM and,

@@ -366,6 +366,8 @@ TEST(api_enabled_features_vs_xcr0) {
            (unsigned long long)en, (unsigned long long)xcr0, (unsigned long long)(user & ~xcr0));
     /* Vector state enabled in XCR0 must be reported, or no XSTATE-aware software can locate it. */
     static const int must[] = { 2, 5, 6, 7 };
+    if ((xcr0 & 0xE0) && !(en & 0xE0) && t_is_wine())   /* known Wine gap (seen with Wine 9 on an AVX-512 CPU model): AVX-512 runs but the API does not report it */
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures does not report AVX-512 state", t_wine_version());
     for (size_t k = 0; k < T_COUNTOF(must); k++) {
         int b = must[k];
         if (xcr0 >> b & 1)
@@ -2362,7 +2364,10 @@ TEST(exec_avx512_matches_api) {
         CHECKF((en & 0xE0) == 0, "API reports AVX-512 state 0x%llx but XCR0 does not enable it", (unsigned long long)(en & 0xE0));
         SKIP("AVX-512 advertised but not enabled by the OS");
     }
-    CHECKF(exec_avx512_add_zmm(), "AVX-512 instruction produced a wrong result");
+    int exec_ok = exec_avx512_add_zmm();
+    CHECKF(exec_ok, "AVX-512 instruction produced a wrong result");
+    if (exec_ok && !api && t_is_wine())   /* known Wine gap (seen with Wine 9 on an AVX-512 CPU model): AVX-512 runs but the API does not report it */
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures does not report AVX-512 state", t_wine_version());
     CHECKF(api, "AVX-512 executes but GetEnabledXStateFeatures lacks 0xE0 (got 0x%llx)", (unsigned long long)en);
 }
 
