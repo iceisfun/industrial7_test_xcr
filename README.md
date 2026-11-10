@@ -179,6 +179,7 @@ XFAIL with SDE's message (`t_sde_killed_child`). Known artifacts of SDE 10.13 on
 | DR0-DR3 execute breakpoints set with SetThreadContext | never fire: Pin runs the code from its code cache [#DB] |
 | x87 #MF in 32-bit code | FPU instruction pointer points into Pin's code cache |
 | CPUID topology (leaves 0Bh/1Fh, APIC IDs) | one emulated APIC ID on every CPU |
+| `-xsave_default V` (XCR_SDE_XCR0=V) | only the emulated XGETBV returns V; CPUID.(0Dh,0).EBX, GetEnabledXStateFeatures, IsProcessorFeaturePresent and the other-architecture process keep the host XCR0 (xcr0_probe expected failures) |
 | `-nhm`: F3 0F BD / F3 0F BC | run as the host's LZCNT/TZCNT instead of BSR/BSF |
 | reserved FXSAVE bytes in SetThreadContext | Pin asserts (case not run) |
 | a thread that keeps suspending/capturing other threads (xstate_stress `ctl_*`, rarely simd_bench `ctx_getthreadcontext_control`) | Pin deadlocks at random and the process hangs (xstate_stress `ctl_*` not run under SDE) |

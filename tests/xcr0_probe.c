@@ -752,8 +752,20 @@ TEST(cpuid_d_enabled_offsets_nonoverlapping) {
                        i, off[i], sz[i], j, off[j], sz[j]);
 }
 
+/* tools/sde_run.sh with XCR_SDE_ARGS="-xsave_default V" exports XCR_SDE_XCR0=V: SDE then emulates XGETBV = V,
+ * while CPUID.(0Dh,0).EBX and everything the OS reports (Wine reads the host XCR0 into KUSER_SHARED_DATA:
+ * GetEnabledXStateFeatures, IsProcessorFeaturePresent, the other-architecture process) keep the host value.
+ * Emulator configuration artifact, README "Emulated validation"; never set outside such runs. */
+static void xp_sde_xcr0_override(void) {
+    char v[32];
+    if (t_sde_model() && GetEnvironmentVariableA("XCR_SDE_XCR0", v, sizeof v))
+        t_expect_fail("Intel SDE (%s) with -xsave_default %s: emulated XCR0 differs from the host XCR0 behind CPUID.0Dh "
+                      "and the OS view", t_sde_model(), v);
+}
+
 TEST(xsave_size_ebx_matches_xcr0) {
     xp_raw x; xp_need_xcr0(&x);
+    xp_sde_xcr0_override();
     REQUIRE(x.has_d);
     uint32_t end = 576;
     for (int i = 2; i < 63; i++)
@@ -1458,6 +1470,7 @@ static int run_other_exe(const char *path, const char *args, DWORD tmo, t_child_
 
 TEST(xcr0_same_in_other_architecture_process) {
     xp_raw x; xp_read(&x);
+    xp_sde_xcr0_override();
     const t_env *e = t_env_get();
     t_info("process", "arch=%s wow64=%d native_machine=0x%x", e->process_arch, e->wow64, e->native_machine);
     char other[MAX_PATH];
@@ -1710,6 +1723,7 @@ TEST(api_get_enabled_xstate_features_present) {
 
 TEST(api_user_bits_subset_of_xcr0) {
     xp_raw x; xp_read(&x);
+    xp_sde_xcr0_override();
     pfn_GetEnabledXStateFeatures gef = api_gef();
     if (!gef) SKIP("GetEnabledXStateFeatures not exported");
     uint64_t api = gef();
@@ -1742,6 +1756,7 @@ TEST(api_reports_xcr0_documented_bits) {
 
 TEST(api_extra_bits_are_supervisor) {
     xp_raw x; xp_need_xcr0(&x);
+    xp_sde_xcr0_override();
     pfn_GetEnabledXStateFeatures gef = api_gef();
     if (!gef) SKIP("GetEnabledXStateFeatures not exported");
     uint64_t extra = gef() & ~x.xcr0;
@@ -1810,6 +1825,7 @@ TEST(pf_xsave_enabled_matches_osxsave) {
 
 TEST(pf_avx_family_vs_xcr0) {
     xp_raw x; xp_read(&x);
+    xp_sde_xcr0_override();
     int p39 = IsProcessorFeaturePresent(PF_AVX_INSTRUCTIONS_AVAILABLE) ? 1 : 0;
     int p40 = IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE) ? 1 : 0;
     int p41 = IsProcessorFeaturePresent(PF_AVX512F_INSTRUCTIONS_AVAILABLE) ? 1 : 0;

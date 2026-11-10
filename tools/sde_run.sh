@@ -33,6 +33,8 @@
 # builds signal/exception CONTEXTs from the host XSAVE image, which SDE does not extend, and Wine's
 # helper processes may die under Pin). It never weakens a check: without XCR_SDE every check is as on
 # Windows.
+# With "-xsave_default V" in XCR_SDE_ARGS it also sets XCR_SDE_XCR0=V (only the emulated XGETBV changes; the
+# OS view keeps the host XCR0, which xcr0_probe marks as expected failures).
 # Also sets WINELOADERNOEXEC=1: Pin cannot follow Wine's exec of the static wine-preloader.
 #
 # Exit status = the exe's exit status (124 = timeout), as wine_run.sh. "Tool (or Pin) caused signal"
@@ -67,7 +69,7 @@ while [ $# -gt 0 ]; do
     --fetch) fetch_sde; exit $?;;
     --where) s="$(find_sde)"; [ -n "$s" ] && echo "$s" || { echo "SDE not found (tools/sde_run.sh --fetch)" >&2; exit 2; }; exit 0;;
     --cpu=*) CPU="${1#--cpu=}"; shift;;
-    -h|--help) sed -n '2,32p' "$0"; exit 0;;
+    -h|--help) sed -n '2,42p' "$0"; exit 0;;
     *) break;;
   esac
 done
@@ -88,6 +90,9 @@ export WINE="${XCR_SDE_WINE:-/usr/lib/wine/wine64}"
 export XCR_BASE_PREFIX="${XCR_SDE_PREFIX:-$HOME/.cache/xcr_suite/prefix_sde}"
 [ -d "$XCR_BASE_PREFIX/drive_c" ] || "$HERE/make_base_prefix.sh" >&2 9>&-
 export XCR_SDE="$CPU" WINELOADERNOEXEC=1
+# -xsave_default V overrides only the emulated XGETBV; tests mark what still shows the host XCR0 (XCR_SDE_XCR0).
+XD="$(printf '%s\n' "${XCR_SDE_ARGS:-}" | sed -n 's/.*-xsave_default[ =]\([0-9a-fA-Fx]*\).*/\1/p')"
+if [ -n "$XD" ]; then export XCR_SDE_XCR0="$XD"; else unset XCR_SDE_XCR0; fi
 export XCR_TIMEOUT="${XCR_TIMEOUT:-1800}"
 # The Windows exe sees XCR_SDE (model); SDE gets the chip option and any extra knobs.
 LOGDIR="${XCR_SDE_LOGDIR:-}"
