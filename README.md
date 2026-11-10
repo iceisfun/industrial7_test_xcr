@@ -100,6 +100,82 @@ REGRESSION / FIXED / XFAIL-FLIP / CHANGED), capability (SKIP vs run) differences
 PERF deltas. Its exit status is 1 when there are functional mismatches other than PASS<->XFAIL flips
 (`--strict` counts those too) or an exe that was OK is no longer OK.
 
+## Emulated validation (Intel SDE)
+
+A host without AVX-512 (or without AMX, APX, ...) only SKIPs those cases. `tools/sde_run.sh` runs an exe
+under the [Intel Software Development Emulator](https://www.intel.com/content/www/us/en/download/684897/intel-software-development-emulator.html)
+inside the same headless, throw-away Wine sandbox as `tools/wine_run.sh` (one wine tree at a time: runs
+are serialised with a lock file; hard timeout, default 1800 s because SDE is 10-100x slower). SDE emulates
+CPUID, XGETBV and every instruction of the chosen CPU model that the host lacks, so the AVX-512 code
+(EVEX encodings, opmasks, fault suppression, compress/expand, gather/scatter, ZMM XSAVE layouts) really
+executes. Like Wine itself, this is plumbing validation: Windows remains the authority.
+
+```
+tools/sde_run.sh --fetch                                 # once: download SDE into ~/.cache/xcr_suite/sde
+sudo apt install wine64 wine32                           # once: the distro Wine (see below)
+tools/sde_run.sh --cpu=spr build/x64/zmm_registers.exe   # Sapphire Rapids (default); also icx, skx, gnr, future ...
+tools/sde_run.sh --cpu=spr build/x86/zmm_registers.exe   # 32-bit exes work the same way
+tools/sde_run.sh --cpu=nhm build/x64/cpu_features.exe    # Nehalem: no AVX, no XSAVE/OSXSAVE
+XCR_SDE_ARGS="-xsave_default 0x3" tools/sde_run.sh --cpu=hsw build/x64/xcr0_probe.exe   # AVX in CPUID, XCR0 without YMM
+for a in x64 x86; do mkdir -p sde_spr/$a; for e in build/$a/*.exe; do   # everything, one model
+  tools/sde_run.sh --cpu=spr "$e" --json=Z:$PWD/sde_spr/$a/$(basename "$e" .exe).json > sde_spr/$a/$(basename "$e" .exe).txt 2>&1
+done; done
+```
+
+What each model proves:
+
+- `spr` / `icx` / `future`: the AVX-512 (and AMX/AVX-512 FP16/...) cases run instead of SKIPping, and are
+  checked against the same architectural rules as on hardware.
+- `nhm` / `wsm`: SDE's chip check stops any process that executes an instruction the model lacks, so an
+  exe that reaches its SUMMARY line proves that the baseline code needs no AVX (or SSE4.2/AES on nhm).
+  The "feature absent" paths run: `cpu_has()` gating, simd_dispatch tier fallback, the SKIP paths, and
+  the #UD probes (feature_faults `feat_*`, `feat_xgetbv_without_osxsave`, xcr0_probe and ymm/zmm
+  `*_ud_*` cases) up to the faulting instruction.
+- `hsw` with `-xsave_default 0x3`: AVX is advertised but the OS-enabled XCR0 lacks YMM state, which
+  exercises `avx_ud_when_ymm_state_disabled` / `ymm_vex_faults_when_avx_disabled`.
+
+### Wine for SDE
+
+Pin cannot run Proton/Wine 11 builds here: they install a seccomp syscall filter and their signal path
+crashes under Pin, so every hardware exception kills the process. `sde_run.sh` therefore uses the distro
+Wine (`/usr/lib/wine/wine64`, Wine 9; `XCR_SDE_WINE` overrides) with its own base prefix
+(`~/.cache/xcr_suite/prefix_sde`, created on first use) and sets `WINELOADERNOEXEC=1` (Pin cannot follow
+Wine's exec of the static preloader). Wine 9 differs from Wine 11 in ways that are real Wine
+discrepancies, not SDE artifacts, and are reported as such:
+`GetEnabledXStateFeatures` does not report AVX-512 (XFAIL "Wine ...: ... does not report AVX-512", so the
+exception/context ZMM cases SKIP), it returns 0 on a CPU without XSAVE (XFAIL), and on x64 it groups
+Rbp with CONTEXT_CONTROL (context_xstate `getctx_control_only_leaves_rest`,
+`getctx_integer_only_leaves_rest`, `setctx_integer_observed`) and returns ERROR_NOACCESS instead of
+ERROR_MORE_DATA for a compact context without room (xstate_windows `thread_get_compact_no_room`): FAIL.
+
+### Emulator artifacts
+
+`sde_run.sh` exports `XCR_SDE=<model>`; tests read it with `t_sde_model()` and use it **only** to mark
+known SDE behaviour as an expected failure (`t_expect_fail`, so the check still runs and a pass shows as
+XPASS) or, where the case would kill the whole process, as XFAIL without running it. Without `XCR_SDE`
+nothing changes. The ENV header shows `sde=<model>` and the JSON env record has `"sde"`. SDE is run with
+`-ptr_raise 1` (an emulated access to an inaccessible page raises #PF like hardware), `-raise_int3 1` and
+`-chip_check_emit_file 1`; the harness compares SDE's per-process report files in `XCR_SDE_LOGDIR_WIN`
+around every child run, and when SDE stopped the child (chip check instead of #UD) the case becomes
+XFAIL with SDE's message (`t_sde_killed_child`). Known artifacts of SDE 10.13 on an AVX2 host:
+
+| area | SDE behaviour (hardware/SDM behaviour in brackets) |
+|---|---|
+| chip check | stops the process on an instruction the model or XCR0 lacks [#UD] |
+| emulated EVEX aligned moves, MOVDIR64B, XSAVE family | no #GP for a misaligned operand |
+| XSETBV / XGETBV | XSETBV works at CPL3, XGETBV accepts any index [#GP] |
+| XSAVE emulation | XCOMP_BV omits PKRU, initial components and (32-bit) Hi16_ZMM, is 0 for RFBM=0; XRSTOR with partial RFBM touches other components; FXRSTOR does not set XINUSE[0]; no XRSTOR header #GP, no #PF on the area |
+| VPCOMPRESSD / VPEXPANDD | fault on popcnt(k) elements that end at a guard page [only the elements accessed] |
+| emulated stores, scatters, NX fetch | page fault reported as a read (ExceptionInformation[0]=0) |
+| gathers | elements below the faulting one are not completed before the fault |
+| unmasked #XM in an emulated EVEX instruction | Pin aborts the process |
+| RDPID, CLFLUSHOPT/CLWB on no-access pages, ICEBP | own TSC_AUX value; no fault; no #DB |
+| TF single-step, RSM/SYSEXIT/SYSRET, INT 80h | Pin aborts the process |
+| x87 #MF in 32-bit code | FPU instruction pointer points into Pin's code cache |
+| CPUID topology (leaves 0Bh/1Fh, APIC IDs) | one emulated APIC ID on every CPU |
+| `-nhm`: F3 0F BD / F3 0F BC | run as the host's LZCNT/TZCNT instead of BSR/BSF |
+| reserved FXSAVE bytes in SetThreadContext | Pin asserts (case not run) |
+
 ## Benchmarks
 
 Benchmarks are ordinary suite exes: same CLI, same JSON, same result model. PERF rows never fail a

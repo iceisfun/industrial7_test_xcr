@@ -186,10 +186,17 @@ const t_env *e = t_env_get();   // os_major/minor/build/ubr, os_product, process
                                 // wine, ncpu, affinity, active_groups, qpc_freq,
                                 // api_xstate_present/api_xstate_features (GetEnabledXStateFeatures), pf[64]
 t_is_wine(), t_wine_version(), t_exe_name(), t_case_name(), t_self_path(), t_verbose(), t_on_case_thread()
+t_sde_model()            // "spr", "nhm", ... under tools/sde_run.sh (XCR_SDE env), else NULL
+t_sde_killed_child(&r)   // 1 when SDE reported that it stopped child r (chip check instead of #UD)
 T_PROC("kernel32.dll", InitializeContext2)   // typed run-time lookup; NULL if missing -> SKIP
 t_guarded_alloc(n, &base) / t_guarded_free(base)   // n bytes ending at a PAGE_NOACCESS page
 t_tmpfile(buf, cap, "leaf")
 ```
+
+`t_sde_model()` exists only to mark a known Intel SDE emulator artifact as an expected failure
+(`t_expect_fail`), or as XFAIL when the case would kill the process; see README "Emulated validation".
+Like `t_is_wine()`, it must never weaken a check. Under SDE, `t_child_run` itself turns a case into an
+expected failure when SDE reports that it stopped the child.
 
 Resolve every XSTATE or Windows 11-only API through `T_PROC`, so that the exe still loads on systems
 that lack it.
