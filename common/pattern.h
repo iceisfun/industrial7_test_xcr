@@ -13,10 +13,10 @@ uint64_t t_rng_range(t_rng *r, uint64_t n);          /* uniform in [0, n), n > 0
 void     t_rng_fill(t_rng *r, void *buf, size_t n);
 uint64_t t_mix64(uint64_t x);                         /* splitmix64 finalizer (stateless hash) */
 
-/* Register pattern: deterministic, distinctive, never all-zero per 8-byte word.
- * Layout of each 64-bit word w of register `reg` for owner `tag` (thread id, iteration, ...):
- *   byte 7 = 0xA0 | (reg & 0x1F) >> 1 ... (hash-based), see pattern.c; t_pattern_explain decodes.
- * Every (tag, reg, word) triple gives a different value, so leaked state identifies its source. */
+/* Register pattern: deterministic, distinctive, never zero per 8-byte word. Word w of register `reg`
+ * for owner `tag` (thread index, iteration, ...) is
+ *   byte 7 = 0x80 | reg,  byte 6 = 0x40 | w,  bytes 5..0 = hash(tag, reg, w)
+ * so a leaked/foreign value identifies its source (t_pattern_explain decodes it). */
 uint64_t t_pattern_word(uint32_t tag, uint32_t reg, uint32_t word);
 void     t_pattern_reg(void *out, size_t bytes, uint32_t tag, uint32_t reg);
 /* Fill nregs registers of `stride` bytes each (e.g. a t_vregs.v array: stride 64, width 16/32/64). */

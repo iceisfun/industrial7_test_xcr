@@ -142,6 +142,19 @@ int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r);
 /* Look for a line starting with prefix in r->out; copies the rest of the line to val. */
 int t_child_find(const t_child_result *r, const char *prefix, char *val, size_t cap);
 
+/* ---- small utilities (util.c) ------------------------------------------------ */
+/* Resolve an export at run time (LoadLibraryA on first use). Use for every API that may be missing on
+ * some Windows versions (XSTATE APIs, Win11-only functions) so the exe still loads everywhere.
+ *   T_PROC("kernel32.dll", InitializeContext2) -> typed pointer (from the SDK declaration) or NULL */
+void *t_proc(const char *dll, const char *name);
+#define T_PROC(dll, name) ((__typeof__(&name))t_proc(dll, #name))
+/* n usable bytes ending exactly at a PAGE_NOACCESS guard page (for end-of-page / fault-suppression
+ * tests). *base receives the allocation to pass to t_guarded_free. NULL on failure. */
+void *t_guarded_alloc(size_t n, void **base);
+void  t_guarded_free(void *base);
+/* Unique scratch file path in %TEMP% (not created). */
+void  t_tmpfile(char *out, size_t cap, const char *leaf);
+
 /* Everything else (in one include) */
 #include "cpuid.h"
 #include "feature_detect.h"

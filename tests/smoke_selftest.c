@@ -147,9 +147,8 @@ static char *read_file(const char *path, size_t *len) {
 
 /* ======================= harness behaviour ================================== */
 TEST(harness_result_kinds) {
-    char tmp[MAX_PATH], json[MAX_PATH + 64], args[MAX_PATH + 128];
-    GetTempPathA(sizeof tmp, tmp);
-    snprintf(json, sizeof json, "%sxcr_selftest_%lu.json", tmp, GetCurrentProcessId());
+    char json[MAX_PATH], args[MAX_PATH + 128];
+    t_tmpfile(json, sizeof json, "demo.json");
     snprintf(args, sizeof args, "--include-manual --filter=demo_ --case-timeout=30 \"--json=%s\"", json);
     static t_child_result r;
     REQUIRE(t_run_self(args, 60000, &r));
@@ -411,4 +410,54 @@ TEST(env_recorder) {
         t_info("GetEnabledXStateFeatures", "0x%llx", e->api_xstate_features);
     }
     if (t_is_wine()) t_info("wine", "%s", t_wine_version());
+}
+CHILD(guard_overrun) {
+    (void)argc; (void)argv;
+    void *base; volatile unsigned char *p = (volatile unsigned char *)t_guarded_alloc(100, &base);
+    if (!p) return 3;
+    for (int i = 0; i < 100; i++) p[i] = (unsigned char)i;   /* all usable */
+    printf("WRITES_OK\n"); fflush(stdout);
+    return p[100];                                            /* first byte of the guard page */
+}
+TEST(util_helpers) {
+    CHECK(T_PROC("kernel32.dll", GetTickCount) != NULL);
+    CHECK(t_proc("kernel32.dll", "NoSuchExport_xyz") == NULL);
+    CHECK(t_proc("no_such_dll_xyz.dll", "x") == NULL);
+    static t_child_result r;
+    REQUIRE(t_child_run("guard_overrun", NULL, 20000, &r));
+    CHECK(strstr(r.out, "WRITES_OK") != NULL);
+    CHECK_EQ(r.exc_code, 0xC0000005u);
+    char a[MAX_PATH], b[MAX_PATH];
+    t_tmpfile(a, sizeof a, "x.json"); t_tmpfile(b, sizeof b, "x.json");
+    CHECK(strcmp(a, b) != 0);
+}
+
+/* watchdog and worker-thread crash: each ends the whole run, so they run in their own child runs */
+TEST_MANUAL(wd_hang) { Sleep(20000); }
+static DWORD WINAPI worker_crash(void *p) { (void)p; volatile int *q = (volatile int *)g_bad_addr; return (DWORD)*q; }
+TEST_MANUAL(wt_crash) {
+    HANDLE h = CreateThread(NULL, 0, worker_crash, NULL, 0, NULL);
+    REQUIRE(h != NULL);
+    WaitForSingleObject(h, 10000); CloseHandle(h);
+}
+TEST(harness_fatal_paths) {
+    static t_child_result r;
+    char json[MAX_PATH], args[MAX_PATH + 128];
+    t_tmpfile(json, sizeof json, "wd.json");
+    snprintf(args, sizeof args, "--include-manual --filter=wd_hang --case-timeout=1 \"--json=%s\"", json);
+    REQUIRE(t_run_self(args, 15000, &r));
+    CHECK(!r.timed_out);
+    CHECK_EQ(r.exit_code, 1);
+    CHECK(r.ms < 10000);
+    CHECK(strstr(r.out, "CRASH wd_hang") && strstr(r.out, "watchdog"));
+    CHECK(strstr(r.out, "SUMMARY ") && strstr(r.out, "crash=1"));
+    char *buf = read_file(json, NULL);
+    CHECK(buf && strstr(buf, "\"result\":\"CRASH\"") && strstr(buf, "\"type\":\"summary\""));
+    free(buf); DeleteFileA(json);
+
+    REQUIRE(t_run_self("--include-manual --filter=wt_crash", 15000, &r));
+    CHECK(!r.timed_out);
+    CHECK_EQ(r.exit_code, 1);
+    CHECK(strstr(r.out, "CRASH wt_crash") && strstr(r.out, "not the case thread"));
+    CHECK(strstr(r.out, "SUMMARY ") != NULL);
 }
