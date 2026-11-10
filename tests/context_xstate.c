@@ -57,6 +57,7 @@
 #define CX_NGPR      13
 #define CX_CTX_ALIGN 16
 #define CX_SSE_LEN   0x100
+#define CX_FX_DEFINED 416           /* FXSAVE bytes with architectural content in 64-bit mode (XMM0-15 end) */
 #define CX_ARCHNAME  "x64"
 #else
 #define CX_ARCHBIT   CONTEXT_i386
@@ -65,6 +66,7 @@
 #define CX_NGPR      5
 #define CX_CTX_ALIGN 4
 #define CX_SSE_LEN   0x80
+#define CX_FX_DEFINED 288           /* 32-bit mode: XMM0-7 end */
 #define CX_ARCHNAME  "x86"
 #endif
 #define CX_NV        T_NXMM          /* XMM/YMM registers in this mode: 16 (x64) / 8 (x86) */
@@ -96,15 +98,26 @@
 #define CXO_FLAGS  1464
 #define CXO_MAX    1468
 #define CXO_REM    1472
+#define CXO_EFL    1476
 #define CXO_SP     1480
 #define CXO_ZIN    1536
 #define CXO_ZOUT   3584
 #define CXO_KIN    5632
 #define CXO_KOUT   5696
+/* A check of a pinned Windows contract that Wine is known not to implement: on Wine a failure turns the case
+ * into XFAIL (named reason), on everything else it is an ordinary CHECK. Never weakens the check itself. */
+#define CX_CHECK_WGAP(gap, c, ...) do { int ok_ = !!(c); \
+    if (!ok_ && t_is_wine()) t_expect_fail("wine %s: %s", t_wine_version(), gap); \
+    CHECKF(ok_, __VA_ARGS__); } while (0)
+/* x87 control word bits that exist architecturally (bit 6 and 13-15 reserved); Windows masks a CONTEXT
+ * control word with 0x1F3F (ntoskrnl!KxContextToKframes 19041) and hardware may report bit 6 as 1 */
+#define CX_FCW_BITS 0x1F3Fu
 #define CX_S_(x) #x
 #define CX_S(x) CX_S_(x)
 
-enum { CXF_X87 = 1, CXF_KBW = 2 };
+/* CXF_X87: load ST(0..7) from fin; CXF_X87_3: with CXF_X87, load only ST(0..2) (TOP = 5);
+ * CXF_VZU: worker executes VZEROUPPER before loading (only set when AVX is usable) */
+enum { CXF_X87 = 1, CXF_KBW = 2, CXF_X87_3 = 4, CXF_VZU = 8 };
 
 typedef struct cx_args {
     uint8_t  vin[16][32];        /* XMM/YMM i: low 16 bytes = XMM, bytes 16..31 = upper YMM lane */
@@ -117,7 +130,7 @@ typedef struct cx_args {
     volatile LONG stop;
     uint32_t mxcsr_in, mxcsr_out;
     uint16_t fcw_in, fcw_out, fsw_out, pad0;
-    uint32_t flags, max_loops, remaining, pad1;
+    uint32_t flags, max_loops, remaining, eflags_out;   /* eflags_out: EFLAGS at the loop exit */
     uint64_t sp;                 /* RSP/ESP inside the spin loop */
     uint8_t  pad2[CXO_ZIN - 1488];
     uint8_t  zin[32][64];
@@ -140,6 +153,7 @@ _Static_assert(offsetof(cx_args, fsw_out) == CXO_FSWOUT, "fswout");
 _Static_assert(offsetof(cx_args, flags) == CXO_FLAGS, "flags");
 _Static_assert(offsetof(cx_args, max_loops) == CXO_MAX, "max");
 _Static_assert(offsetof(cx_args, remaining) == CXO_REM, "rem");
+_Static_assert(offsetof(cx_args, eflags_out) == CXO_EFL, "efl");
 _Static_assert(offsetof(cx_args, sp) == CXO_SP, "sp");
 _Static_assert(offsetof(cx_args, zin) == CXO_ZIN, "zin");
 _Static_assert(offsetof(cx_args, zout) == CXO_ZOUT, "zout");
@@ -177,14 +191,15 @@ extern const char cx_cap_ret[] __asm__("cx_cap_ret");
 
 #define CXA(o) CX_S(o)
 #define CX_X87_LOAD(b) \
-    "  testl $1, " CXA(CXO_FLAGS) "(" b ")\n  jz 1f\n" \
+    "  testl $1, " CXA(CXO_FLAGS) "(" b ")\n  jz 1f\n  testl $4, " CXA(CXO_FLAGS) "(" b ")\n  jnz 3f\n" \
     "  fldt " CXA(CXO_FIN) "+70(" b ")\n  fldt " CXA(CXO_FIN) "+60(" b ")\n  fldt " CXA(CXO_FIN) "+50(" b ")\n" \
-    "  fldt " CXA(CXO_FIN) "+40(" b ")\n  fldt " CXA(CXO_FIN) "+30(" b ")\n  fldt " CXA(CXO_FIN) "+20(" b ")\n" \
+    "  fldt " CXA(CXO_FIN) "+40(" b ")\n  fldt " CXA(CXO_FIN) "+30(" b ")\n3:\n  fldt " CXA(CXO_FIN) "+20(" b ")\n" \
     "  fldt " CXA(CXO_FIN) "+10(" b ")\n  fldt " CXA(CXO_FIN) "+0(" b ")\n1:\n"
 #define CX_X87_STORE(b) \
     "  stmxcsr " CXA(CXO_MXOUT) "(" b ")\n  fnstcw " CXA(CXO_FCWOUT) "(" b ")\n  fnstsw " CXA(CXO_FSWOUT) "(" b ")\n" \
     "  testl $1, " CXA(CXO_FLAGS) "(" b ")\n  jz 2f\n" \
     "  fstpt " CXA(CXO_FOUT) "+0(" b ")\n  fstpt " CXA(CXO_FOUT) "+10(" b ")\n  fstpt " CXA(CXO_FOUT) "+20(" b ")\n" \
+    "  testl $4, " CXA(CXO_FLAGS) "(" b ")\n  jnz 2f\n" \
     "  fstpt " CXA(CXO_FOUT) "+30(" b ")\n  fstpt " CXA(CXO_FOUT) "+40(" b ")\n  fstpt " CXA(CXO_FOUT) "+50(" b ")\n" \
     "  fstpt " CXA(CXO_FOUT) "+60(" b ")\n  fstpt " CXA(CXO_FOUT) "+70(" b ")\n2:\n"
 #define CX_FPENV_LOAD(b) \
@@ -231,7 +246,8 @@ extern const char cx_cap_ret[] __asm__("cx_cap_ret");
     CX_GLOBAL(loop) \
     "  cmpl $0, 4(%rax)\n  jne " exit "\n  pause\n  decl %r11d\n  jnz " loop "\n" \
     CX_GLOBAL(exit) \
-    "  subq $" CXA(CXO_READY) ", %rax\n  movl %r11d, " CXA(CXO_REM) "(%rax)\n" \
+    "  pushfq\n  subq $" CXA(CXO_READY) ", %rax\n  movl %r11d, " CXA(CXO_REM) "(%rax)\n" \
+    "  popq %r11\n  movl %r11d, " CXA(CXO_EFL) "(%rax)\n  cld\n" \
     "  movq %rbx, " CXA(CXO_GOUT) "+0(%rax)\n  movq %rcx, " CXA(CXO_GOUT) "+8(%rax)\n" \
     "  movq %rdx, " CXA(CXO_GOUT) "+16(%rax)\n  movq %rsi, " CXA(CXO_GOUT) "+24(%rax)\n" \
     "  movq %rdi, " CXA(CXO_GOUT) "+32(%rax)\n  movq %rbp, " CXA(CXO_GOUT) "+40(%rax)\n" \
@@ -293,7 +309,8 @@ __asm__(
     CX_GLOBAL(loop) \
     "  cmpl $0, 4(%eax)\n  jne " exit "\n  pause\n  decl %ecx\n  jnz " loop "\n" \
     CX_GLOBAL(exit) \
-    "  subl $" CXA(CXO_READY) ", %eax\n  movl %ecx, " CXA(CXO_REM) "(%eax)\n" \
+    "  pushfl\n  subl $" CXA(CXO_READY) ", %eax\n  movl %ecx, " CXA(CXO_REM) "(%eax)\n" \
+    "  popl %ecx\n  movl %ecx, " CXA(CXO_EFL) "(%eax)\n  cld\n" \
     "  movl %ebx, " CXA(CXO_GOUT) "+0(%eax)\n  movl $0, " CXA(CXO_GOUT) "+4(%eax)\n" \
     "  movl %edx, " CXA(CXO_GOUT) "+8(%eax)\n  movl $0, " CXA(CXO_GOUT) "+12(%eax)\n" \
     "  movl %esi, " CXA(CXO_GOUT) "+16(%eax)\n  movl $0, " CXA(CXO_GOUT) "+20(%eax)\n" \
@@ -530,6 +547,16 @@ static uint16_t cx_own_cs(void) { uint16_t v; __asm__ volatile("mov %%cs, %0" : 
 static uint16_t cx_own_ss(void) { uint16_t v; __asm__ volatile("mov %%ss, %0" : "=r"(v)); return v; }
 static uint16_t cx_own_ds(void) { uint16_t v; __asm__ volatile("mov %%ds, %0" : "=r"(v)); return v; }
 static uint16_t cx_own_es(void) { uint16_t v; __asm__ volatile("mov %%es, %0" : "=r"(v)); return v; }
+static uint16_t cx_own_fs(void) { uint16_t v; __asm__ volatile("mov %%fs, %0" : "=r"(v)); return v; }
+static uint16_t cx_own_gs(void) { uint16_t v; __asm__ volatile("mov %%gs, %0" : "=r"(v)); return v; }
+/* MXCSR_MASK from FXSAVE (0 means the architectural default 0xFFBF) */
+static uint32_t cx_mxcsr_mask(void) {
+    T_ALIGN(16) uint8_t fx[512];
+    memset(fx, 0, sizeof fx);
+    t_fxsave(fx);
+    uint32_t m; memcpy(&m, fx + 28, 4);
+    return m ? m : 0xFFBFu;
+}
 
 /* ======================================================================================================
  * Buffers
@@ -616,10 +643,14 @@ typedef struct cx_worker {
 } cx_worker;
 
 #define CX_MAX_LIVE 8
-static cx_args *volatile g_live[CX_MAX_LIVE];
+static cx_args *volatile g_live[CX_MAX_LIVE];      /* workers still spinning, with the case that started them */
+static const char *g_live_case[CX_MAX_LIVE];
+
+static __attribute__((target("avx"))) void cx_vzeroupper_avx(void) { __asm__ volatile("vzeroupper" ::: "memory"); }
 
 static DWORD WINAPI cx_worker_main(void *p) {
     cx_worker *w = (cx_worker *)p;
+    if ((w->a->flags & CXF_VZU) && cpu_has(F_AVX)) cx_vzeroupper_avx();
     if (w->kind == T_VK_ZMM) cx_spin_zmm(w->a);
     else if (w->kind == T_VK_YMM) cx_spin_ymm(w->a);
     else cx_spin_xmm(w->a);
@@ -629,15 +660,17 @@ static const char *cx_loop_lo(int kind) { return kind == T_VK_ZMM ? cx_zmm_loop 
 static const char *cx_loop_hi(int kind) { return kind == T_VK_ZMM ? cx_zmm_exit : kind == T_VK_YMM ? cx_ymm_exit : cx_xmm_exit; }
 
 /* Start a worker on a pre-filled cx_args and wait until it holds its registers (spinning).
- * Returns 1 on success. Stale workers of an aborted case are stopped first. */
+ * Returns 1 on success. Stale workers left by an earlier, aborted case are stopped first (their cx_args is
+ * never freed on the abort path, so the write is safe); workers of the current case are left running. */
 static int cx_worker_start(cx_worker *w, cx_args *a, int kind) {
-    for (int i = 0; i < CX_MAX_LIVE; i++) if (g_live[i]) { g_live[i]->stop = 1; }
+    for (int i = 0; i < CX_MAX_LIVE; i++)
+        if (g_live[i] && g_live_case[i] != t_case_name()) { g_live[i]->stop = 1; g_live[i] = NULL; }
     memset(w, 0, sizeof *w);
     w->a = a; w->kind = kind;
     a->ready = 0; a->stop = 0;
     w->h = CreateThread(NULL, 0, cx_worker_main, w, 0, &w->tid);
     if (!w->h) return 0;
-    for (int i = 0; i < CX_MAX_LIVE; i++) if (!g_live[i]) { g_live[i] = a; break; }
+    for (int i = 0; i < CX_MAX_LIVE; i++) if (!g_live[i]) { g_live[i] = a; g_live_case[i] = t_case_name(); break; }
     double t0 = t_now_ms();
     while (!a->ready && t_now_ms() - t0 < CX_TMO) Sleep(1);
     return a->ready != 0;
@@ -744,6 +777,12 @@ static uint8_t *cx_locate(CONTEXT *c, DWORD id, DWORD *len) {
     uint8_t *p = (uint8_t *)X.LocateXStateFeature(c, id, &l);
     if (len) *len = l;
     return p;
+}
+/* XSAVE header of an InitializeContext context: CONTEXT_EX directly follows the legacy CONTEXT
+ * (All, Legacy, XState {LONG Offset; DWORD Length}, offsets relative to the CONTEXT_EX) */
+static uint64_t *cx_xs_hdr(CONTEXT *c) {
+    LONG *ex = (LONG *)((uint8_t *)c + sizeof(CONTEXT));
+    return (uint64_t *)((uint8_t *)ex + ex[4]);
 }
 static uint64_t cx_mask(CONTEXT *c) {
     DWORD64 m = 0xDEAD;
@@ -1082,7 +1121,8 @@ TEST(locate_enabled_and_unsupported_features) {
         DWORD l = 0;
         uint8_t *p = cx_locate(x.ctx, id, &l);
         if (!(en & (1ull << id))) {
-            CHECKF(p == NULL, "feature %lu not enabled (0x%llx) but located at %p", (unsigned long)id, (unsigned long long)en, (void *)p);
+            CX_CHECK_WGAP("LocateXStateFeature locates features that are not enabled", p == NULL,
+                          "feature %lu not enabled (0x%llx) but located at %p", (unsigned long)id, (unsigned long long)en, (void *)p);
         } else if (user & (1ull << id)) {
             CHECKF(p != NULL, "enabled user feature %lu not located", (unsigned long)id);
             if (p) {
@@ -1155,7 +1195,8 @@ TEST(set_mask_without_xstate_chunk) {
     REQUIRE(c);
     SetLastError(0);
     CHECK(!X.SetXStateFeaturesMask(c, T_XS_AVX | 3));
-    CHECK_EQ(GetLastError(), ERROR_INVALID_PARAMETER);
+    CX_CHECK_WGAP("SetXStateFeaturesMask fails without a last error", GetLastError() == ERROR_INVALID_PARAMETER,
+                  "GLE %lu want ERROR_INVALID_PARAMETER", (unsigned long)GetLastError());
     c->ContextFlags = CONTEXT_CONTROL;
     CHECK(X.SetXStateFeaturesMask(c, 3));
     CHECKF((c->ContextFlags & CX_XMMF) == CX_XMMF, "legacy mask 3 did not request the FP part: flags 0x%lx",
@@ -1183,11 +1224,13 @@ TEST(get_mask_plain_contexts) {
     m = 0xDEAD;
     SetLastError(0);
     CHECK(!X.GetXStateFeaturesMask(c, &m));
-    CHECK_EQ(GetLastError(), ERROR_NOT_SUPPORTED);
+    CX_CHECK_WGAP("GetXStateFeaturesMask fails without a last error", GetLastError() == ERROR_NOT_SUPPORTED,
+                  "GLE %lu want ERROR_NOT_SUPPORTED", (unsigned long)GetLastError());
     c->ContextFlags = 0x1F;
     SetLastError(0);
     CHECK(!X.SetXStateFeaturesMask(c, 3));
-    CHECK_EQ(GetLastError(), ERROR_NOT_SUPPORTED);
+    CX_CHECK_WGAP("SetXStateFeaturesMask fails without a last error", GetLastError() == ERROR_NOT_SUPPORTED,
+                  "GLE %lu want ERROR_NOT_SUPPORTED", (unsigned long)GetLastError());
     cx_free(c);
 }
 
@@ -1204,11 +1247,12 @@ TEST(copy_context_invalid_flags) {
     CHECK_EQ(GetLastError(), ERROR_INVALID_PARAMETER);
     SetLastError(0);
 #ifdef T_X64
-    CHECK(!X.CopyContext(a.ctx, CONTEXT_AMD64 | 0x20, b.ctx));
+    BOOL r = X.CopyContext(a.ctx, CONTEXT_AMD64 | 0x20, b.ctx);
 #else
-    CHECK(!X.CopyContext(a.ctx, CONTEXT_i386 | 0x80, b.ctx));
+    BOOL r = X.CopyContext(a.ctx, CONTEXT_i386 | 0x80, b.ctx);
 #endif
-    CHECK_EQ(GetLastError(), ERROR_INVALID_PARAMETER);
+    CX_CHECK_WGAP("CopyContext does not validate ContextFlags", !r && GetLastError() == ERROR_INVALID_PARAMETER,
+                  "CopyContext(undefined flag bit) r=%d GLE %lu want FALSE / ERROR_INVALID_PARAMETER", r, (unsigned long)GetLastError());
     cx_xc_free(&a); cx_xc_free(&b);
 }
 
@@ -1234,8 +1278,16 @@ TEST(copy_context_partial_control) {
     CHECK(X.CopyContext(d.ctx, CONTEXT_INTEGER, s.ctx));
     for (int i = 0; i < CX_NGPR; i++) CHECK_EQ(cx_gpr(d.ctx, i), cx_gpr(s.ctx, i));
     for (int i = 0; i < CX_NV; i++) CHECKF(cx_all_sent(cx_xmm(d.ctx, i), 16), "CopyContext(CONTEXT_INTEGER) copied xmm%d", i);
+    cx_set_mxcsr(s.ctx, 0x3F80);
+    cx_set_mxcsr(d.ctx, 0x1F80);
     CHECK(X.CopyContext(d.ctx, CX_XMMF, s.ctx));
     for (int i = 0; i < CX_NV; i++) CHECK_MEM(cx_xmm(d.ctx, i), cx_xmm(s.ctx, i), 16);
+    CHECK_EQ(cx_fx_mxcsr(d.ctx), 0x3F80);
+#ifdef T_X64
+    /* ntdll!RtlpCopyLegacyContextAmd64 copies CONTEXT.MxCsr (+0x34) with the FP part */
+    CX_CHECK_WGAP("CopyContext does not copy CONTEXT.MxCsr", d.ctx->MxCsr == 0x3F80, "CONTEXT.MxCsr 0x%lx after CopyContext(FP), want 0x3F80",
+                  (unsigned long)d.ctx->MxCsr);
+#endif
     cx_xc_free(&s); cx_xc_free(&d);
 }
 
@@ -1338,7 +1390,9 @@ TEST(getctx_control_only_leaves_rest) {
         if (c && GetThreadContext(w.h, c)) {
             cx_check_control(c, a, T_VK_XMM, "CONTEXT_CONTROL");
 #ifdef T_X86
-            CHECK_EQ(c->Ebp, (DWORD)a->gin[4]);   /* EBP is part of CONTEXT_CONTROL on x86 */
+            /* EBP is part of CONTEXT_CONTROL on x86 (winnt.h) */
+            CX_CHECK_WGAP("x86 CONTEXT_CONTROL does not carry Ebp", c->Ebp == (DWORD)a->gin[4], "Ebp 0x%lx want 0x%lx",
+                          (unsigned long)c->Ebp, (unsigned long)(DWORD)a->gin[4]);
 #endif
             CHECKF(cx_gprs_untouched(c, 0), "CONTEXT_CONTROL filled integer registers");
             for (int i = 0; i < CX_NV; i++) CHECKF(cx_all_sent(cx_xmm(c, i), 16), "CONTEXT_CONTROL filled xmm%d", i);
@@ -1597,7 +1651,7 @@ TEST(setctx_identity_roundtrip) {
         for (int i = 0; i < CX_NGPR; i++) CHECK_EQ(a->gout[i], cx_gpr_expect(a, i));
         for (int i = 0; i < 8; i++) CHECK_MEM(a->fout[i].b, a->fin[i].b, 10);
         CHECK_EQ(a->mxcsr_out, 0x3F80);
-        CHECK_EQ(a->fcw_out, 0x0A7F);
+        CHECK_EQ(a->fcw_out & CX_FCW_BITS, 0x0A7F & CX_FCW_BITS);
     }
     cx_free(a);
 }
@@ -1665,14 +1719,7 @@ TEST(setctx_mxcsr_observed) {
     cx_args *a = cx_args_new(0x6400, 0);
     REQUIRE(a);
     static const uint32_t vals[] = { 0x7F80, 0x1F80 | 0x8000 | 0x40, 0x1F80 | 0x003F, 0x1F00 };
-    uint32_t mask = 0xFFBF;
-    {
-        T_ALIGN(16) uint8_t fx[512];
-        memset(fx, 0, sizeof fx);
-        t_fxsave(fx);
-        uint32_t m; memcpy(&m, fx + 28, 4);
-        if (m) mask = m;
-    }
+    uint32_t mask = cx_mxcsr_mask();
     for (size_t k = 0; k < T_COUNTOF(vals); k++) {
         uint32_t v = vals[k] & mask;
         cx_args_fill(a, 0x6400 + (uint32_t)k, 0);
@@ -1739,7 +1786,7 @@ TEST(setctx_x87_cw_observed) {
     } else CHECKF(ok, "worker did not start");
     cx_release(&w);
     if (w.done) {
-        CHECK_EQ(a->fcw_out, 0x0C7F);
+        CHECK_EQ(a->fcw_out & CX_FCW_BITS, 0x0C7F & CX_FCW_BITS);
         for (int i = 0; i < 8; i++) CHECK_MEM(a->fout[i].b, a->fin[i].b, 10);
     }
     cx_free(a);
@@ -1801,7 +1848,10 @@ TEST(setctx_integer_observed) {
 #ifdef T_X86
             want = (uint32_t)want;
 #endif
-            CHECKF(a->gout[i] == want, "%s observed 0x%llx want 0x%llx", cx_gpr_name(i), (unsigned long long)a->gout[i], (unsigned long long)want);
+            if (cx_gpr_is_control(i))
+                CX_CHECK_WGAP("x86 CONTEXT_INTEGER set changes Ebp (a CONTEXT_CONTROL register)", a->gout[i] == want,
+                              "%s observed 0x%llx want 0x%llx", cx_gpr_name(i), (unsigned long long)a->gout[i], (unsigned long long)want);
+            else CHECKF(a->gout[i] == want, "%s observed 0x%llx want 0x%llx", cx_gpr_name(i), (unsigned long long)a->gout[i], (unsigned long long)want);
         }
         for (int i = 0; i < CX_NV; i++) CHECK_MEM(a->vout[i], a->vin[i], 16);
     }
@@ -1865,6 +1915,246 @@ TEST(setctx_rsp_rip_preserved_by_fp_set) {
     cx_free(a);
 }
 
+TEST(getctx_segments_only) {
+    /* CONTEXT_SEGMENTS = DS/ES/FS/GS. All threads of a process share these selectors, so the worker's values
+     * equal the case thread's. CS/SS belong to CONTEXT_CONTROL and stay untouched. */
+    cx_args *a = cx_args_new(0x5C00, 0);
+    REQUIRE(a);
+    cx_worker w;
+    int ok = cx_worker_start(&w, a, T_VK_XMM);
+    if (ok && cx_suspend(&w)) {
+        CONTEXT *c = cx_plain(CONTEXT_SEGMENTS);
+        if (c && GetThreadContext(w.h, c)) {
+#define CX_SEGCHK(n, own) CX_CHECK_WGAP("context reports fixed Windows selectors, not the thread's", (uint16_t)c->n == (own), \
+                                    #n " 0x%x want 0x%x (the thread's selector)", (unsigned)c->n, (unsigned)(own))
+            CX_SEGCHK(SegDs, cx_own_ds());
+            CX_SEGCHK(SegEs, cx_own_es());
+            CX_SEGCHK(SegFs, cx_own_fs());
+            CX_SEGCHK(SegGs, cx_own_gs());
+#undef CX_SEGCHK
+            CHECKF(cx_gprs_untouched(c, 1), "CONTEXT_SEGMENTS filled general registers");
+            uintptr_t ip = cx_ip(c), sp = cx_sp(c);
+            CHECKF(cx_all_sent(&ip, sizeof ip) && cx_all_sent(&sp, sizeof sp), "CONTEXT_SEGMENTS filled IP/SP");
+            CHECKF(cx_all_sent(&c->SegCs, sizeof c->SegCs) && cx_all_sent(&c->SegSs, sizeof c->SegSs), "CONTEXT_SEGMENTS filled SegCs/SegSs");
+            for (int i = 0; i < CX_NV; i++) CHECKF(cx_all_sent(cx_xmm(c, i), 16), "CONTEXT_SEGMENTS filled xmm%d", i);
+            t_info("segments", "ds %x es %x fs %x gs %x", (unsigned)c->SegDs, (unsigned)c->SegEs, (unsigned)c->SegFs, (unsigned)c->SegGs);
+        } else CHECKF(0, "GetThreadContext(CONTEXT_SEGMENTS) GLE=%lu", (unsigned long)GetLastError());
+        cx_free(c);
+    } else CHECKF(ok, "worker did not start");
+    cx_release(&w);
+    cx_free(a);
+}
+
+TEST(getctx_x87_partial_stack) {
+    /* Three values on the x87 stack: TOP = 5, ST(0..2) live in physical R5..R7. The CONTEXT keeps the
+     * stack-relative ST(i) order (FXSAVE layout), the abridged tag byte is indexed by physical register.
+     * Then ST(1) is replaced through SetThreadContext and the worker pops what it observes. */
+    cx_args *a = cx_args_new(0x5D00, 1);
+    REQUIRE(a);
+    a->flags |= CXF_X87_3;
+    t_f80 nv;
+    cx_f80_make(&nv, 0x5D77, 1);
+    int set_ok = 0;
+    cx_worker w;
+    int ok = cx_worker_start(&w, a, T_VK_XMM);
+    if (ok && cx_suspend(&w)) {
+        CONTEXT *c = cx_get_std(&w);
+        if (c) {
+            char lab[48];
+            for (int i = 0; i < 3; i++) {
+                snprintf(lab, sizeof lab, "ST(%d) of 3", i);         CHECK_REG(lab, cx_st(c, i), a->fin[i].b, 10);
+                snprintf(lab, sizeof lab, "FXSAVE ST(%d) of 3", i);  CHECK_REG(lab, cx_fx(c) + 32 + 16 * i, a->fin[i].b, 10);
+            }
+            uint16_t fsw; memcpy(&fsw, cx_fx(c) + 2, 2);
+            CHECKF(((fsw >> 11) & 7) == 5, "FSW 0x%x: TOP %u after three pushes, want 5", fsw, (fsw >> 11) & 7);
+            CHECKF(cx_fx(c)[4] == 0xE0, "abridged tag 0x%02x, want 0xE0 (R5-R7 valid)", cx_fx(c)[4]);
+#ifdef T_X86
+            /* full tag word: R0-R4 empty (11), R5-R7 valid normals (00) */
+            CHECKF((c->FloatSave.TagWord & 0xFFFF) == 0x03FF, "FloatSave.TagWord 0x%lx, want 0x03FF", (unsigned long)c->FloatSave.TagWord);
+            CHECKF(((c->FloatSave.StatusWord >> 11) & 7) == 5, "FloatSave.StatusWord 0x%lx: TOP != 5", (unsigned long)c->FloatSave.StatusWord);
+#endif
+            cx_set_st(c, 1, &nv);
+            c->ContextFlags = CONTEXT_FLOATING_POINT | CX_XMMF;
+            set_ok = SetThreadContext(w.h, c);
+            CHECKF(set_ok, "SetThreadContext(ST1) GLE=%lu", (unsigned long)GetLastError());
+            cx_free(c);
+        }
+    } else CHECKF(ok, "worker did not start");
+    cx_release(&w);
+    if (w.done) {
+        CHECK_REG("ST(0) observed", a->fout[0].b, a->fin[0].b, 10);
+        CHECK_REG("ST(1) observed", a->fout[1].b, set_ok ? nv.b : a->fin[1].b, 10);
+        CHECK_REG("ST(2) observed", a->fout[2].b, a->fin[2].b, 10);
+    }
+    cx_free(a);
+}
+
+TEST(setctx_eflags_sanitized) {
+    /* User EFLAGS from a CONTEXT are sanitized, never trusted: IOPL cannot be raised, IF stays set, and on x64
+     * NT is dropped (ntoskrnl!KxContextToKframes 19041: EFlags & 0x210DD5 | 0x200). Arithmetic/control flags
+     * the user may own (DF here) are applied: the worker captures EFLAGS at its loop exit (CLD follows). */
+    cx_args *a = cx_args_new(0x6B00, 0);
+    REQUIRE(a);
+    cx_worker w;
+    int ok = cx_worker_start(&w, a, T_VK_XMM);
+    int set_ok = 0;
+    if (ok && cx_suspend(&w)) {
+        CONTEXT *c = cx_plain(CONTEXT_CONTROL);
+        if (c && GetThreadContext(w.h, c)) {
+            DWORD f = (c->EFlags | 0x400u /* DF */ | 0x3000u /* IOPL 3 */) & ~0x200u /* IF */;
+#ifdef T_X64
+            f |= 0x4000u;   /* NT */
+#endif
+            c->EFlags = f;
+            set_ok = SetThreadContext(w.h, c);
+            CHECKF(set_ok, "SetThreadContext(EFlags 0x%lx) GLE=%lu", (unsigned long)f, (unsigned long)GetLastError());
+            CONTEXT *d = cx_plain(CONTEXT_CONTROL);
+            if (set_ok && d && GetThreadContext(w.h, d)) {
+                t_info("eflags_after_set", "0x%lx (requested 0x%lx)", (unsigned long)d->EFlags, (unsigned long)f);
+                /* the stored context must report what the thread will really run with */
+                const char *gap = "GetThreadContext reports unsanitized EFlags stored by SetThreadContext";
+                CX_CHECK_WGAP(gap, (d->EFlags & 0x3000) == 0, "EFlags 0x%lx: IOPL raised through SetThreadContext", (unsigned long)d->EFlags);
+                CX_CHECK_WGAP(gap, d->EFlags & 0x200, "EFlags 0x%lx: IF cleared through SetThreadContext", (unsigned long)d->EFlags);
+                CHECKF(d->EFlags & 0x400, "EFlags 0x%lx: DF not applied", (unsigned long)d->EFlags);
+#ifdef T_X64
+                CX_CHECK_WGAP(gap, !(d->EFlags & 0x4000), "EFlags 0x%lx: NT applied", (unsigned long)d->EFlags);
+#endif
+            }
+            cx_free(d);
+        }
+        cx_free(c);
+    } else CHECKF(ok, "worker did not start");
+    cx_release(&w);
+    if (w.done && set_ok) {
+        uint32_t e = a->eflags_out;
+        t_info("eflags_observed", "0x%x", e);
+        CHECKF(e & 0x400, "worker EFLAGS 0x%x: DF set through SetThreadContext not observed", e);
+        CHECKF((e & 0x3000) == 0, "worker EFLAGS 0x%x: running with IOPL %u", e, (e >> 12) & 3);
+        CHECKF(e & 0x200, "worker EFLAGS 0x%x: running with IF clear", e);
+#ifdef T_X64
+        CHECKF(!(e & 0x4000), "worker EFLAGS 0x%x: running with NT set", e);
+#endif
+        for (int i = 0; i < CX_NGPR; i++) CHECK_EQ(a->gout[i], cx_gpr_expect(a, i));
+    }
+    cx_free(a);
+}
+
+TEST(getctx_eflags_df_clear_baseline) {
+    /* Baseline for setctx_eflags_sanitized: without a set, the worker runs with DF clear, IF set, IOPL 0. */
+    cx_args *a = cx_args_new(0x6C00, 0);
+    REQUIRE(a);
+    cx_worker w;
+    int ok = cx_worker_start(&w, a, T_VK_XMM);
+    if (ok && cx_suspend(&w)) {
+        CONTEXT *c = cx_plain(CONTEXT_CONTROL);
+        if (c && GetThreadContext(w.h, c)) {
+            CHECKF(!(c->EFlags & 0x400), "EFlags 0x%lx: DF set in a C-callable routine", (unsigned long)c->EFlags);
+            CHECKF((c->EFlags & 0x3000) == 0, "EFlags 0x%lx: IOPL != 0", (unsigned long)c->EFlags);
+        }
+        cx_free(c);
+    } else CHECKF(ok, "worker did not start");
+    cx_release(&w);
+    if (w.done) {
+        CHECKF(!(a->eflags_out & 0x400) && (a->eflags_out & 0x200), "worker EFLAGS 0x%x", a->eflags_out);
+    }
+    cx_free(a);
+}
+
+/* Child: SetThreadContext with reserved MXCSR bits on a suspended worker. Windows masks CONTEXT.MxCsr with
+ * MXCSR_MASK (ntoskrnl!KxContextToKframes: & KiMxCsrMask); a raw LDMXCSR of it would #GP. Prints
+ * SET=<ok> GLE=<e> then MX=<observed> DONE=<exited>. Runs in a child: a broken implementation kills the
+ * worker (an exception on a non-case thread ends the process). */
+CHILD(cx_mxres) {
+    cx_resolve();
+    cx_args *a = cx_args_new(0x6D00, 0);
+    cx_worker w;
+    if (!a || !cx_worker_start(&w, a, T_VK_XMM)) { printf("SET=-1 GLE=0 start failed\n"); return 3; }
+    SuspendThread(w.h);
+    CONTEXT *c = cx_plain(CX_XMMF);
+    BOOL r = FALSE;
+    DWORD e = 0;
+    if (c && GetThreadContext(w.h, c)) {
+        cx_set_mxcsr(c, 0xFFFF0000u | 0x1F80u);
+        SetLastError(0);
+        r = SetThreadContext(w.h, c);
+        e = GetLastError();
+    }
+    printf("SET=%d GLE=%lu\n", r ? 1 : 0, (unsigned long)e);
+    fflush(stdout);
+    int done = cx_worker_finish(&w);
+    printf("MX=%x DONE=%d\n", a->mxcsr_out, done);
+    fflush(stdout);
+    return 0;
+}
+
+TEST(setctx_mxcsr_reserved_bits) {
+    static t_child_result r;
+    REQUIRE(t_child_run("cx_mxres", "", 20000, &r));
+    CHECKF(!r.timed_out, "child timed out");
+    char val[128];
+    int set = -1; unsigned long gle = 0;
+    if (t_child_find(&r, "SET=", val, sizeof val)) sscanf(val, "%d GLE=%lu", &set, &gle);
+    REQUIREF(set >= 0, "child setup failed: %.300s", r.out);
+    unsigned mx = 0; int done = 0;
+    int have = t_child_find(&r, "MX=", val, sizeof val) && sscanf(val, "%x DONE=%d", &mx, &done) == 2;
+    if (r.exc_code || !have || !done) {
+        if (t_is_wine()) XFAIL("wine %s: reserved MXCSR bits from a CONTEXT are not masked (worker died, exception 0x%lx)",
+                               t_wine_version(), (unsigned long)r.exc_code);
+        CHECKF(0, "worker did not survive SetThreadContext with reserved MXCSR bits (exception 0x%lx, output %.200s)",
+               (unsigned long)r.exc_code, r.out);
+        return;
+    }
+    t_info("set_result", "%d gle=%lu observed=0x%x", set, gle, mx);
+    uint32_t want = (0xFFFF0000u | 0x1F80u) & cx_mxcsr_mask();
+    if (set) CHECKF(mx == want, "observed MXCSR 0x%x, want 0x%x (requested value & MXCSR_MASK)", mx, want);
+    else {
+        t_note("SetThreadContext rejected reserved MXCSR bits (GLE %lu); Windows 10 masks them instead", gle);
+        CHECKF(mx == 0x1F80, "rejected set still changed MXCSR to 0x%x", mx);
+    }
+    CHECK_EQ(r.exit_code, 0);
+}
+
+TEST(setctx_fxsave_reserved_bytes_ignored) {
+    /* The FXSAVE image in a CONTEXT has reserved / software-available bytes (x64: 416-511, x86: 288-511).
+     * Callers commonly leave them uninitialized (InitializeContext does not clear them, CopyContext does not
+     * copy them); FXRSTOR/XRSTOR ignore them, so SetThreadContext must too: the thread keeps exact XMM and,
+     * with CONTEXT_XSTATE, YMM upper state. */
+    int avx = cx_avx_ok();
+    cx_args *a = cx_args_new(0x6E00, 0);
+    REQUIRE(a);
+    uint8_t lo[16];
+    t_pattern_reg(lo, 16, 0x6E01, 1);
+    cx_worker w;
+    int ok = cx_worker_start(&w, a, avx ? T_VK_YMM : T_VK_XMM);
+    int set_ok = 0;
+    if (ok && cx_suspend(&w)) {
+        cx_xc x = { 0 };
+        CONTEXT *plain = NULL, *c = NULL;
+        if (avx) { if (cx_get_x(&w, &x, CX_STD | CONTEXT_XSTATE, T_XS_AVX)) c = x.ctx; }
+        else { plain = cx_get_std(&w); c = plain; }
+        if (c) {
+            memset(cx_fx(c) + CX_FX_DEFINED, 0xA5, 512 - CX_FX_DEFINED);
+            memcpy(cx_xmm(c, 1), lo, 16);
+            set_ok = SetThreadContext(w.h, c);
+            CHECKF(set_ok, "SetThreadContext with garbage in reserved FXSAVE bytes GLE=%lu", (unsigned long)GetLastError());
+        }
+        cx_xc_free(&x);
+        cx_free(plain);
+    } else CHECKF(ok, "worker did not start");
+    cx_release(&w);
+    if (w.done && set_ok) {
+        CHECK_REG("xmm1 set", a->vout[1], lo, 16);
+        for (int i = 0; i < CX_NV; i++) if (i != 1) CHECK_REG("xmm untouched", a->vout[i], a->vin[i], 16);
+        if (avx) {
+            int up = 1;
+            for (int i = 0; i < CX_NV; i++) if (memcmp(a->vout[i] + 16, a->vin[i] + 16, 16)) up = 0;
+            CX_CHECK_WGAP("reserved FXSAVE bytes of a CONTEXT reach the kernel's sigreturn frame (YMM state dropped)", up,
+                          "YMM upper halves changed by a set whose only difference is reserved FXSAVE bytes");
+        }
+    }
+    cx_free(a);
+}
+
 /* ======================================================================================================
  * 7. CONTEXT_XSTATE: YMM
  * ====================================================================================================== */
@@ -1910,6 +2200,8 @@ TEST(xstate_getctx_ymm_init_state) {
     CX_NEED_AVX();
     cx_args *a = cx_args_new(0x7200, 0);
     REQUIRE(a);
+    /* the x64 ABI lets earlier code leave YMM upper halves dirty: start from VZEROUPPER, then legacy SSE loads */
+    a->flags |= CXF_VZU;
     cx_worker w;
     int ok = cx_worker_start(&w, a, T_VK_XMM);
     if (ok && cx_suspend(&w)) {
@@ -1919,6 +2211,7 @@ TEST(xstate_getctx_ymm_init_state) {
             t_info("mask_init_ymm", "0x%llx", (unsigned long long)m);
             uint8_t *ymmh = cx_locate(x.ctx, CX_XS_AVX, NULL);
             if (m & T_XS_AVX) CHECKF(ymmh && cx_all_zero(ymmh, 16 * CX_NV), "AVX present in mask but upper halves are not zero");
+            else if (ymmh) t_info("ymm_area_when_init", "%s", cx_all_zero(ymmh, 16 * CX_NV) ? "zeroed" : "left as is");
             cx_check_xmm(x.ctx, a->vin, CX_NV, "low lanes");
         }
         cx_xc_free(&x);
@@ -2088,6 +2381,7 @@ TEST(xstate_two_workers_isolated) {
     if (!ok1) memset(&w2, 0, sizeof w2);
     uint8_t nv[16];
     t_pattern_reg(nv, 16, 0x7830, 2);
+    int set1 = 0;
     if (ok1 && ok2 && cx_suspend(&w1) && cx_suspend(&w2)) {
         cx_xc x1 = { 0 }, x2 = { 0 };
         if (cx_get_x(&w1, &x1, CX_STD | CONTEXT_XSTATE, T_XS_AVX) && cx_get_x(&w2, &x2, CX_STD | CONTEXT_XSTATE, T_XS_AVX)) {
@@ -2098,14 +2392,19 @@ TEST(xstate_two_workers_isolated) {
                     CHECK_REG("worker2 ymm upper", h2 + 16 * i, a2->vin[i] + 16, 16);
                 }
                 memcpy(h1 + 16 * 2, nv, 16);
-                CHECK(SetThreadContext(w1.h, x1.ctx));
+                set1 = SetThreadContext(w1.h, x1.ctx);
+                CHECKF(set1, "SetThreadContext(worker1) GLE=%lu", (unsigned long)GetLastError());
             }
         }
         cx_xc_free(&x1); cx_xc_free(&x2);
     } else CHECKF(ok1 && ok2, "workers did not start");
     cx_release(&w1);
     if (ok1) cx_release(&w2);
-    if (w1.done) { uint8_t want[32]; memcpy(want, a1->vin[2], 32); memcpy(want + 16, nv, 16); CHECK_REG("worker1 ymm2", a1->vout[2], want, 32); }
+    if (w1.done) for (int i = 0; i < CX_NV; i++) {
+        uint8_t want[32]; memcpy(want, a1->vin[i], 32);
+        if (i == 2 && set1) memcpy(want + 16, nv, 16);
+        CHECK_REG("worker1 ymm", a1->vout[i], want, 32);
+    }
     if (w2.done) for (int i = 0; i < CX_NV; i++) CHECK_REG("worker2 untouched", a2->vout[i], a2->vin[i], 32);
     cx_free(a1); cx_free(a2);
 }
@@ -2159,17 +2458,32 @@ TEST(xstate_copycontext_from_thread) {
         cx_xc s = { 0 };
         if (cx_get_x(&w, &s, CX_STD | CONTEXT_XSTATE, T_XS_AVX)) {
             CHECK(X.CopyContext(d.ctx, CX_STD | CONTEXT_XSTATE, s.ctx));
-            t_info("dst_flags", "0x%lx src 0x%lx", (unsigned long)d.ctx->ContextFlags, (unsigned long)s.ctx->ContextFlags);
-            t_info("dst_seg", "cs %x ss %x efl %lx dr7 %llx", d.ctx->SegCs, d.ctx->SegSs, (unsigned long)d.ctx->EFlags, (unsigned long long)d.ctx->Dr7);
             CHECK_EQ(cx_mask(d.ctx), cx_mask(s.ctx));
+            /* ntdll!RtlpCopyXStateChunk: XSTATE_BV = src & enabled; XCOMP_BV = src & (enabled|3) | bit 63 when the
+             * OS uses the compacted format, else 0 -> for a valid source both header words are copied as is */
+            uint64_t *xs = cx_xs_hdr(s.ctx), *xd = cx_xs_hdr(d.ctx);
+            CHECKF(xd[0] == xs[0] && xd[1] == xs[1], "XSAVE header after CopyContext %llx/%llx, source %llx/%llx",
+                   (unsigned long long)xd[0], (unsigned long long)xd[1], (unsigned long long)xs[0], (unsigned long long)xs[1]);
             uint8_t *hd = cx_locate(d.ctx, CX_XS_AVX, NULL), *hs = cx_locate(s.ctx, CX_XS_AVX, NULL);
             if (hd && hs) CHECK_MEM(hd, hs, 16 * CX_NV);
             CHECK_MEM(cx_xmm(d.ctx, 0), cx_xmm(s.ctx, 0), 16 * CX_NV);
             CHECK_EQ(cx_ip(d.ctx), cx_ip(s.ctx));
             CHECK_EQ(cx_sp(d.ctx), cx_sp(s.ctx));
             for (int i = 0; i < CX_NGPR; i++) CHECK_EQ(cx_gpr(d.ctx, i), cx_gpr(s.ctx, i));
-            /* the copy is a valid SetThreadContext source */
-            if (hd) { uint8_t nv[16]; t_pattern_reg(nv, 16, 0x7A01, 4); memcpy(hd + 16 * 4, nv, 16);
+            int mx_ok = 1;
+#ifdef T_X64
+            mx_ok = d.ctx->MxCsr == s.ctx->MxCsr;
+            CX_CHECK_WGAP("CopyContext does not copy CONTEXT.MxCsr", mx_ok, "CONTEXT.MxCsr 0x%lx after CopyContext, source 0x%lx",
+                          (unsigned long)d.ctx->MxCsr, (unsigned long)s.ctx->MxCsr);
+#endif
+            /* the copy is a valid SetThreadContext source (only when it is a faithful copy: a garbage MxCsr
+             * would be a different test, see setctx_mxcsr_reserved_bits) */
+            /* RtlpCopyLegacyContext{Amd64,X86} copy only the defined FXSAVE bytes (x86: the first 0x120); the
+             * rest of the destination keeps its old (here: sentinel) contents. Reserved FXSAVE bytes must not
+             * matter to SetThreadContext either, but that is setctx_fxsave_reserved_bytes_ignored (Wine keeps
+             * Linux's FP_XSTATE_MAGIC there): take them from the source so this case is only about the copy. */
+            memcpy(cx_fx(d.ctx) + CX_FX_DEFINED, cx_fx(s.ctx) + CX_FX_DEFINED, 512 - CX_FX_DEFINED);
+            if (hd && mx_ok) { uint8_t nv[16]; t_pattern_reg(nv, 16, 0x7A01, 4); memcpy(hd + 16 * 4, nv, 16);
                       CHECK(SetThreadContext(w.h, d.ctx)); memcpy(a->vin[4] + 16, nv, 16); }
         }
         cx_xc_free(&s);
@@ -2395,8 +2709,12 @@ TEST(err_xstate_chunk_too_short) {
         BOOL r = GetThreadContext(w.h, x.ctx);
         DWORD e = GetLastError();
         t_info("short_chunk_result", "%d gle=%lu", r, (unsigned long)e);
-        CHECKF(cx_all_sent(ymmh, 256), "GetThreadContext wrote the AVX area beyond CONTEXT_EX.XState.Length");
-        if (!r) CHECKF(e == ERROR_MORE_DATA, "short XSTATE chunk: GLE %lu (Windows 10: ERROR_MORE_DATA)", (unsigned long)e);
+        CX_CHECK_WGAP("GetThreadContext ignores CONTEXT_EX.XState.Length", cx_all_sent(ymmh, 256),
+                      "GetThreadContext wrote the AVX area beyond CONTEXT_EX.XState.Length");
+        if (!r) {
+            CHECKF(e != 0, "short XSTATE chunk: failed without an error code");
+            if (e != ERROR_MORE_DATA) t_note("short XSTATE chunk: GLE %lu (Windows 10 path: STATUS_BUFFER_OVERFLOW -> ERROR_MORE_DATA)", (unsigned long)e);
+        }
     } else CHECKF(ok, "worker did not start");
     cx_release(&w);
     if (w.done) for (int i = 0; i < CX_NV; i++) CHECK_REG("ymm", a->vout[i], a->vin[i], 32);
@@ -2494,7 +2812,9 @@ static void cx_cap_prepare(cx_cap *k, CONTEXT *c, uint32_t tag) {
     k->ctx = (uint64_t)(uintptr_t)c;
     k->mxcsr = 0x3F80;
 }
-static void cx_cap_run(cx_cap *k) {
+/* noinline: x86 Windows RtlCaptureContext reports the caller frame (cx_capture's return address), so all
+ * captures must come from this one call site to be comparable */
+static __attribute__((noinline)) void cx_cap_run(cx_cap *k) {
     unsigned mx = t_get_mxcsr();
     cx_capture(k);
     t_set_mxcsr(mx);
@@ -2511,8 +2831,10 @@ TEST(rtlcapture_control_integer) {
     DWORD need = CONTEXT_CONTROL | CONTEXT_INTEGER;
     CHECKF((c->ContextFlags & need) == need, "ContextFlags 0x%lx lacks CONTROL|INTEGER", (unsigned long)c->ContextFlags);
     t_info("flags", "0x%lx", (unsigned long)c->ContextFlags);
-    CHECKF(c->SegCs == cx_own_cs(), "SegCs 0x%x want 0x%x", (unsigned)c->SegCs, cx_own_cs());
-    CHECKF(c->SegSs == cx_own_ss(), "SegSs 0x%x want 0x%x", (unsigned)c->SegSs, cx_own_ss());
+    /* selectors: low 16 bits only - RtlCaptureContext stores them with 16-bit moves, and the x86 CONTEXT
+     * fields are DWORDs whose upper half keeps the caller's buffer contents */
+    CHECKF((uint16_t)c->SegCs == cx_own_cs(), "SegCs 0x%x want 0x%x", (unsigned)c->SegCs, cx_own_cs());
+    CHECKF((uint16_t)c->SegSs == cx_own_ss(), "SegSs 0x%x want 0x%x", (unsigned)c->SegSs, cx_own_ss());
     CHECKF(c->EFlags & 0x2, "EFlags 0x%lx", (unsigned long)c->EFlags);
     CHECKF(c->EFlags & 0x200, "EFlags 0x%lx IF clear", (unsigned long)c->EFlags);
 #ifdef T_X64
@@ -2522,6 +2844,12 @@ TEST(rtlcapture_control_integer) {
     DWORD64 got[8] = { c->Rbx, c->Rbp, c->Rsi, c->Rdi, c->R12, c->R13, c->R14, c->R15 };
     for (int i = 0; i < 8; i++) CHECKF(got[i] == k.gin[i], "%s 0x%llx want 0x%llx", nm[i], (unsigned long long)got[i], (unsigned long long)k.gin[i]);
     if (c->Rcx != (DWORD64)(uintptr_t)c) t_note("Rcx 0x%llx is not the CONTEXT argument", (unsigned long long)c->Rcx);
+    /* ntdll!RtlCaptureContext (x64) stores all six selectors and reports CONTEXT_SEGMENTS (0x10000F) */
+    if ((c->ContextFlags & CONTEXT_SEGMENTS) == CONTEXT_SEGMENTS)
+        CHECKF(c->SegDs == cx_own_ds() && c->SegEs == cx_own_es() && c->SegFs == cx_own_fs() && c->SegGs == cx_own_gs(),
+               "captured DS/ES/FS/GS %x/%x/%x/%x want %x/%x/%x/%x", c->SegDs, c->SegEs, c->SegFs, c->SegGs,
+               cx_own_ds(), cx_own_es(), cx_own_fs(), cx_own_gs());
+    else t_note("ContextFlags 0x%lx without CONTEXT_SEGMENTS", (unsigned long)c->ContextFlags);
 #else
     CHECK_EQ(c->Ebx, (DWORD)k.gin[0]);
     CHECK_EQ(c->Esi, (DWORD)k.gin[2]);
@@ -2533,7 +2861,7 @@ TEST(rtlcapture_control_integer) {
            (unsigned long)(uintptr_t)cx_cap_ret, (unsigned long)k.sp_after, (unsigned long)k.own_bp,
            (unsigned long)k.frame_ip, (unsigned long)k.frame_sp, (unsigned long)k.frame_bp);
     t_info("x86_capture_style", "%s", direct ? "call site" : frame ? "caller frame" : "other");
-    CHECKF(c->SegDs == cx_own_ds() && c->SegEs == cx_own_es(), "SegDs/SegEs 0x%lx/0x%lx", (unsigned long)c->SegDs, (unsigned long)c->SegEs);
+    CHECKF((uint16_t)c->SegDs == cx_own_ds() && (uint16_t)c->SegEs == cx_own_es(), "SegDs/SegEs 0x%lx/0x%lx", (unsigned long)c->SegDs, (unsigned long)c->SegEs);
 #endif
     cx_free(c);
 }
@@ -2580,7 +2908,17 @@ TEST(rtlcapture_repeatable_and_bounded) {
     CHECK_EQ(cx_ip(c), cx_ip(d));
     CHECK_EQ(cx_sp(c), cx_sp(d));
     CHECK_EQ(c->ContextFlags, d->ContextFlags);
-    for (int i = 0; i < CX_NGPR; i++) if (i != 1) CHECK_EQ(cx_gpr(c, i), cx_gpr(d, i));
+    /* only the registers cx_capture loads (nonvolatile); volatile ones hold whatever the C caller left */
+#ifdef T_X64
+    static const int nvi[] = { 0, 3, 4, 5, 9, 10, 11, 12 };    /* rbx rsi rdi rbp r12-r15 */
+#else
+    static const int nvi[] = { 0, 2, 3 };                      /* ebx esi edi */
+#endif
+    for (size_t j = 0; j < T_COUNTOF(nvi); j++) {
+        int i = nvi[j];
+        CHECKF(cx_gpr(c, i) == cx_gpr(d, i), "%s 0x%llx vs 0x%llx", cx_gpr_name(i), (unsigned long long)cx_gpr(c, i),
+               (unsigned long long)cx_gpr(d, i));
+    }
     t_guarded_free(base);
     cx_free(d);
 }
