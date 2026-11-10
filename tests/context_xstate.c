@@ -2924,6 +2924,675 @@ TEST(rtlcapture_repeatable_and_bounded) {
 }
 
 /* ======================================================================================================
+ * 10b. Target blocked in a kernel wait or system call
+ *
+ * Every other worker in this file spins in user mode. Here the worker loads its registers in one asm routine
+ * (cx_block_xmm / cx_block_ymm), calls a blocking function with nothing compiled in between, and stores its
+ * registers right after the call returns. Blocking calls:
+ *   wait_nt    ntdll!NtWaitForSingleObject(event)      direct: the registers reach the ntdll stub untouched
+ *   delay_nt   ntdll!NtDelayExecution(FALSE, 1.5 s)    direct
+ *   read_nt    ntdll!NtReadFile(anonymous pipe)        direct (9 arguments: exercises stack arguments)
+ *   wait_k32   kernel32!WaitForSingleObject(event)     through kernelbase (its code may use any register)
+ *   read_k32   kernel32!ReadFile(anonymous pipe)
+ *   sleepex    kernel32!SleepEx(10 s, TRUE), woken by QueueUserAPC (user APC delivery + NtContinue)
+ *
+ * Contract pinned against the Windows 10 22H2 (19041.2965) reference (docker1 corpus explorer, 2026-11):
+ *   - ntoskrnl!PspGetSetContextSpecialApc / PspGetSetContextInternal: Get/Set of another thread runs as a
+ *     kernel APC in the target, also while it waits. FP get = FXSAVE of the live registers (the user state:
+ *     the kernel does not use them), XSTATE = XSAVE. Nonvolatile GPRs and XMM6-15 are read/written through
+ *     pointers to the user-mode save slots found by unwinding the kernel stack to the system-call trap frame.
+ *   - ntoskrnl!KxContextToKframes: Rip/Rsp/EFlags and Rax-R11 into the KTRAP_FRAME, XMM0-5 into the trap
+ *     frame, XMM6-15 into the exception frame, MxCsr (& KiMxCsrMask) into TrapFrame.MxCsr, x87 control word
+ *     masked with 0x1F3F, then FXRSTOR of the CONTEXT's FltSave (with the kernel's MXCSR) and RtlXRestoreS of
+ *     the XSTATE chunk into the live registers.
+ *   - ntoskrnl!KiSystemServiceStart exit (RVA 0x40f500-0x40f87b): rbx/rdi/rsi from the trap frame, LDMXCSR
+ *     TrapFrame.MxCsr, then the SYSRET path loads Rax = service status, Rcx = TrapFrame.Rip, R11 =
+ *     TrapFrame.EFlags, Rsp = TrapFrame.Rsp, Rbp = TrapFrame.Rbp, zeroes edx and PXOR xmm0-xmm5. Before a user
+ *     APC (0x40f556) it zeroes the trap frame's Rax-R11 and Xmm0-5 slots.
+ *   => After SetThreadContext on a thread blocked in a system call, everything the x64 ABI makes nonvolatile
+ *      (rbx rbp rsi rdi r12-r15, xmm6-15 low halves, MXCSR control, x87 CW) and Rip/Rsp take effect when the
+ *      call returns. Volatile registers (rax rcx rdx r8-r11, xmm0-5, YMM upper halves, the x87 stack) are not
+ *      restored on the fast return on Windows (xmm0-5 come back zero): observations (t_info) only, as the ABI
+ *      allows the callee to clobber them anyway.
+ *   - WOW64 (x86 build on 64-bit Windows), ntoskrnl FUN_140691cef (PspWow64GetContextThread path):
+ *     PspGetContextThreadInternal(0x4010001F) of the live AMD64 state, then RtlpWow64GetContextOnAmd64:
+ *     RtlpWow64CtxFromAmd64 converts FltSave into ExtendedRegisters (FXSAVE copy) and FloatSave
+ *     (RtlFxToFnFrame); when the AMD64 SegCs != 0x23 (thread inside a system call) only control, integer,
+ *     segments and ExtendedRegisters XMM0-5 are overlaid from the saved WOW64 CPU context. So an x86 thread
+ *     captured inside a system call reports its own FCW / MXCSR / x87 stack, never an all-zero FP area.
+ *   - Rip inside the stub: the x64 ntdll Nt* stubs execute SYSCALL inline (mov r10,rcx / mov eax,n / test /
+ *     jne / syscall / ret, 0x18 bytes), so the user Rip of a blocked thread is inside the export it called.
+ *     The x86 stubs call through Wow64Transition / KiFastSystemCall: Eip is inside ntdll, not necessarily the
+ *     stub (recorded).
+ * ====================================================================================================== */
+#define CXK_FN     0
+#define CXK_RET    8
+#define CXK_NARGS  16
+#define CXK_LANDED 20
+#define CXK_ARGS   24
+#define CXK_CALLSP 104
+#define CXK_NARG_MAX 10
+typedef struct cx_call {
+    uint64_t fn;                  /* function called with nothing compiled in between */
+    uint64_t ret;                 /* RAX/EAX after the call (or at the redirect landing) */
+    uint32_t nargs;
+    volatile LONG landed;         /* set by the redirect landing label */
+    uint64_t args[CXK_NARG_MAX];  /* x64: args 0-3 in rcx rdx r8 r9, 4-9 on the stack; x86: stdcall, pushed */
+    uint64_t call_sp;             /* RSP/ESP at the call instruction (arguments in place) */
+} cx_call;
+_Static_assert(offsetof(cx_call, ret) == CXK_RET && offsetof(cx_call, nargs) == CXK_NARGS &&
+               offsetof(cx_call, landed) == CXK_LANDED && offsetof(cx_call, args) == CXK_ARGS &&
+               offsetof(cx_call, call_sp) == CXK_CALLSP, "cx_call layout");
+
+void cx_block_xmm(cx_args *a, cx_call *k) __asm__("cx_block_xmm");
+void cx_block_ymm(cx_args *a, cx_call *k) __asm__("cx_block_ymm");
+extern const char cx_blk_xmm_ret[] __asm__("cx_blk_xmm_ret");
+extern const char cx_blk_xmm_land[] __asm__("cx_blk_xmm_land");
+extern const char cx_blk_ymm_ret[] __asm__("cx_blk_ymm_ret");
+extern const char cx_blk_ymm_land[] __asm__("cx_blk_ymm_land");
+
+#ifdef T_X64
+/* Frame: 8 pushes + 328 bytes. 0-31 shadow space, 32-79 stack arguments 4-9, 96 a, 104 k, 160-319 xmm6-15. */
+#define CX_BLK(name, ret, land, LOADV, STOREV, TAIL) \
+    ".globl " name "\n.def " name "; .scl 2; .type 32; .endef\n.seh_proc " name "\n" name ":\n" \
+    "  pushq %rbp\n  .seh_pushreg %rbp\n  pushq %rbx\n  .seh_pushreg %rbx\n  pushq %rsi\n  .seh_pushreg %rsi\n" \
+    "  pushq %rdi\n  .seh_pushreg %rdi\n  pushq %r12\n  .seh_pushreg %r12\n  pushq %r13\n  .seh_pushreg %r13\n" \
+    "  pushq %r14\n  .seh_pushreg %r14\n  pushq %r15\n  .seh_pushreg %r15\n" \
+    "  subq $328, %rsp\n  .seh_stackalloc 328\n" \
+    "  movdqa %xmm6, 160(%rsp)\n  .seh_savexmm %xmm6, 160\n  movdqa %xmm7, 176(%rsp)\n  .seh_savexmm %xmm7, 176\n" \
+    "  movdqa %xmm8, 192(%rsp)\n  .seh_savexmm %xmm8, 192\n  movdqa %xmm9, 208(%rsp)\n  .seh_savexmm %xmm9, 208\n" \
+    "  movdqa %xmm10, 224(%rsp)\n  .seh_savexmm %xmm10, 224\n  movdqa %xmm11, 240(%rsp)\n  .seh_savexmm %xmm11, 240\n" \
+    "  movdqa %xmm12, 256(%rsp)\n  .seh_savexmm %xmm12, 256\n  movdqa %xmm13, 272(%rsp)\n  .seh_savexmm %xmm13, 272\n" \
+    "  movdqa %xmm14, 288(%rsp)\n  .seh_savexmm %xmm14, 288\n  movdqa %xmm15, 304(%rsp)\n  .seh_savexmm %xmm15, 304\n" \
+    "  .seh_endprologue\n" \
+    "  movq %rcx, 96(%rsp)\n  movq %rdx, 104(%rsp)\n" \
+    CX_FPENV_LOAD("%rcx") CX_X87_LOAD("%rcx") LOADV \
+    "  movq %rdx, %r11\n" \
+    "  .irp i,4,5,6,7,8,9\n  movq " CXA(CXK_ARGS) "+\\i*8(%r11), %rax\n  movq %rax, \\i*8(%rsp)\n  .endr\n" \
+    "  movq " CXA(CXO_GIN) "+0(%rcx), %rbx\n  movq " CXA(CXO_GIN) "+24(%rcx), %rsi\n" \
+    "  movq " CXA(CXO_GIN) "+32(%rcx), %rdi\n  movq " CXA(CXO_GIN) "+40(%rcx), %rbp\n" \
+    "  movq " CXA(CXO_GIN) "+72(%rcx), %r12\n  movq " CXA(CXO_GIN) "+80(%rcx), %r13\n" \
+    "  movq " CXA(CXO_GIN) "+88(%rcx), %r14\n  movq " CXA(CXO_GIN) "+96(%rcx), %r15\n" \
+    "  movq %rsp, " CXA(CXK_CALLSP) "(%r11)\n  movq %rsp, " CXA(CXO_SP) "(%rcx)\n  movl $1, " CXA(CXO_READY) "(%rcx)\n" \
+    "  movq " CXA(CXK_ARGS) "+0(%r11), %rcx\n  movq " CXA(CXK_ARGS) "+8(%r11), %rdx\n" \
+    "  movq " CXA(CXK_ARGS) "+16(%r11), %r8\n  movq " CXA(CXK_ARGS) "+24(%r11), %r9\n" \
+    "  movq " CXA(CXK_FN) "(%r11), %rax\n  callq *%rax\n" \
+    CX_GLOBAL(ret) \
+    "  movq 104(%rsp), %r11\n  movq %rax, " CXA(CXK_RET) "(%r11)\n  movq 96(%rsp), %rax\n  jmp 9f\n" \
+    CX_GLOBAL(land) \
+    "  movq 104(%rsp), %r11\n  movl $1, " CXA(CXK_LANDED) "(%r11)\n  movq %rax, " CXA(CXK_RET) "(%r11)\n" \
+    "  movq 96(%rsp), %rax\n" \
+    "9:\n  cld\n" \
+    "  movq %rbx, " CXA(CXO_GOUT) "+0(%rax)\n  movq %rcx, " CXA(CXO_GOUT) "+8(%rax)\n" \
+    "  movq %rdx, " CXA(CXO_GOUT) "+16(%rax)\n  movq %rsi, " CXA(CXO_GOUT) "+24(%rax)\n" \
+    "  movq %rdi, " CXA(CXO_GOUT) "+32(%rax)\n  movq %rbp, " CXA(CXO_GOUT) "+40(%rax)\n" \
+    "  movq %r8, " CXA(CXO_GOUT) "+48(%rax)\n  movq %r9, " CXA(CXO_GOUT) "+56(%rax)\n" \
+    "  movq %r10, " CXA(CXO_GOUT) "+64(%rax)\n  movq %r12, " CXA(CXO_GOUT) "+72(%rax)\n" \
+    "  movq %r13, " CXA(CXO_GOUT) "+80(%rax)\n  movq %r14, " CXA(CXO_GOUT) "+88(%rax)\n" \
+    "  movq %r15, " CXA(CXO_GOUT) "+96(%rax)\n" \
+    STOREV CX_X87_STORE("%rax") TAIL \
+    "  movdqa 160(%rsp), %xmm6\n  movdqa 176(%rsp), %xmm7\n  movdqa 192(%rsp), %xmm8\n  movdqa 208(%rsp), %xmm9\n" \
+    "  movdqa 224(%rsp), %xmm10\n  movdqa 240(%rsp), %xmm11\n  movdqa 256(%rsp), %xmm12\n  movdqa 272(%rsp), %xmm13\n" \
+    "  movdqa 288(%rsp), %xmm14\n  movdqa 304(%rsp), %xmm15\n" \
+    "  addq $328, %rsp\n  popq %r15\n  popq %r14\n  popq %r13\n  popq %r12\n" \
+    "  popq %rdi\n  popq %rsi\n  popq %rbx\n  popq %rbp\n  ret\n.seh_endproc\n"
+#define CX_BLK_A "%rcx"
+#define CX_BLK_S "%rax"
+#else
+/* cdecl cx_block_*(a, k); the callee is stdcall. Stack at the call: args, k, a, saved edi esi ebx ebp. */
+#define CX_BLK(name, ret, land, LOADV, STOREV, TAIL) \
+    ".globl " name "\n" name ":\n" \
+    "  pushl %ebp\n  pushl %ebx\n  pushl %esi\n  pushl %edi\n  movl 20(%esp), %ecx\n  movl 24(%esp), %edx\n" \
+    CX_FPENV_LOAD("%ecx") CX_X87_LOAD("%ecx") LOADV \
+    "  pushl %ecx\n  pushl %edx\n" \
+    "  movl " CXA(CXK_NARGS) "(%edx), %eax\n" \
+    "4:\n  testl %eax, %eax\n  jz 5f\n  decl %eax\n  pushl " CXA(CXK_ARGS) "(%edx,%eax,8)\n  jmp 4b\n5:\n" \
+    "  movl %esp, " CXA(CXK_CALLSP) "(%edx)\n  movl $0, " CXA(CXK_CALLSP) "+4(%edx)\n" \
+    "  movl %esp, " CXA(CXO_SP) "(%ecx)\n  movl $0, " CXA(CXO_SP) "+4(%ecx)\n" \
+    "  movl " CXA(CXO_GIN) "+0(%ecx), %ebx\n  movl " CXA(CXO_GIN) "+16(%ecx), %esi\n" \
+    "  movl " CXA(CXO_GIN) "+24(%ecx), %edi\n  movl " CXA(CXO_GIN) "+32(%ecx), %ebp\n" \
+    "  movl $1, " CXA(CXO_READY) "(%ecx)\n  movl " CXA(CXK_FN) "(%edx), %eax\n  call *%eax\n" \
+    CX_GLOBAL(ret) \
+    "  pushl %eax\n  movl 4(%esp), %eax\n  popl " CXA(CXK_RET) "(%eax)\n  movl $0, " CXA(CXK_RET) "+4(%eax)\n  jmp 9f\n" \
+    CX_GLOBAL(land) \
+    "  pushl %eax\n  movl 4(%esp), %eax\n  movl $1, " CXA(CXK_LANDED) "(%eax)\n" \
+    "  popl " CXA(CXK_RET) "(%eax)\n  movl $0, " CXA(CXK_RET) "+4(%eax)\n" \
+    "9:\n  movl 4(%esp), %eax\n  addl $8, %esp\n  cld\n" \
+    "  movl %ebx, " CXA(CXO_GOUT) "+0(%eax)\n  movl $0, " CXA(CXO_GOUT) "+4(%eax)\n" \
+    "  movl %edx, " CXA(CXO_GOUT) "+8(%eax)\n  movl $0, " CXA(CXO_GOUT) "+12(%eax)\n" \
+    "  movl %esi, " CXA(CXO_GOUT) "+16(%eax)\n  movl $0, " CXA(CXO_GOUT) "+20(%eax)\n" \
+    "  movl %edi, " CXA(CXO_GOUT) "+24(%eax)\n  movl $0, " CXA(CXO_GOUT) "+28(%eax)\n" \
+    "  movl %ebp, " CXA(CXO_GOUT) "+32(%eax)\n  movl $0, " CXA(CXO_GOUT) "+36(%eax)\n" \
+    STOREV CX_X87_STORE("%eax") TAIL \
+    "  popl %edi\n  popl %esi\n  popl %ebx\n  popl %ebp\n  ret\n"
+#define CX_BLK_A "%ecx"
+#define CX_BLK_S "%eax"
+#endif
+
+__asm__(
+    ".text\n"
+    CX_BLK("cx_block_xmm", "cx_blk_xmm_ret", "cx_blk_xmm_land",
+           "  .irp i," CX_RV "\n  movdqu \\i*32(" CX_BLK_A "), %xmm\\i\n  .endr\n",
+           "  .irp i," CX_RV "\n  movdqu %xmm\\i, " CXA(CXO_VOUT) "+\\i*32(" CX_BLK_S ")\n  .endr\n",
+           "")
+    CX_BLK("cx_block_ymm", "cx_blk_ymm_ret", "cx_blk_ymm_land",
+           "  .irp i," CX_RV "\n  vmovdqu \\i*32(" CX_BLK_A "), %ymm\\i\n  .endr\n",
+           "  .irp i," CX_RV "\n  vmovdqu %ymm\\i, " CXA(CXO_VOUT) "+\\i*32(" CX_BLK_S ")\n  .endr\n",
+           "  vzeroupper\n")
+);
+
+enum { CXB_WAIT_NT, CXB_DELAY_NT, CXB_READ_NT, CXB_WAIT_K32, CXB_READ_K32, CXB_SLEEPEX, CXB_NMODES };
+static const struct { const char *name; int direct; } cxb_modes[CXB_NMODES] = {
+    { "NtWaitForSingleObject", 1 }, { "NtDelayExecution", 1 }, { "NtReadFile", 1 },
+    { "WaitForSingleObject", 0 }, { "ReadFile", 0 }, { "SleepEx(alertable)", 0 },
+};
+#define CXB_DELAY_MS 1500
+typedef struct { union { LONG Status; PVOID Pointer; } u; ULONG_PTR Information; } cx_iosb;
+
+/* Everything the blocked worker references: one VirtualAlloc block, leaked on purpose if the worker never exits */
+typedef struct cx_blkst {
+    cx_call  k;
+    int      mode, kind;
+    cx_args *a;
+    HANDLE   h, ev, rd, wr;
+    DWORD    tid, nread;
+    volatile LONG apc_ran;
+    LARGE_INTEGER tmo;
+    cx_iosb  iosb;
+    uint8_t  buf[16], data[16];
+} cx_blkst;
+
+static void CALLBACK cx_blk_apc(ULONG_PTR p) { InterlockedExchange(&((cx_blkst *)p)->apc_ran, 1); }
+static DWORD WINAPI cx_blk_main(void *p) {
+    cx_blkst *s = (cx_blkst *)p;
+    if (s->kind == T_VK_YMM) cx_block_ymm(s->a, &s->k); else cx_block_xmm(s->a, &s->k);
+    return 0;
+}
+static const char *cx_blk_entry(int kind) { return kind == T_VK_YMM ? (const char *)(void *)cx_block_ymm : (const char *)(void *)cx_block_xmm; }
+static const char *cx_blk_retlab(int kind) { return kind == T_VK_YMM ? cx_blk_ymm_ret : cx_blk_xmm_ret; }
+static const char *cx_blk_landlab(int kind) { return kind == T_VK_YMM ? cx_blk_ymm_land : cx_blk_xmm_land; }
+
+static int cx_in_ntdll(uintptr_t ip, uintptr_t *base_out) {
+    HMODULE m = GetModuleHandleA("ntdll.dll");
+    if (!m) return 0;
+    const IMAGE_DOS_HEADER *d = (const IMAGE_DOS_HEADER *)m;
+    const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)((const uint8_t *)m + d->e_lfanew);
+    uintptr_t b = (uintptr_t)m;
+    if (base_out) *base_out = b;
+    return ip >= b && ip < b + nt->OptionalHeader.SizeOfImage;
+}
+/* SP after the call returned (x86 stdcall callee pops its arguments) */
+static uintptr_t cx_blk_ret_sp(const cx_blkst *s) {
+#ifdef T_X64
+    return (uintptr_t)s->k.call_sp;
+#else
+    return (uintptr_t)s->k.call_sp + 4u * s->k.nargs;
+#endif
+}
+
+static CONTEXT *cx_get_std_h(HANDLE h) {
+    CONTEXT *c = cx_plain(CX_STD);
+    if (!c) return NULL;
+    if (!GetThreadContext(h, c)) {
+        CHECKF(0, "GetThreadContext(CX_STD) of the blocked worker failed, GLE=%lu", (unsigned long)GetLastError());
+        cx_free(c);
+        return NULL;
+    }
+    return c;
+}
+
+/* Prepare mode + register images (before any thread exists: SKIP/REQUIRE are safe). Returns NULL + reason. */
+static cx_blkst *cx_blk_new(int mode, int kind, uint32_t tag, char *why, size_t cap) {
+    cx_blkst *s = (cx_blkst *)cx_alloc(sizeof(cx_blkst) + sizeof(cx_args) + 64);
+    if (!s) { snprintf(why, cap, "VirtualAlloc failed"); return NULL; }
+    memset(s, 0, sizeof *s);
+    s->a = (cx_args *)(((uintptr_t)(s + 1) + 63) & ~(uintptr_t)63);
+    cx_args_fill(s->a, tag, 1);
+    s->a->mxcsr_in = 0x5F80;     /* RC = up: a non-default control value the context must report */
+    s->a->fcw_in = 0x0A7F;       /* RC = up, PC = 53-bit */
+    s->mode = mode; s->kind = kind;
+    for (int i = 0; i < 16; i++) s->data[i] = (uint8_t)(0xC0 + i);
+    const char *fname = NULL;
+    switch (mode) {
+    case CXB_WAIT_NT:  fname = "NtWaitForSingleObject"; break;
+    case CXB_DELAY_NT: fname = "NtDelayExecution"; break;
+    case CXB_READ_NT:  fname = "NtReadFile"; break;
+    default: break;
+    }
+    void *fn = NULL;
+    if (fname) {
+        fn = t_proc("ntdll.dll", fname);
+        if (!fn) { snprintf(why, cap, "ntdll!%s not exported", fname); cx_free(s); return NULL; }
+    }
+    if (mode == CXB_WAIT_NT || mode == CXB_WAIT_K32) {
+        s->ev = CreateEventA(NULL, TRUE, FALSE, NULL);
+        if (!s->ev) { snprintf(why, cap, "CreateEvent GLE=%lu", (unsigned long)GetLastError()); cx_free(s); return NULL; }
+    }
+    if (mode == CXB_READ_NT || mode == CXB_READ_K32) {
+        if (!CreatePipe(&s->rd, &s->wr, NULL, 4096)) { snprintf(why, cap, "CreatePipe GLE=%lu", (unsigned long)GetLastError()); cx_free(s); return NULL; }
+    }
+    cx_call *k = &s->k;
+    switch (mode) {
+    case CXB_WAIT_NT:     /* NtWaitForSingleObject(h, FALSE, &-10 s): bounded even if the parent never signals */
+        s->tmo.QuadPart = -100000000LL;
+        k->fn = (uintptr_t)fn; k->nargs = 3;
+        k->args[0] = (uintptr_t)s->ev; k->args[1] = 0; k->args[2] = (uintptr_t)&s->tmo; break;
+    case CXB_DELAY_NT:
+        s->tmo.QuadPart = -(LONGLONG)CXB_DELAY_MS * 10000;
+        k->fn = (uintptr_t)fn; k->nargs = 2; k->args[0] = 0; k->args[1] = (uintptr_t)&s->tmo; break;
+    case CXB_READ_NT:     /* NtReadFile(h, NULL, NULL, NULL, &iosb, buf, 16, NULL, NULL) on a synchronous pipe */
+        k->fn = (uintptr_t)fn; k->nargs = 9;
+        k->args[0] = (uintptr_t)s->rd; k->args[4] = (uintptr_t)&s->iosb; k->args[5] = (uintptr_t)s->buf; k->args[6] = 16; break;
+    case CXB_WAIT_K32:
+        k->fn = (uintptr_t)(void *)WaitForSingleObject; k->nargs = 2; k->args[0] = (uintptr_t)s->ev; k->args[1] = 10000; break;
+    case CXB_READ_K32:
+        k->fn = (uintptr_t)(void *)ReadFile; k->nargs = 5;
+        k->args[0] = (uintptr_t)s->rd; k->args[1] = (uintptr_t)s->buf; k->args[2] = 16; k->args[3] = (uintptr_t)&s->nread; break;
+    case CXB_SLEEPEX:
+        k->fn = (uintptr_t)(void *)SleepEx; k->nargs = 2; k->args[0] = 10000; k->args[1] = TRUE; break;
+    }
+    return s;
+}
+
+/* Start the worker and wait until it is inside the blocking call; returns 1 with the worker SUSPENDED once.
+ * "Inside" = its IP left [entry, return label): it executed the call. A 50 ms grace lets it reach the wait. */
+static int cx_blk_start(cx_blkst *s) {
+    s->a->ready = 0;
+    s->h = CreateThread(NULL, 0, cx_blk_main, s, 0, &s->tid);
+    if (!s->h) return 0;
+    double t0 = t_now_ms();
+    while (!s->a->ready && t_now_ms() - t0 < CX_TMO) Sleep(1);
+    if (!s->a->ready) return 0;
+    Sleep(50);
+    uintptr_t lo = (uintptr_t)cx_blk_entry(s->kind), hi = (uintptr_t)cx_blk_retlab(s->kind);
+    CONTEXT *c = cx_plain(CONTEXT_CONTROL);
+    if (!c) return 0;
+    int ok = 0;
+    for (int i = 0; i < 200 && !ok; i++) {
+        if (SuspendThread(s->h) == (DWORD)-1) break;
+        c->ContextFlags = CONTEXT_CONTROL;
+        if (GetThreadContext(s->h, c)) {
+            uintptr_t ip = cx_ip(c);
+            if (ip < lo || ip >= hi) { ok = 1; break; }
+        }
+        ResumeThread(s->h);
+        Sleep(10);
+    }
+    cx_free(c);
+    return ok;
+}
+static void cx_blk_wake(cx_blkst *s) {
+    DWORD n = 0;
+    switch (s->mode) {
+    case CXB_WAIT_NT: case CXB_WAIT_K32: SetEvent(s->ev); break;
+    case CXB_READ_NT: case CXB_READ_K32:
+        CHECKF(WriteFile(s->wr, s->data, 16, &n, NULL) && n == 16, "WriteFile(pipe) GLE=%lu", (unsigned long)GetLastError()); break;
+    case CXB_SLEEPEX:
+        CHECKF(QueueUserAPC(cx_blk_apc, s->h, (ULONG_PTR)s), "QueueUserAPC GLE=%lu", (unsigned long)GetLastError()); break;
+    default: break;
+    }
+}
+/* Resume (once), wake, wait for the worker to finish. Returns 1 if it exited. */
+static int cx_blk_finish(cx_blkst *s) {
+    if (!s->h) return 0;
+    ResumeThread(s->h);
+    cx_blk_wake(s);
+    DWORD wr = WaitForSingleObject(s->h, CX_TMO + CXB_DELAY_MS);
+    if (wr != WAIT_OBJECT_0) {        /* unblock by every means; all waits are bounded (<= 10 s) anyway */
+        if (s->ev) SetEvent(s->ev);
+        if (s->wr) { CloseHandle(s->wr); s->wr = NULL; }
+        QueueUserAPC(cx_blk_apc, s->h, (ULONG_PTR)s);
+        wr = WaitForSingleObject(s->h, 12000);
+    }
+    CHECKF(wr == WAIT_OBJECT_0, "blocked worker did not return after the wake-up (wait=%lu)", (unsigned long)wr);
+    return wr == WAIT_OBJECT_0;
+}
+static void cx_blk_free(cx_blkst *s, int exited) {
+    if (!s) return;
+    if (s->h && !exited) { t_note("worker still running: its state block is leaked on purpose"); return; }
+    if (s->h) CloseHandle(s->h);
+    if (s->ev) CloseHandle(s->ev);
+    if (s->rd) CloseHandle(s->rd);
+    if (s->wr) CloseHandle(s->wr);
+    cx_free(s);
+}
+/* The call's own result when it returned normally */
+static void cx_blk_check_result(cx_blkst *s) {
+    uint32_t r = (uint32_t)s->k.ret;
+    switch (s->mode) {
+    case CXB_WAIT_NT: case CXB_DELAY_NT: CHECKF(r == 0, "%s returned 0x%x", cxb_modes[s->mode].name, r); break;
+    case CXB_WAIT_K32: CHECKF(r == WAIT_OBJECT_0, "WaitForSingleObject returned 0x%x", r); break;
+    case CXB_READ_NT:
+        CHECKF(r == 0, "NtReadFile returned 0x%x", r);
+        CHECKF(s->iosb.u.Status == 0 && s->iosb.Information == 16, "IO_STATUS_BLOCK {0x%lx, %lu}",
+               (unsigned long)s->iosb.u.Status, (unsigned long)s->iosb.Information);
+        CHECK_MEM(s->buf, s->data, 16);
+        break;
+    case CXB_READ_K32:
+        CHECKF(r == 1 && s->nread == 16, "ReadFile returned %u, %lu bytes", r, (unsigned long)s->nread);
+        CHECK_MEM(s->buf, s->data, 16);
+        break;
+    case CXB_SLEEPEX:
+        CHECKF(r == WAIT_IO_COMPLETION, "SleepEx returned 0x%x, want WAIT_IO_COMPLETION", r);
+        CHECK(s->apc_ran);
+        break;
+    }
+    CHECKF(!s->k.landed, "the redirect landing ran without a redirect");
+}
+
+/* Nonvolatile GPR indices under the native ABI (x64: rbx rsi rdi rbp r12-r15; x86: ebx esi edi ebp) */
+#ifdef T_X64
+static const int cxb_nvg[] = { 0, 3, 4, 5, 9, 10, 11, 12 };
+#define CXB_NV_XMM_LO 6
+#else
+static const int cxb_nvg[] = { 0, 2, 3, 4 };
+#define CXB_NV_XMM_LO CX_NV          /* x86: every XMM register is volatile */
+#endif
+static int cxb_is_nvg(int i) { for (size_t j = 0; j < T_COUNTOF(cxb_nvg); j++) if (cxb_nvg[j] == i) return 1; return 0; }
+
+/* Classify a register image: s(et) / o(riginal) / z(ero) / x (anything else); appended to a t_info string */
+static char cx_cls(const uint8_t *got, const uint8_t *set, const uint8_t *orig, int n) {
+    if (set && !memcmp(got, set, n)) return 's';
+    if (orig && !memcmp(got, orig, n)) return 'o';
+    if (cx_all_zero(got, n)) return 'z';
+    return 'x';
+}
+
+/* GetThreadContext of the blocked worker: the user-mode state at the call */
+static void cx_blk_check_get(cx_blkst *s, CONTEXT *c, const char *what) {
+    const cx_args *a = s->a;
+    int direct = cxb_modes[s->mode].direct;
+    uintptr_t ip = cx_ip(c), sp = cx_sp(c), csp = (uintptr_t)s->k.call_sp, nb = 0;
+    int in_nt = cx_in_ntdll(ip, &nb);
+    t_info("blocked_ip", "%p (%s+0x%lx), call fn %p, sp = call_sp - %ld", (void *)ip, in_nt ? "ntdll" : "?",
+           (unsigned long)(in_nt ? ip - nb : 0), (void *)(uintptr_t)s->k.fn, (long)((intptr_t)csp - (intptr_t)sp));
+    CX_CHECK_WGAP("context of a thread blocked in a system call reports a non-ntdll IP", in_nt,
+                  "%s: IP %p is not inside ntdll (the system-call stub)", what, (void *)ip);
+#ifdef T_X64
+    if (direct) {
+        uintptr_t f = (uintptr_t)s->k.fn;
+        CX_CHECK_WGAP("context of a thread blocked in a system call reports a non-ntdll IP", ip > f && ip <= f + 0x20,
+                      "%s: RIP %p is not inside the %s stub [%p, +0x20]", what, (void *)ip, cxb_modes[s->mode].name, (void *)f);
+    }
+#endif
+    if (direct)
+        CX_CHECK_WGAP("context of a thread blocked in a system call reports a non-stub SP", sp < csp && csp - sp <= 64,
+                      "%s: SP %p not just below the call frame %p", what, (void *)sp, (void *)csp);
+    else CHECKF(sp < csp && csp - sp < 0x20000, "%s: SP %p not below the caller's frame %p", what, (void *)sp, (void *)csp);
+    CHECKF(c->SegCs == cx_own_cs(), "%s: SegCs 0x%x want 0x%x", what, (unsigned)c->SegCs, (unsigned)cx_own_cs());
+    CHECKF(c->EFlags & 0x200, "%s: EFlags 0x%lx IF clear in user mode", what, (unsigned long)c->EFlags);
+    CHECKF(!(c->EFlags & 0x100), "%s: EFlags 0x%lx TF set", what, (unsigned long)c->EFlags);
+
+    /* GPRs / XMM: exact for direct calls (nothing ran between the load and the stub); through kernelbase its own
+     * code may hold any register at the system call, so only recorded */
+    char cls[64]; int n = 0;
+    for (size_t j = 0; j < T_COUNTOF(cxb_nvg); j++) {
+        int i = cxb_nvg[j];
+        uint64_t got = cx_gpr(c, i), want = cx_gpr_expect(a, i);
+        if (direct) CHECKF(got == want, "%s: %s = 0x%llx want 0x%llx", what, cx_gpr_name(i), (unsigned long long)got, (unsigned long long)want);
+        cls[n++] = got == want ? 'o' : 'x';
+    }
+    cls[n] = 0;
+    t_info("blocked_nv_gprs", "%s", cls);
+    n = 0;
+    for (int i = 0; i < CX_NV; i++) {
+        if (direct && i >= CXB_NV_XMM_LO) {
+            char lab[64]; snprintf(lab, sizeof lab, "xmm%d %s", i, what);
+            CHECK_REG(lab, cx_xmm(c, i), a->vin[i], 16);
+        }
+        cls[n++] = cx_cls(cx_xmm(c, i), NULL, a->vin[i], 16);
+    }
+    cls[n] = 0;
+    t_info("blocked_xmm", "%s (o = loaded value, z = zero, x = other)", cls);
+
+    /* FP control state: no Windows wait path changes it; FCW/MXCSR are ABI-nonvolatile */
+    const char *fpgap = "context of a thread blocked in a system call has an all-zero FP area";
+    uint32_t mx = cx_mxcsr(c), fmx = cx_fx_mxcsr(c);
+    CX_CHECK_WGAP(fpgap, (mx & 0xFFC0) == (a->mxcsr_in & 0xFFC0), "%s: MXCSR 0x%x, loaded 0x%x", what, mx, a->mxcsr_in);
+    CX_CHECK_WGAP(fpgap, (fmx & 0xFFC0) == (a->mxcsr_in & 0xFFC0), "%s: FXSAVE MXCSR 0x%x, loaded 0x%x", what, fmx, a->mxcsr_in);
+    CX_CHECK_WGAP(fpgap, (cx_fcw(c) & CX_FCW_BITS) == (a->fcw_in & CX_FCW_BITS), "%s: x87 CW 0x%x, loaded 0x%x", what,
+                  (unsigned)cx_fcw(c), (unsigned)a->fcw_in);
+    n = 0;
+    for (int i = 0; i < 8; i++) {
+        int eq = !memcmp(cx_fx(c) + 32 + 16 * i, a->fin[i].b, 10);
+        if (direct) CX_CHECK_WGAP(fpgap, eq, "%s: ST(%d) is not the loaded value", what, i);
+        cls[n++] = eq ? 'o' : cx_all_zero(cx_fx(c) + 32 + 16 * i, 10) ? 'z' : 'x';
+    }
+    cls[n] = 0;
+    t_info("blocked_x87", "%s", cls);
+}
+
+/* After the call returned: what the ABI guarantees across a call, with `want_*` the values the caller holds
+ * (loaded, or set by SetThreadContext). `alt_*` (may be NULL) is a second acceptable value: a callee that saved
+ * the register before the Set restores the old one. Volatile registers are recorded (s/o/z/x). */
+static void cx_blk_check_after(cx_blkst *s, const uint64_t *want_g, const uint64_t *alt_g, uint8_t (*want_v)[32],
+                               uint8_t (*alt_v)[32], uint32_t want_mx, uint16_t want_cw, const t_f80 *set_st, const char *what) {
+    const cx_args *a = s->a;
+    char cls[64]; int n = 0;
+    for (size_t j = 0; j < T_COUNTOF(cxb_nvg); j++) {
+        int i = cxb_nvg[j];
+        uint64_t got = a->gout[i];
+        uint64_t w = want_g[i], al = alt_g ? alt_g[i] : w;
+#ifdef T_X86
+        w = (uint32_t)w; al = (uint32_t)al;
+#endif
+        CHECKF(got == w || got == al, "%s: %s = 0x%llx want 0x%llx%s", what, cx_gpr_name(i), (unsigned long long)got,
+               (unsigned long long)w, alt_g ? " (or the pre-Set value)" : "");
+        cls[n++] = got == w ? 's' : got == al ? 'o' : 'x';
+    }
+    cls[n] = 0;
+    t_info("after_nv_gprs", "%s", cls);
+    n = 0;
+    for (int i = 0; i < CX_NV; i++) {
+        if (i >= CXB_NV_XMM_LO) {
+            int ok = !memcmp(a->vout[i], want_v[i], 16) || (alt_v && !memcmp(a->vout[i], alt_v[i], 16));
+            if (!ok) { char lab[64]; snprintf(lab, sizeof lab, "xmm%d %s", i, what); CHECK_REG(lab, a->vout[i], want_v[i], 16); }
+        }
+        cls[n++] = cx_cls(a->vout[i], want_v[i], alt_v ? alt_v[i] : a->vin[i], 16);
+    }
+    cls[n] = 0;
+    t_info("after_xmm", "%s (s = expected, o = pre-Set/loaded, z = zero, x = other; xmm%d+ checked)", cls, CXB_NV_XMM_LO);
+    const char *setgap = "SetThreadContext FP state of a thread blocked in a system call is not applied when the call returns";
+    CX_CHECK_WGAP(setgap, (a->mxcsr_out & 0xFFC0) == (want_mx & 0xFFC0), "%s: MXCSR 0x%x want control 0x%x", what, a->mxcsr_out, want_mx);
+    CX_CHECK_WGAP(setgap, (a->fcw_out & CX_FCW_BITS) == (want_cw & CX_FCW_BITS), "%s: x87 CW 0x%x want 0x%x", what,
+                  (unsigned)a->fcw_out, (unsigned)want_cw);
+    if (s->kind == T_VK_YMM) {
+        n = 0;
+        for (int i = 0; i < CX_NV; i++) cls[n++] = cx_cls(a->vout[i] + 16, want_v[i] + 16, a->vin[i] + 16, 16);
+        cls[n] = 0;
+        t_info("after_ymm_upper", "%s (volatile: recorded only)", cls);
+    }
+    n = 0;
+    for (int i = 0; i < 8; i++) cls[n++] = cx_cls(a->fout[i].b, set_st ? set_st[i].b : NULL, a->fin[i].b, 10);
+    cls[n] = 0;
+    t_info("after_x87_stack", "%s (volatile: recorded only)", cls);
+}
+
+/* ---- Get while blocked, then the ABI view after the wait returns ---- */
+static void cx_blk_get_case(int mode, int kind) {
+    char why[128];
+    cx_blkst *s = cx_blk_new(mode, kind, 0xD100 + (uint32_t)mode * 16 + (uint32_t)kind, why, sizeof why);
+    if (!s) SKIP("%s", why);
+    int started = cx_blk_start(s);
+    CHECKF(started, "worker did not reach the blocking call");
+    if (started) {
+        CONTEXT *c = cx_get_std_h(s->h);
+        if (c) { cx_blk_check_get(s, c, "blocked"); cx_free(c); }
+        if (kind == T_VK_YMM) {
+            cx_xc x = { 0 };
+            cx_worker w = { 0 }; w.h = s->h;
+            if (cx_get_x(&w, &x, CX_STD | CONTEXT_XSTATE, T_XS_AVX)) {
+                uint64_t m = cx_mask(x.ctx);
+                uint8_t *ymmh = cx_locate(x.ctx, CX_XS_AVX, NULL);
+                char cls[24]; int n = 0;
+                for (int i = 0; i < CX_NV && ymmh; i++) {
+                    const uint8_t *g = (m & T_XS_AVX) ? ymmh + 16 * i : NULL;
+                    char ch = g ? cx_cls(g, NULL, s->a->vin[i] + 16, 16) : 'i';
+                    cls[n++] = ch;
+                    /* XINUSE consistency: a reported upper half is the loaded value or zero, never foreign data */
+                    if (g) CX_CHECK_WGAP("context of a thread blocked in a system call has foreign YMM data", ch == 'o' || ch == 'z',
+                                         "ymm%d upper half in a blocked thread's XSTATE context is neither the loaded value nor zero", i);
+                }
+                cls[n] = 0;
+                t_info("blocked_xstate", "mask 0x%llx, uppers %s (o = loaded, z = zero, i = init/absent)", (unsigned long long)m, cls);
+            }
+            cx_xc_free(&x);
+        }
+    }
+    int done = cx_blk_finish(s);
+    if (done) {
+        cx_blk_check_result(s);
+        uint64_t g[16]; for (int i = 0; i < 16; i++) g[i] = s->a->gin[i];
+        cx_blk_check_after(s, g, NULL, s->a->vin, NULL, s->a->mxcsr_in, s->a->fcw_in, NULL, "after the wait");
+    }
+    cx_blk_free(s, done);
+}
+
+/* ---- SetThreadContext while blocked: FP (+XSTATE) and nonvolatile GPRs; take effect when the call returns ---- */
+static void cx_blk_set_case(int mode, int kind) {
+    char why[128];
+    if (kind == T_VK_YMM) CX_NEED_AVX();
+    cx_blkst *s = cx_blk_new(mode, kind, 0xD800 + (uint32_t)mode * 16 + (uint32_t)kind, why, sizeof why);
+    if (!s) SKIP("%s", why);
+    static uint8_t nv[16][32];
+    static uint64_t ng[16];
+    static t_f80 nf[8];
+    for (int i = 0; i < 16; i++) { t_pattern_reg(nv[i], 32, 0xD8F0 + (uint32_t)mode, (uint32_t)i); ng[i] = t_pattern_word(0xD8F0 + (uint32_t)mode, 40 + (uint32_t)i, 0); }
+    for (int i = 0; i < 8; i++) cx_f80_make(&nf[i], 0xD8F0 + (uint32_t)mode, i);
+    const uint32_t nmx = 0x3F80;       /* RC = down */
+    const uint16_t ncw = 0x0E7F;       /* RC = truncate, PC = 53-bit */
+    int set_ok = 0, direct = cxb_modes[mode].direct;
+    int started = cx_blk_start(s);
+    CHECKF(started, "worker did not reach the blocking call");
+    if (started) {
+        cx_xc x = { 0 };
+        CONTEXT *c = NULL, *plain = NULL;
+        uint8_t *ymmh = NULL;
+        cx_worker w = { 0 }; w.h = s->h;
+        if (kind == T_VK_YMM) {
+            if (cx_get_x(&w, &x, CX_STD | CONTEXT_XSTATE, T_XS_AVX)) { c = x.ctx; ymmh = cx_locate(c, CX_XS_AVX, NULL); CHECK(ymmh != NULL); }
+        } else c = plain = cx_get_std_h(s->h);
+        if (c && (kind != T_VK_YMM || ymmh)) {
+            for (int i = 0; i < CX_NV; i++) memcpy(cx_xmm(c, i), nv[i], 16);
+            if (ymmh) for (int i = 0; i < CX_NV; i++) memcpy(ymmh + 16 * i, nv[i] + 16, 16);
+            cx_set_mxcsr(c, nmx);
+            cx_set_fcw(c, ncw);
+            for (int i = 0; i < 8; i++) cx_set_st(c, i, &nf[i]);
+            /* GPRs only for direct calls: inside kernelbase the nonvolatile registers hold kernelbase's own
+             * pointers and frame state, so rewriting them would corrupt the callee, not test the OS */
+            if (direct) for (size_t j = 0; j < T_COUNTOF(cxb_nvg); j++) cx_set_gpr(c, cxb_nvg[j], ng[cxb_nvg[j]]);
+            if (ymmh) { CHECK(X.SetXStateFeaturesMask(c, T_XS_AVX | 3)); c->ContextFlags = CX_STD | CONTEXT_XSTATE; }
+            else c->ContextFlags = CX_STD;
+            set_ok = SetThreadContext(s->h, c);
+            CHECKF(set_ok, "SetThreadContext while blocked in %s, GLE=%lu", cxb_modes[mode].name, (unsigned long)GetLastError());
+            /* read back while still blocked: the context reports what was set */
+            CONTEXT *d = set_ok ? cx_get_std_h(s->h) : NULL;
+            if (d) {
+                char lab[64];
+                for (int i = 0; i < CX_NV; i++) { snprintf(lab, sizeof lab, "xmm%d read back while blocked", i); CHECK_REG(lab, cx_xmm(d, i), nv[i], 16); }
+                CHECKF(cx_mxcsr(d) == nmx, "MXCSR read back 0x%x want 0x%x", cx_mxcsr(d), nmx);
+                CHECKF((cx_fcw(d) & CX_FCW_BITS) == (ncw & CX_FCW_BITS), "x87 CW read back 0x%x want 0x%x", (unsigned)cx_fcw(d), (unsigned)ncw);
+                for (int i = 0; i < 8; i++) { snprintf(lab, sizeof lab, "ST(%d) read back while blocked", i); CHECK_REG(lab, cx_fx(d) + 32 + 16 * i, nf[i].b, 10); }
+                for (size_t j = 0; j < T_COUNTOF(cxb_nvg) && direct; j++) {
+                    int i = cxb_nvg[j];
+                    uint64_t want = ng[i];
+#ifdef T_X86
+                    want = (uint32_t)want;
+#endif
+                    CHECKF(cx_gpr(d, i) == want, "%s read back 0x%llx want 0x%llx", cx_gpr_name(i), (unsigned long long)cx_gpr(d, i), (unsigned long long)want);
+                }
+                CHECKF(cx_ip(d) == cx_ip(c) && cx_sp(d) == cx_sp(c), "IP/SP changed by an FP/integer set: %p/%p -> %p/%p",
+                       (void *)cx_ip(c), (void *)cx_sp(c), (void *)cx_ip(d), (void *)cx_sp(d));
+                cx_free(d);
+            }
+            if (ymmh && set_ok) {
+                cx_xc y = { 0 };
+                if (cx_get_x(&w, &y, CX_STD | CONTEXT_XSTATE, T_XS_AVX)) {
+                    uint8_t *yh = cx_locate(y.ctx, CX_XS_AVX, NULL);
+                    CHECKF(cx_mask(y.ctx) & T_XS_AVX, "AVX missing from the mask after setting non-zero upper halves");
+                    char lab[64];
+                    for (int i = 0; yh && i < CX_NV; i++) { snprintf(lab, sizeof lab, "ymm%d upper read back while blocked", i); CHECK_REG(lab, yh + 16 * i, nv[i] + 16, 16); }
+                }
+                cx_xc_free(&y);
+            }
+        }
+        cx_free(plain);
+        cx_xc_free(&x);
+    }
+    int done = cx_blk_finish(s);
+    if (done && set_ok) {
+        cx_blk_check_result(s);
+        /* Through kernelbase an XMM register its code saved before the Set is restored to the pre-Set value on
+         * return: either value honours the ABI. MXCSR / x87 CW are never saved and restored by those paths. */
+        uint64_t g[16]; for (int i = 0; i < 16; i++) g[i] = direct ? ng[i] : s->a->gin[i];
+        cx_blk_check_after(s, g, NULL, nv, direct ? NULL : s->a->vin, nmx, ncw, nf, "after Set while blocked");
+    }
+    cx_blk_free(s, done);
+}
+
+/* ---- CONTEXT_CONTROL redirect: Rip = landing label, Rsp = the frame right after the call ---- */
+static void cx_blk_redirect_case(int mode) {
+    char why[128];
+    cx_blkst *s = cx_blk_new(mode, T_VK_XMM, 0xDE00 + (uint32_t)mode, why, sizeof why);
+    if (!s) SKIP("%s", why);
+    int set_ok = 0;
+    int started = cx_blk_start(s);
+    CHECKF(started, "worker did not reach the blocking call");
+    if (started) {
+        CONTEXT *c = cx_plain(CONTEXT_CONTROL);
+        if (c && GetThreadContext(s->h, c)) {
+            cx_set_ip(c, (uintptr_t)cx_blk_landlab(T_VK_XMM));
+#ifdef T_X64
+            c->Rsp = cx_blk_ret_sp(s);
+#else
+            c->Esp = (DWORD)cx_blk_ret_sp(s);
+#endif
+            set_ok = SetThreadContext(s->h, c);
+            CHECKF(set_ok, "SetThreadContext(CONTEXT_CONTROL) while blocked, GLE=%lu", (unsigned long)GetLastError());
+            CONTEXT *d = cx_plain(CONTEXT_CONTROL);
+            if (d && set_ok && GetThreadContext(s->h, d))
+                CHECKF(cx_ip(d) == (uintptr_t)cx_blk_landlab(T_VK_XMM) && cx_sp(d) == cx_blk_ret_sp(s),
+                       "redirect read back IP %p SP %p", (void *)cx_ip(d), (void *)cx_sp(d));
+            cx_free(d);
+        } else CHECKF(0, "GetThreadContext(CONTEXT_CONTROL) GLE=%lu", (unsigned long)GetLastError());
+        cx_free(c);
+    }
+    int done = cx_blk_finish(s);
+    if (done && set_ok) {
+        CHECKF(s->k.landed, "the wait returned to its caller instead of the redirected IP");
+        t_info("status_at_landing", "0x%llx", (unsigned long long)s->k.ret);
+        if (s->k.landed && cxb_modes[mode].direct) {
+            /* nothing ran between the load and the stub: the ABI-nonvolatile state arrives at the landing intact */
+            uint64_t g[16]; for (int i = 0; i < 16; i++) g[i] = s->a->gin[i];
+            cx_blk_check_after(s, g, NULL, s->a->vin, NULL, s->a->mxcsr_in, s->a->fcw_in, NULL, "at the redirect landing");
+        }
+        if (mode == CXB_READ_NT || mode == CXB_READ_K32) CHECK_MEM(s->buf, s->data, 16);   /* the read itself completed */
+    }
+    cx_blk_free(s, done);
+}
+
+TEST(blk_getctx_wait_nt)      { cx_blk_get_case(CXB_WAIT_NT, T_VK_XMM); }
+TEST(blk_getctx_delay_nt)     { cx_blk_get_case(CXB_DELAY_NT, T_VK_XMM); }
+TEST(blk_getctx_readfile_nt)  { cx_blk_get_case(CXB_READ_NT, T_VK_XMM); }
+TEST(blk_getctx_wait_k32)     { cx_blk_get_case(CXB_WAIT_K32, T_VK_XMM); }
+TEST(blk_getctx_readfile_k32) { cx_blk_get_case(CXB_READ_K32, T_VK_XMM); }
+TEST(blk_getctx_sleepex_alertable) { cx_blk_get_case(CXB_SLEEPEX, T_VK_XMM); }
+TEST(blk_getctx_ymm_wait_nt)  { CX_NEED_AVX(); cx_blk_get_case(CXB_WAIT_NT, T_VK_YMM); }
+TEST(blk_getctx_ymm_readfile_nt) { CX_NEED_AVX(); cx_blk_get_case(CXB_READ_NT, T_VK_YMM); }
+TEST(blk_setctx_wait_nt)      { cx_blk_set_case(CXB_WAIT_NT, T_VK_XMM); }
+TEST(blk_setctx_delay_nt)     { cx_blk_set_case(CXB_DELAY_NT, T_VK_XMM); }
+TEST(blk_setctx_readfile_nt)  { cx_blk_set_case(CXB_READ_NT, T_VK_XMM); }
+TEST(blk_setctx_wait_k32)     { cx_blk_set_case(CXB_WAIT_K32, T_VK_XMM); }
+TEST(blk_setctx_readfile_k32) { cx_blk_set_case(CXB_READ_K32, T_VK_XMM); }
+TEST(blk_setctx_sleepex_alertable) { cx_blk_set_case(CXB_SLEEPEX, T_VK_XMM); }
+TEST(blk_setctx_xstate_wait_nt) { cx_blk_set_case(CXB_WAIT_NT, T_VK_YMM); }
+TEST(blk_setctx_xstate_sleepex_alertable) { cx_blk_set_case(CXB_SLEEPEX, T_VK_YMM); }
+TEST(blk_redirect_wait_nt)    { cx_blk_redirect_case(CXB_WAIT_NT); }
+TEST(blk_redirect_delay_nt)   { cx_blk_redirect_case(CXB_DELAY_NT); }
+TEST(blk_redirect_readfile_nt) { cx_blk_redirect_case(CXB_READ_NT); }
+TEST(blk_redirect_wait_k32)   { cx_blk_redirect_case(CXB_WAIT_K32); }
+
+/* ======================================================================================================
  * 11. WOW64
  * ====================================================================================================== */
 #define CX_W64_TAG 0xB100u
