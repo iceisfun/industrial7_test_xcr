@@ -22,6 +22,13 @@
  *     generation's). Every mismatch is FAIL with role, index, thread id, generation, expected and observed bits,
  *     and a decode of the observed word (patterns embed marker / thread index / register / word).
  *
+ *   - Forced time slicing with live state: preempt_* cases pin several workers to one CPU (or two per CPU) and
+ *     size the hold loop (calibrated PAUSE count) to tens of ms, so the scheduler must switch between threads
+ *     whose XMM/YMM/x87/MMX/MXCSR/FCW hold distinct patterns mid-hold; ctl_migrate_* moves victims between CPUs
+ *     during multi-ms holds. How often a hold was descheduled is INFO only (quantum length is policy).
+ *   - Thread-pool work items (QueueUserWorkItem, queued from timer ticks) run the same register hold.
+ *   - A Wine-gap XFAIL is raised only when the case recorded no failure of its own (g_st_fails), so it never
+ *     turns a genuine FAIL into XFAIL.
  * Windows behaviour checked in the Windows 10 22H2 (19041) reference decompilation (docker1 corpus explorer):
  *   kernelbase!SuspendThread = NtSuspendThread, returns the previous count or 0xFFFFFFFF + LastError.
  *   kernelbase!GetThreadContext / SetThreadContext = Nt{Get,Set}ContextThread, BOOL from NTSTATUS.
@@ -38,6 +45,15 @@
  * Helpers this file adds locally (not in common/): seqlock pattern slots, st_* asm routines, XSTATE context
  * allocation (same two-phase InitializeContext negotiation as context_xstate.c). */
 #include "t.h"
+
+/* Failure counter local to this file: every CHECK* of this file passes through these wrappers (single
+ * evaluation of the condition), so a case can tell whether it already failed. A Wine-gap XFAIL is raised
+ * only when nothing else failed: t_xfail() would otherwise reclassify a genuine FAIL as XFAIL. */
+static volatile LONG g_st_fails;
+static int st_cnt(int ok) { if (!ok) InterlockedIncrement(&g_st_fails); return ok; }
+#define t_check(ok, ...)        t_check(st_cnt(ok), __VA_ARGS__)
+#define t_check_reg_at(...)     st_cnt(t_check_reg_at(__VA_ARGS__))
+#define t_check_mem(...)        st_cnt(t_check_mem(__VA_ARGS__))
 
 /* ======================================================================================================
  * Architecture glue
@@ -518,7 +534,7 @@ static const char *const st_y_name[Y_N] = { "spin", "SwitchToThread", "Sleep(0)"
     "affinity-hop", "priority-change" };
 enum { C_SUSPEND = 1, C_GET = 2, C_GETX = 4, C_XOPT = 8, C_SET = 16, C_AFF = 32, C_PRIO = 64, C_APC = 128 };
 #define C_CAPTURE (C_SUSPEND | C_GET | C_GETX | C_XOPT | C_SET)
-enum { T_TQ = 1, T_MM = 2, TA_APC = 4, TA_WAKE = 8, TA_KICK = 16, TA_REGS = 32 };
+enum { T_TQ = 1, T_MM = 2, TA_APC = 4, TA_WAKE = 8, TA_KICK = 16, TA_REGS = 32, TA_POOL = 64 };
 enum { PH_C, PH_ASM, PH_CALL };
 enum { T_2XCPU = -1 };
 
@@ -532,7 +548,10 @@ typedef struct st_cfg {
     int churn;          /* create short-lived threads during the run and check their initial state */
     int need_hold;      /* CHECK that the oracle caught the worker inside a hold loop */
     int perf;           /* report rates */
+    int pin;            /* PIN_ONE: every worker on one CPU; PIN_PAIRS: two workers per CPU (forced time slicing) */
+    int hold_ms;        /* > 0: spin calibrated so one hold lasts about this long (overrides spin) */
 } st_cfg;
+enum { PIN_NONE, PIN_ONE, PIN_PAIRS };
 
 typedef struct st_slot {
     st_blk b;
@@ -559,6 +578,8 @@ typedef struct st_worker {
     LONG64 iters;
     LONG bad, details, mode_bad, apc_iters;
     uint32_t ops_done[OP_N], yields_done[Y_N];
+    uintptr_t pin_mask;          /* nonzero: affinity the worker sets for itself at start */
+    LONG holds_timed, holds_stretched;
     int nmut;
     struct { LONG gen; int what, reg, n; uint8_t got[32], want[32]; } mut[4];
 } __attribute__((aligned(64))) st_worker;
@@ -580,7 +601,8 @@ typedef struct st_run {
            apc_ops, upper_sys, x87_nonempty, ctl_bad;
     double cap_ms;
     /* timers */
-    volatile LONG tmr_on, tmr_inflight, tmr_ticks, tmr_apc, tmr_wake, tmr_kick, tmr_regs, tmr_bad;
+    volatile LONG tmr_on, tmr_inflight, tmr_ticks, tmr_apc, tmr_wake, tmr_kick, tmr_regs, tmr_bad, tmr_pool, tmr_pool_fail;
+    LONG64 stretch_qpc;                 /* QPC ticks: a hold longer than this was descheduled (INFO only) */
     volatile LONG cb_lock[ST_NCB];
     /* mutation self-test */
     volatile LONG mut_done; LONG mut_gen; int mut_reg; uint8_t mut_old[16], mut_new[16]; uint32_t mut_mx_old, mut_mx_new;
@@ -835,7 +857,16 @@ static void st_iter(st_worker *w) {
         s->b.arg = (uint64_t)(uintptr_t)w;
         w->phase = PH_CALL;
     } else w->phase = PH_ASM;
+    /* Integer QPC deltas only: this C code runs under the thread's x87 mode (PC may be 24-bit on x86). */
+    LARGE_INTEGER q0 = { 0 }, q1 = { 0 };
+    int timed = S->stretch_qpc && (op == OP_HOLD || op == OP_X87 || op == OP_MMX);
+    if (timed) QueryPerformanceCounter(&q0);
     st_run_slot(s);
+    if (timed) {
+        QueryPerformanceCounter(&q1);
+        w->holds_timed++;
+        if (q1.QuadPart - q0.QuadPart > S->stretch_qpc) w->holds_stretched++;
+    }
     w->phase = PH_C;
     st_verify(w, s);
     w->ops_done[op]++;
@@ -849,6 +880,7 @@ static DWORD WINAPI st_worker_main(void *p) {
     st_worker *w = (st_worker *)p;
     st_run *S = w->S;
     w->tid = GetCurrentThreadId();
+    if (w->pin_mask) SetThreadAffinityMask(GetCurrentThread(), (DWORD_PTR)w->pin_mask);
     t_set_mxcsr(w->mx_mode);
     t_set_x87_cw(w->fcw_mode);
     InterlockedExchange(&w->started, 1);
@@ -1188,12 +1220,32 @@ static void st_cb_regs(st_run *S, LONG t, uint64_t x) {
     InterlockedExchange(&S->cb_lock[k], 0);
 }
 
+/* Thread-pool work item (QueueUserWorkItem) queued by a timer tick: same register hold on a pool thread.
+ * Counted in tmr_inflight from queueing to return, so the driver's drain loop also waits for these. */
+static DWORD WINAPI st_pool_cb(void *p) {
+    st_run *S = &g_S;
+    LONG t = (LONG)(intptr_t)p;
+    if (S->tmr_on) {
+        st_cb_regs(S, t, t_mix64(S->seed ^ 0x9001ull ^ (uint64_t)t));
+        InterlockedIncrement(&S->tmr_pool);
+    }
+    InterlockedDecrement(&S->tmr_inflight);
+    return 0;
+}
+
 static void st_timer_tick(st_run *S) {
     InterlockedIncrement(&S->tmr_inflight);
     if (S->tmr_on) {
         LONG t = InterlockedIncrement(&S->tmr_ticks);
         uint64_t x = t_mix64(S->seed ^ (uint64_t)t);
         if (S->c.tmr & TA_REGS) st_cb_regs(S, t, x >> 3);
+        if ((S->c.tmr & TA_POOL) && S->tmr_inflight < 64) {
+            InterlockedIncrement(&S->tmr_inflight);
+            if (!QueueUserWorkItem(st_pool_cb, (void *)(intptr_t)t, WT_EXECUTEDEFAULT)) {
+                InterlockedDecrement(&S->tmr_inflight);
+                InterlockedIncrement(&S->tmr_pool_fail);
+            }
+        }
         st_worker *w = &S->w[(x >> 16) % (unsigned)S->n];
         unsigned acts = S->c.tmr & (TA_APC | TA_WAKE | TA_KICK);
         if (acts && w->started && !w->finished) {
@@ -1305,6 +1357,7 @@ static void st_init_worker(st_run *S, st_worker *w, int idx, const char *role, u
 
 static void st_run_cfg(const st_cfg *cfg, const char *name) {
     if (!cpu_has(F_SSE2)) SKIP("SSE2 not usable");
+    LONG fails0 = g_st_fails;
     st_run *S = &g_S;
     st_cfg c = *cfg;
     if (!c.threads) c.threads = 16;
@@ -1353,6 +1406,41 @@ static void st_run_cfg(const st_cfg *cfg, const char *name) {
     S->scratch = (st_blk *)st_valloc(sizeof(st_blk));
     REQUIREF(S->w && S->scratch, "allocation of %d workers failed", n);
     for (int i = 0; i < n; i++) st_init_worker(S, &S->w[i], i, "worker", MK_MAIN);
+    if (c.pin && S->ncpu >= 1) {
+        for (int i = 0; i < n; i++) {
+            unsigned cpu = c.pin == PIN_ONE ? (unsigned)(S->ncpu - 1) : (unsigned)(i / 2) % (unsigned)S->ncpu;
+            S->w[i].pin_mask = st_nth_cpu(S->procmask, cpu);
+        }
+    }
+    if (c.hold_ms > 0) {
+        /* PAUSE latency differs by an order of magnitude between cores: calibrate the hold loop on this thread
+         * (fastest of 6 runs after a warm-up, so a preempted or clock-ramping run does not shrink the count),
+         * then size spin for hold_ms. */
+        static st_blk cal;
+        double best = 1e30;
+        const uint32_t probe = 20000;
+        /* hybrid parts: PAUSE cost differs between core types, so calibrate on the pinned CPU when there is one */
+        DWORD_PTR oldaff = c.pin == PIN_ONE ? SetThreadAffinityMask(GetCurrentThread(), (DWORD_PTR)S->w[0].pin_mask) : 0;
+        for (int k = 0; k < 7; k++) {
+            st_fill(&cal, 0xCA11, (uint32_t)k, 0, MK_MAIN, OP_HOLD);
+            cal.mx_mode = t_get_mxcsr(); cal.fcw_mode = t_get_x87_cw(); cal.spin = probe;
+            double t0c = t_now_ms();
+            st_hold_xmm(&cal);
+            double d = t_now_ms() - t0c;
+            if (k && d < best) best = d;
+        }
+        if (oldaff) SetThreadAffinityMask(GetCurrentThread(), oldaff);
+        if (best < 0.001) best = 0.001;
+        double sp = (double)probe * (double)c.hold_ms / best / 1.5;   /* published spin is [spin, 2*spin) */
+        if (sp < 1000) sp = 1000;
+        if (sp > 40000000.0) sp = 40000000.0;
+        c.spin = (unsigned)sp;
+        S->c.spin = c.spin;
+        LARGE_INTEGER f; QueryPerformanceFrequency(&f);
+        /* a hold takes at most ~2/1.5 * hold_ms when it keeps its CPU; beyond 2 * hold_ms it was descheduled */
+        S->stretch_qpc = (LONG64)((double)f.QuadPart * (double)c.hold_ms * 2.0 / 1000.0);
+        t_info("hold_calibration", "%u PAUSE iterations in %.3f ms -> spin %u for ~%d ms holds", probe, best, c.spin, c.hold_ms);
+    }
     S->cbw = &S->w[n];
     for (int k = 0; k < ST_NCB; k++) st_init_worker(S, &S->cbw[k], k, "timer-callback", MK_CB);
     for (int i = 0; i < n; i++) {
@@ -1503,6 +1591,15 @@ static void st_run_cfg(const st_cfg *cfg, const char *name) {
         for (int k = 0; k < Y_N; k++) if (ys[k] && o < sizeof yb - 40) o += (size_t)snprintf(yb + o, sizeof yb - o, "%s%s=%llu", o ? " " : "", st_y_name[k], (unsigned long long)ys[k]);
         t_info("yields", "%s", yb);
     }
+    if (S->stretch_qpc) {
+        LONG tm = 0, st = 0;
+        for (int i = 0; i < n; i++) { tm += S->w[i].holds_timed; st += S->w[i].holds_stretched; }
+        /* how often a hold with live patterns was descheduled and resumed: variable, never a pass criterion */
+        t_info("holds_descheduled", "%ld of %ld timed holds took > 2x hold_ms (pinned=%d)", (long)st, (long)tm, c.pin);
+    }
+    if (c.tmr & TA_POOL)
+        t_info("pool_callbacks", "%ld register holds on thread-pool threads (%ld QueueUserWorkItem failures)",
+               (long)S->tmr_pool, (long)S->tmr_pool_fail);
     if (c.ctl) {
         t_info("ctl", "suspends=%lld captures=%lld hold_hits=%lld (apc %lld) asm_other=%lld outside=%lld checked_outside=%lld apc_skip=%lld sets=%lld aff=%lld prio=%lld apc=%lld",
                (long long)S->susp_ops, (long long)S->caps, (long long)S->hold_hits, (long long)S->hold_hits_apc,
@@ -1520,6 +1617,7 @@ static void st_run_cfg(const st_cfg *cfg, const char *name) {
                (long)S->tmr_wake, (long)S->tmr_kick, (long)S->tmr_regs);
         CHECKF(S->tmr_ticks > 0, "timer callbacks never ran in %.0f ms", run_ms);
         if (c.tmr & TA_REGS) CHECKF(S->tmr_regs > 0, "no timer callback performed its register hold");
+        if (c.tmr & TA_POOL) CHECKF(S->tmr_pool > 0, "no thread-pool work item ran in %.0f ms (%ld QueueUserWorkItem failures)", run_ms, (long)S->tmr_pool_fail);
         CHECKF(S->tmr_bad == 0, "%ld timer kick problem(s)", (long)S->tmr_bad);
     }
     if (c.churn) {
@@ -1565,6 +1663,11 @@ static void st_run_cfg(const st_cfg *cfg, const char *name) {
     if (S->xc.buf) st_xc_free(&S->xc); else st_vfree(S->ctx);
     st_vfree(S->w); st_vfree(S->scratch);
     S->w = NULL;
+    if ((wz || wh) && g_st_fails != fails0) {
+        t_note("Wine gap also seen (%lld zero-FP + %lld host-IP captures not checked); the failures above stand",
+               (long long)wz, (long long)wh);
+        return;
+    }
     if (wz) XFAIL("Wine: GetThreadContext of a thread inside a system call returned an all-zero legacy FP area (FCW=0, "
                   "MXCSR=0) in %lld captures (+%lld with a host-code IP); those were not checked, hold-loop oracle unaffected",
                   (long long)wz, (long long)wh);
@@ -1845,7 +1948,19 @@ ST(ctl_oracle_long_hold_x87, .threads = 1, .ops = OPB(OP_X87), .yields = YB(Y_SP
 ST(ctl_oracle_long_hold_mmx, .threads = 1, .ops = OPB(OP_MMX), .yields = YB(Y_SPIN), .ctl = C_GET | C_SET, .spin = 200000, .need_hold = 1, .ms = 250)
 ST(ctl_oracle_long_hold_ymm_xstate, .threads = 1, .ops = OPB(OP_HOLD), .yields = YB(Y_SPIN), .kind = K_YMM, .ctl = C_GETX | C_SET, .spin = 200000, .need_hold = 1, .ms = 250)
 ST(ctl_oracle_during_yielding_calls, .threads = 8, .ops = OPB(OP_CALL), .yields = YB(Y_SLEEP1) | YB(Y_SLEEP0) | YB(Y_WTIMER) | YB(Y_SYSCALL), .ctl = C_XOPT | C_SET, .ms = 200)
-ST(ctl_everything_2x_cpus, .threads = T_2XCPU, .ops = OPS_ALL, .yields = Y_ALL, .kind = K_MIX, .ctl = C_XOPT | C_SET | C_AFF | C_PRIO | C_APC, .ms = 400)
+/* Forced time slicing with live patterns: workers pinned to one CPU (or two per CPU) run holds of tens of ms,
+ * longer than a scheduling quantum on client Windows, so the OS must switch between pattern-holding threads on
+ * the same core mid-hold (counted as holds_descheduled, INFO only: quantum length is a policy). */
+ST(preempt_one_cpu_long_holds, .threads = 4, .ops = OPS_HOLDS, .yields = YB(Y_SPIN), .kind = K_MIX, .pin = PIN_ONE,
+   .hold_ms = 40, .ms = 500)
+ST(preempt_one_cpu_long_holds_captured, .threads = 4, .ops = OPS_HOLDS, .yields = YB(Y_SPIN) | YB(Y_SWITCH), .kind = K_MIX,
+   .pin = PIN_ONE, .hold_ms = 30, .ctl = C_XOPT | C_SET, .need_hold = 1, .ms = 500)
+ST(preempt_pairs_per_cpu, .threads = T_2XCPU, .ops = OPS_HOLDS | OPB(OP_COMPUTE), .yields = YB(Y_SPIN) | YB(Y_SWITCH),
+   .kind = K_MIX, .pin = PIN_PAIRS, .hold_ms = 15, .ms = 500)
+/* CPU migration while the patterns are live: the controller moves victims between CPUs during multi-ms holds */
+ST(ctl_migrate_during_long_holds, .threads = 8, .ops = OPS_HOLDS, .yields = YB(Y_SPIN), .kind = K_MIX, .hold_ms = 5,
+   .ctl = C_XOPT | C_AFF, .need_hold = 1, .ms = 400)
+ST(ctl_everything_2x_cpus,.threads = T_2XCPU, .ops = OPS_ALL, .yields = Y_ALL, .kind = K_MIX, .ctl = C_XOPT | C_SET | C_AFF | C_PRIO | C_APC, .ms = 400)
 
 /* ======================================================================================================
  * 3. Process-wide timer interrupts: timer-queue and multimedia timer callbacks
@@ -1857,8 +1972,9 @@ ST(tmr_queue_callback_regs, .threads = 8, .ops = OPS_ALL, .yields = Y_ALL, .kind
 ST(tmr_mm_apc_injection, .threads = 16, .ops = OPS_HOLDS, .yields = YB(Y_ALERT) | YB(Y_WTIMER), .kind = K_MIX, .tmr = T_MM | TA_APC, .ms = 250)
 ST(tmr_mm_kick_suspend, .threads = 16, .ops = OPS_HOLDS | OPB(OP_COMPUTE), .yields = YB(Y_SPIN) | YB(Y_SWITCH), .kind = K_MIX, .tmr = T_MM | TA_KICK, .ms = 250)
 ST(tmr_mm_callback_regs, .threads = 8, .ops = OPS_ALL, .yields = Y_ALL, .kind = K_MIX, .tmr = T_MM | TA_REGS | TA_WAKE, .ms = 250)
-ST(tmr_everything_with_controller, .threads = T_2XCPU, .ops = OPS_ALL, .yields = Y_ALL, .kind = K_MIX,
-   .ctl = C_XOPT | C_SET | C_AFF | C_PRIO | C_APC, .tmr = T_TQ | T_MM | TA_APC | TA_WAKE | TA_KICK | TA_REGS, .ms = 500)
+ST(tmr_threadpool_callback_regs, .threads = 8, .ops = OPS_ALL, .yields = Y_ALL, .kind = K_MIX, .tmr = T_TQ | TA_POOL | TA_REGS, .ms = 300)
+ST(tmr_everything_with_controller,.threads = T_2XCPU, .ops = OPS_ALL, .yields = Y_ALL, .kind = K_MIX,
+   .ctl = C_XOPT | C_SET | C_AFF | C_PRIO | C_APC, .tmr = T_TQ | T_MM | TA_APC | TA_WAKE | TA_KICK | TA_REGS | TA_POOL, .ms = 500)
 
 /* ======================================================================================================
  * 4. Oracle self-tests (an injected SetThreadContext change must be seen exactly), churn, rates
@@ -1873,7 +1989,7 @@ ST(perf_stress_rates_xstate_capture, .threads = 4, .ops = OPB(OP_HOLD) | OPB(OP_
 /* opt-in soak (--include-manual): everything for 30 s */
 TEST_MANUAL(soak_everything_30s) {
     static const st_cfg c_ = { .threads = T_2XCPU, .ops = OPS_ALL, .yields = Y_ALL, .kind = K_MIX,
-                               .ctl = C_XOPT | C_SET | C_AFF | C_PRIO | C_APC, .tmr = T_TQ | T_MM | TA_APC | TA_WAKE | TA_KICK | TA_REGS,
+                               .ctl = C_XOPT | C_SET | C_AFF | C_PRIO | C_APC, .tmr = T_TQ | T_MM | TA_APC | TA_WAKE | TA_KICK | TA_REGS | TA_POOL,
                                .churn = 1, .ms = 30000 };
     st_run_cfg(&c_, "soak_everything_30s");
 }
