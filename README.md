@@ -147,6 +147,10 @@ exception/context ZMM cases SKIP), it returns 0 on a CPU without XSAVE (XFAIL), 
 Rbp with CONTEXT_CONTROL (context_xstate `getctx_control_only_leaves_rest`,
 `getctx_integer_only_leaves_rest`, `setctx_integer_observed`) and returns ERROR_NOACCESS instead of
 ERROR_MORE_DATA for a compact context without room (xstate_windows `thread_get_compact_no_room`): FAIL.
+Wine 9 also reports every x64 #XM as `STATUS_FLOAT_MULTIPLE_TRAPS` (Windows x64: the one `STATUS_FLOAT_*`
+code of the unmasked flag; Wine 11 is exact): XFAIL "Wine 9.0 reports an x64 #XM as ...". Because a CONTEXT
+carries only the components `GetEnabledXStateFeatures` reports, exception_xstate runs its ZMM frames only
+where that API reports AVX-512 and otherwise SKIPs them (or uses YMM frames) with that reason.
 
 ### Emulator artifacts
 
@@ -162,7 +166,7 @@ XFAIL with SDE's message (`t_sde_killed_child`). Known artifacts of SDE 10.13 on
 | area | SDE behaviour (hardware/SDM behaviour in brackets) |
 |---|---|
 | chip check | stops the process on an instruction the model or XCR0 lacks [#UD] |
-| emulated EVEX aligned moves, MOVDIR64B, XSAVE family | no #GP for a misaligned operand |
+| emulated EVEX aligned moves, MOVDIR64B, XSAVE family, legacy SHA m128 | no #GP for a misaligned operand |
 | XSETBV / XGETBV | XSETBV works at CPL3, XGETBV accepts any index [#GP] |
 | XSAVE emulation | XCOMP_BV omits PKRU, initial components and (32-bit) Hi16_ZMM, is 0 for RFBM=0; XRSTOR with partial RFBM touches other components; FXRSTOR does not set XINUSE[0]; no XRSTOR header #GP, no #PF on the area |
 | VPCOMPRESSD / VPEXPANDD | fault on popcnt(k) elements that end at a guard page [only the elements accessed] |
@@ -171,10 +175,13 @@ XFAIL with SDE's message (`t_sde_killed_child`). Known artifacts of SDE 10.13 on
 | unmasked #XM in an emulated EVEX instruction | Pin aborts the process |
 | RDPID, CLFLUSHOPT/CLWB on no-access pages, ICEBP | own TSC_AUX value; no fault; no #DB |
 | TF single-step, RSM/SYSEXIT/SYSRET, INT 80h | Pin aborts the process |
+| DR0-DR3 execute breakpoints set with SetThreadContext | never fire: Pin runs the code from its code cache [#DB] |
 | x87 #MF in 32-bit code | FPU instruction pointer points into Pin's code cache |
 | CPUID topology (leaves 0Bh/1Fh, APIC IDs) | one emulated APIC ID on every CPU |
 | `-nhm`: F3 0F BD / F3 0F BC | run as the host's LZCNT/TZCNT instead of BSR/BSF |
 | reserved FXSAVE bytes in SetThreadContext | Pin asserts (case not run) |
+| SuspendThread/GetThreadContext controller plus cross-thread APCs (xstate_stress `ctl_*`) | the process hangs inside Pin (cases with APC injection not run); a controller can stay blocked past its stop timeout |
+| more than 256 threads in a 32-bit process | Pin asserts in CreateThreadData (thread_xstate `*_n1024` not run) |
 
 ## Benchmarks
 

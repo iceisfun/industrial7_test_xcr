@@ -2129,6 +2129,8 @@ static void misaligned_case(const char *child, t_feature f) {
     }
     REQUIREF(t_child_run(child, "", 5000, &g_cr), "child did not start (error %lu)", g_cr.spawn_error);
     CHECKF(!g_cr.timed_out, "child hung");
+    if (t_sde_model() && g_cr.exc_code == 0)   /* emulator artifact (seen for SHA), README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s) emulates %s without the legacy-SSE alignment #GP", t_sde_model(), child);
     CHECKF(g_cr.exc_code != 0, "misaligned legacy-SSE m128 operand did not fault (exit 0x%lx, output: %.80s)", g_cr.exit_code, g_cr.out);
     if (g_cr.exc_code) {
         t_info("exception_code", "0x%08lx", g_cr.exc_code);

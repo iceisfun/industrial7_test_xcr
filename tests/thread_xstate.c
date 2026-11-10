@@ -990,6 +990,10 @@ static void run_cfg(const cfg *c) {
     scen *sc = &S;
     memset(sc, 0, sizeof *sc);
     if (!cpu_has(F_SSE2)) SKIP("SSE2 not usable");
+#ifdef T_X86
+    if (t_sde_model() && c->n > 256)   /* emulator artifact, README "Emulated validation"; not run: it kills the process */
+        XFAIL("Intel SDE (%s): 32-bit Pin cannot allocate its per-thread data for %d threads (Pin assertion)", t_sde_model(), c->n);
+#endif
     sc->op = c->op; sc->n = c->n; sc->pin = c->pin; sc->rf = c->rf; sc->prio_mix = c->prio_mix;
     sc->susp = c->susp; sc->mig_ext = c->mig_ext; sc->fixed_iters = c->fixed_iters;
     sc->getctx = c->getctx; sc->mxflags = c->mxflags;
