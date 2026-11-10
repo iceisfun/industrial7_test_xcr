@@ -25,6 +25,10 @@
  *                                              ntdll!RtlLocateExtendedFeature2: NULL unless 2 <= id < 64 and
  *                                              id is an enabled feature (and, compacted, in XCOMP_BV);
  *                                              *Length = component size from the shared XState config
+ *      kernelbase!SetXStateFeaturesMask     without an XSTATE chunk: mask bits above 1 -> FALSE,
+ *                                              STATUS_INVALID_PARAMETER (ERROR_INVALID_PARAMETER)
+ *      ntdll!RtlInitializeExtendedContext2  memsets the XSAVE area: a fresh context has XSTATE mask 0
+ *      ntdll!RtlCopyContext                 copies the XSTATE chunk (RtlpCopyXStateChunk) when both have one
  * Result policy: AVX-512 absent or not OS-enabled -> SKIP with the precise reason; advertised but wrong
  * -> FAIL; implementation-defined observations -> t_note / t_info.
  * Deliberate faults (EVEX #UD, XSETBV #GP, unmasked-lane #PF, misaligned VMOVDQA64) and every
@@ -519,6 +523,129 @@ TEST(zmm_api_locate_not_enabled_id) {
     t_info("ids_checked", "%d", n);
 }
 
+/* ntdll!RtlGetEnabledExtendedFeatures(mask) = (EnabledFeatures | EnabledSupervisorFeatures) & mask (19041 decompile);
+ * kernelbase!GetEnabledXStateFeatures is the same with mask ~0 (3 when that is 0). */
+typedef DWORD64 (WINAPI *zx_rtl_enabled_fn)(DWORD64);
+TEST(zmm_api_rtl_enabled_extended_features) {
+    zx_rtl_enabled_fn rtl = (zx_rtl_enabled_fn)t_proc("ntdll.dll", "RtlGetEnabledExtendedFeatures");
+    __typeof__(&GetEnabledXStateFeatures) en = T_PROC("kernel32.dll", GetEnabledXStateFeatures);
+    if (!rtl || !en) SKIP("RtlGetEnabledExtendedFeatures / GetEnabledXStateFeatures not exported");
+    DWORD64 all = rtl(~0ull), e = en();
+    t_info("rtl_all", "0x%llx", (unsigned long long)all);
+    CHECK_EQ(rtl(0), 0);
+    CHECKF(rtl(ZX_AVX512) == (all & ZX_AVX512), "Rtl(0xE0)=0x%llx, Rtl(~0)=0x%llx", (unsigned long long)rtl(ZX_AVX512),
+           (unsigned long long)all);
+    CHECKF(rtl(ZX_AVX512) == (e & ZX_AVX512), "Rtl(0xE0)=0x%llx but GetEnabledXStateFeatures()=0x%llx",
+           (unsigned long long)rtl(ZX_AVX512), (unsigned long long)e);
+    CHECKF(rtl(1ull << 6) == (all & (1ull << 6)), "single-bit query for ZMM_Hi256");
+    if (all) CHECKF(all == e, "GetEnabledXStateFeatures()=0x%llx != RtlGetEnabledExtendedFeatures(~0)=0x%llx",
+                    (unsigned long long)e, (unsigned long long)all);
+}
+
+/* kernelbase!SetXStateFeaturesMask without an XSTATE chunk: bits above 1 -> FALSE, STATUS_INVALID_PARAMETER
+ * (ERROR_INVALID_PARAMETER); mask 3 alone succeeds. GetXStateFeaturesMask then reports 3 (FP flag) or 0. */
+TEST(zmm_api_set_mask_without_xstate_chunk) {
+    zx_api a; NEED_API(&a);
+    const char *why = "";
+    CONTEXT *plain = zx_context_new(&a, g_ctxbuf[1], CONTEXT_ALL, NULL, &why);
+    REQUIREF(plain, "%s", why);
+    SetLastError(0);
+    BOOL ok = a.setm(plain, XSTATE_MASK_AVX512);
+    DWORD err = GetLastError();
+    if (ok && t_is_wine()) t_expect_fail("Wine %s: SetXStateFeaturesMask accepts AVX-512 bits on a CONTEXT without XSTATE", t_wine_version());
+    CHECKF(!ok, "SetXStateFeaturesMask(no CONTEXT_XSTATE, 0xE0) succeeded");
+    CHECK(a.setm(plain, XSTATE_MASK_LEGACY));
+    DWORD64 m = ~0ull;
+    CHECK(a.getm(plain, &m));
+    CHECKF((m & ~3ull) == 0, "GetXStateFeaturesMask on a CONTEXT without XSTATE = 0x%llx", (unsigned long long)m);
+    /* last: the error code (a Wine gap marks only this check) */
+    if (!ok && err != ERROR_INVALID_PARAMETER && t_is_wine())
+        t_expect_fail("Wine %s: SetXStateFeaturesMask fails without setting ERROR_INVALID_PARAMETER (last error %lu)",
+                      t_wine_version(), (unsigned long)err);
+    if (!ok) CHECK_EQ(err, ERROR_INVALID_PARAMETER);
+}
+
+/* ntdll!RtlInitializeExtendedContext2 zeroes the XSAVE header: a fresh context carries no AVX-512 component */
+TEST(zmm_api_fresh_context_mask_empty) {
+    zx_api a; NEED_API(&a);
+    const char *why = "";
+    CONTEXT *ctx = zx_context_new(&a, g_ctxbuf[0], ZX_XFLAGS, NULL, &why);
+    REQUIREF(ctx, "%s", why);
+    DWORD64 m = ~0ull;
+    CHECK(a.getm(ctx, &m));
+    t_info("fresh_mask", "0x%llx", (unsigned long long)m);
+    CHECKF((m & ZX_AVX512) == 0, "fresh InitializeContext mask 0x%llx already contains AVX-512 bits", (unsigned long long)m);
+    CHECKF((m & 3) == 3, "CONTEXT_ALL includes the legacy FP state: mask 0x%llx", (unsigned long long)m);
+}
+
+/* CopyContext copies the AVX-512 XSTATE components (ntdll!RtlCopyContext -> RtlpCopyXStateChunk). Pure API:
+ * runs whenever the OS reports AVX-512 state as enabled, no AVX-512 instruction is executed. */
+TEST(zmm_api_copy_context_avx512) {
+    zx_api a; NEED_API(&a);
+    __typeof__(&CopyContext) cp = T_PROC("kernel32.dll", CopyContext);
+    if (!cp) SKIP("CopyContext not exported");
+    if ((a.en() & ZX_AVX512) != ZX_AVX512) SKIP("AVX-512 state not enabled (GetEnabledXStateFeatures=0x%llx)", (unsigned long long)a.en());
+    const char *why = "";
+    CONTEXT *src = zx_context_new(&a, g_ctxbuf[0], ZX_XFLAGS, NULL, &why);
+    REQUIREF(src, "%s", why);
+    static uint8_t T_ALIGN(64) dbuf[ZX_CTXBUF];
+    CONTEXT *dst = zx_context_new(&a, dbuf, ZX_XFLAGS, NULL, &why);
+    REQUIREF(dst, "%s", why);
+    REQUIRE(a.setm(src, XSTATE_MASK_LEGACY | XSTATE_MASK_AVX | XSTATE_MASK_AVX512));
+    static const DWORD sz[8] = { 0, 0, 256, 0, 0, 64, 512, 1024 };
+    for (DWORD f = 5; f <= 7; f++) {
+        DWORD l = 0; uint8_t *p = a.loc(src, f, &l);
+        REQUIREF(p && l == sz[f], "LocateXStateFeature(src, %lu)=%p len %lu", (unsigned long)f, (void *)p, (unsigned long)l);
+        t_pattern_reg(p, sz[f], 0xC0C7, f);
+    }
+    SetLastError(0);
+    BOOL ok = cp(dst, ZX_XFLAGS, src);
+    REQUIREF(ok, "CopyContext failed: %lu", (unsigned long)GetLastError());
+    DWORD64 m = 0;
+    CHECK(a.getm(dst, &m));
+    CHECKF((m & ZX_AVX512) == ZX_AVX512, "destination mask 0x%llx after CopyContext", (unsigned long long)m);
+    for (DWORD f = 5; f <= 7; f++) {
+        DWORD l = 0, ls = 0; uint8_t *p = a.loc(dst, f, &l), *q = a.loc(src, f, &ls);
+        CHECKF(p != NULL, "LocateXStateFeature(dst, %lu) NULL", (unsigned long)f);
+        if (p && q) CHECK_MEM(p, q, sz[f]);   /* copied component f */
+    }
+}
+
+/* XCR0 is per logical processor; an OS must program the same value on every CPU, otherwise a thread that is
+ * migrated after its AVX-512 dispatch decision #UDs. CPUID differences are only noted (no OS contract). */
+TEST(zmm_gate_uniform_across_cpus) {
+    DWORD_PTR pm = 0, sm = 0;
+    if (!GetProcessAffinityMask(GetCurrentProcess(), &pm, &sm) || !pm) SKIP("no process affinity mask");
+    const t_cpu_info *c = cpu();
+    HANDLE self = GetCurrentThread();
+    DWORD_PTR old = SetThreadAffinityMask(self, pm);
+    if (!old) SKIP("SetThreadAffinityMask failed: %lu", (unsigned long)GetLastError());
+    int n = 0, xbad = 0, cbad = 0;
+    for (unsigned b = 0; b < sizeof(DWORD_PTR) * 8; b++) {
+        DWORD_PTR bit = (DWORD_PTR)1 << b;
+        if (!(pm & bit)) continue;
+        if (!SetThreadAffinityMask(self, bit)) continue;
+        Sleep(0);
+        t_cpuid_regs r; cpuid_ex(7, 0, &r);
+        int f = (int)(r.ebx >> 16 & 1);
+        if (f != cpu_hw(F_AVX512F)) { cbad++; if (cbad < 4) t_note("CPU %u: CPUID.(7,0):EBX[16]=%d, process view %d", b, f, cpu_hw(F_AVX512F)); }
+        if (c->osxsave) {
+            uint64_t x = t_xgetbv(0);
+            if ((x & ZX_ZMMSTATE) != (c->xcr0 & ZX_ZMMSTATE)) {
+                xbad++;
+                CHECKF(0, "CPU %u: XCR0=0x%llx, process view 0x%llx (AVX-512/AVX/SSE bits differ)", b,
+                       (unsigned long long)x, (unsigned long long)c->xcr0);
+            }
+        }
+        n++;
+    }
+    SetThreadAffinityMask(self, old);
+    CHECK(n > 0);
+    if (!xbad) CHECK(1);
+    t_info("cpus_checked", "%d", n);
+    t_info("cpuid_avx512f_mismatches", "%d", cbad);
+}
+
 /* =============================================================================================
  * 2. fault behaviour that is testable on every host (children)
  * ============================================================================================= */
@@ -999,6 +1126,42 @@ TEST(zmm_kreg_logic_dq) {
         CHECKF(p.fl[1] == ((~a & b & 0xFFFF) == 0), "ktestw CF a=0x%04x b=0x%04x", a, b);
         CHECKF(p.fl[2] == ((a & b & 0xFF) == 0), "ktestb ZF");
         CHECKF(p.fl[3] == ((~a & b & 0xFF) == 0), "ktestb CF");
+    }
+}
+
+/* KMOVD/KMOVQ between opmask and general registers (AVX512BW); KMOVQ r64 only in 64-bit mode.
+ * o[0] = kmovd k->r32 (zero-extends into r64 on x64), o[1] = r32->k (bits 63:32 := 0), o[2] = kmovq k->r64,
+ * o[3] = r64->k->m64 */
+T_TARGET("avx512f,avx512bw") T_NOINLINE static void zmm_kreg_gpr_bw(zk *p) {
+#ifdef T_X64
+    __asm__ volatile(
+        "kmovq 0(%0), %%k1\n\tmovq $-1, %%rax\n\tkmovd %%k1, %%eax\n\tmovq %%rax, 16(%0)\n\t"
+        "kmovq 0(%0), %%k2\n\tmovq 8(%0), %%rax\n\tkmovd %%eax, %%k2\n\tkmovq %%k2, 24(%0)\n\t"
+        "kmovq %%k1, %%rax\n\tmovq %%rax, 32(%0)\n\t"
+        "movq 8(%0), %%rax\n\tkmovq %%rax, %%k3\n\tkmovq %%k3, 40(%0)\n\t"
+        :: "r"(p) : "rax", "k1", "k2", "k3", "memory");
+#else
+    __asm__ volatile(
+        "kmovq 0(%0), %%k1\n\tkmovd %%k1, %%eax\n\tmovl %%eax, 16(%0)\n\tmovl $0, 20(%0)\n\t"
+        "kmovq 0(%0), %%k2\n\tmovl 8(%0), %%eax\n\tkmovd %%eax, %%k2\n\tkmovq %%k2, 24(%0)\n\t"
+        :: "r"(p) : "eax", "k1", "k2", "memory");
+#endif
+}
+TEST(zmm_kreg_gpr_moves_bw) {
+    NEED_X(F_AVX512BW);
+    t_rng r; t_rng_seed(&r, 0x6B04);
+    for (int it = 0; it < 24; it++) {
+        zk p; memset(&p, 0xA5, sizeof p);
+        p.a = it == 0 ? ~0ull : t_rng_next(&r); p.b = it == 0 ? ~0ull : t_rng_next(&r);
+        zmm_kreg_gpr_bw(&p);
+        CHECKF(p.o[0] == (p.a & 0xFFFFFFFFull), "kmovd k->r32 got 0x%llx want 0x%llx (writes to r32 zero-extend)",
+               (unsigned long long)p.o[0], (unsigned long long)(p.a & 0xFFFFFFFFull));
+        CHECKF(p.o[1] == (p.b & 0xFFFFFFFFull), "kmovd r32->k got 0x%llx want 0x%llx (bits 63:32 := 0)",
+               (unsigned long long)p.o[1], (unsigned long long)(p.b & 0xFFFFFFFFull));
+#ifdef T_X64
+        CHECK_EQ(p.o[2], p.a);
+        CHECK_EQ(p.o[3], p.b);
+#endif
     }
 }
 
@@ -2441,6 +2604,62 @@ CHILD(zmm_ff_misaligned_vmovdqa64) {
     return 0;
 }
 
+/* lanes BEFORE the accessible range: the page in front of the buffer is PAGE_NOACCESS */
+CHILD(zmm_fs_leading_guard) {
+    (void)argc; (void)argv; CHILD_NEED_F();
+    SYSTEM_INFO si; GetSystemInfo(&si);
+    size_t pg = si.dwPageSize ? si.dwPageSize : 4096;
+    uint8_t *b = VirtualAlloc(NULL, 2 * pg, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    DWORD old;
+    if (!b || !VirtualProtect(b, pg, PAGE_NOACCESS, &old)) { printf("ALLOC_FAILED=1\n"); return 4; }
+    uint8_t *q = b + pg;
+    for (int i = 0; i < 64; i++) q[i] = (uint8_t)(0x90 + i);
+    zv out, e, pre, v;
+    memset(&pre, 0x6C, sizeof pre);
+    zmm_ld32z(&out, q - 16, 0xFFF0);          /* lanes 0-3 on the NOACCESS page, masked off */
+    memset(&e, 0, sizeof e); memcpy(e.b + 16, q, 48);
+    zx_cmp_print("vmovdqu32{z} lanes 0-3 on the preceding PAGE_NOACCESS", &out, &e, 64);
+    zmm_ld32(&out, q - 60, 0x8000, &pre);     /* only lane 15 (q-60+60 = q) active */
+    e = pre; memcpy(e.b + 60, q, 4);
+    zx_cmp_print("vmovdqu32{k} only the last lane readable", &out, &e, 64);
+    for (int i = 0; i < 64; i++) v.b[i] = (uint8_t)(0x10 + i);
+    uint8_t ref[64]; memcpy(ref, q, 64); memcpy(ref, v.b + 16, 48);
+    zmm_st32(q - 16, &v, 0xFFF0);
+    zx_cmp_print("vmovdqu32{k} store with lanes 0-3 on the preceding PAGE_NOACCESS", q, ref, 64);
+    printf("BAD=%d\n", g_bad); fflush(stdout);
+    VirtualFree(b, 0, MEM_RELEASE);
+    return g_bad ? 1 : 0;
+}
+
+/* Unmasked SIMD FP exceptions (MXCSR.ZM=0): masked-off lanes and {sae} must not raise #XM; an active lane must. */
+ZOP_FN(zmm_r_divps_rz, "avx512f", "kmovw", "vdivps %{rz-sae%}, %%zmm2, %%zmm1, %%zmm0", "kmovw")
+CHILD(zmm_fx_unmasked_ze) {
+    (void)argc; (void)argv; CHILD_NEED_F();
+    static zop p;
+    for (int i = 0; i < 16; i++) { p.s.f[i] = -7.0f; p.a.f[i] = 1.0f; p.b.f[i] = 0.0f; }
+    p.k = 0x1111;
+    for (int i = 0; i < 16; i++) if (p.k >> i & 1) { p.a.f[i] = 6.0f; p.b.f[i] = 3.0f; }
+    t_set_mxcsr(0x1F80 & ~0x200u);           /* unmask divide-by-zero only */
+    zop_run(zmm_m_divps, &p);
+    unsigned mx = t_get_mxcsr();
+    int ok = 1;
+    for (int i = 0; i < 16; i++) if (zx_f2u(p.o.f[i]) != zx_f2u((p.k >> i & 1) ? 2.0f : -7.0f)) ok = 0;
+    printf("STEP1=%s mxcsr=0x%x\n", ok && !(mx & MX_FLAGS) ? "ok" : "bad", mx); fflush(stdout);
+    for (int i = 0; i < 16; i++) { p.a.f[i] = 1.0f; p.b.f[i] = 0.0f; }
+    t_set_mxcsr(0x1F80 & ~0x200u);
+    zop_run(zmm_r_divps_rz, &p);             /* every lane divides by zero, but SAE */
+    mx = t_get_mxcsr();
+    ok = 1;
+    for (int i = 0; i < 16; i++) if (p.o.d[i] != 0x7F800000u) ok = 0;   /* masked response: +inf */
+    printf("STEP2=%s mxcsr=0x%x\n", ok && !(mx & MX_FLAGS) ? "ok" : "bad", mx); fflush(stdout);
+    p.k = 0xFFFF;
+    t_set_mxcsr(0x1F80 & ~0x200u);
+    printf("BEFORE=1\n"); fflush(stdout);
+    zop_run(zmm_m_divps, &p);                /* active lanes 1/0: #XM */
+    printf("AFTER=1\n");
+    return 0;
+}
+
 static void zx_child_expect_ok(const char *name) {
     REQUIREF(t_child_run(name, "", 15000, &g_cr), "child did not start (error %lu)", (unsigned long)g_cr.spawn_error);
     CHECK(!g_cr.timed_out);
@@ -2487,6 +2706,28 @@ TEST(zmm_fault_misaligned_vmovdqa64) {
     if (g_cr.exc_code != STATUS_ACCESS_VIOLATION && g_cr.exc_code != STATUS_DATATYPE_MISALIGNMENT)
         t_note("misaligned VMOVDQA64 #GP reported as 0x%lx", (unsigned long)g_cr.exc_code);
 }
+TEST(zmm_fault_suppression_leading_guard) { NEED_F(); zx_child_expect_ok("zmm_fs_leading_guard"); }
+
+static int zx_is_float_status(DWORD c) {
+    return (c >= 0xC000008Du && c <= 0xC0000093u) || c == 0xC00002B4u || c == 0xC00002B5u;
+}
+TEST(zmm_fault_unmasked_fp_exceptions) {
+    NEED_F();
+    /* SDM 15.6 (exception class E2): masked-off elements neither set flags nor raise unmasked exceptions;
+     * {sae} suppresses every FP exception; an active element with an unmasked exception raises #XM */
+    REQUIREF(t_child_run("zmm_fx_unmasked_ze", "", 15000, &g_cr), "child did not start");
+    CHECK(!g_cr.timed_out);
+    char v[64];
+    CHECKF(t_child_find(&g_cr, "STEP1=", v, sizeof v) && !strncmp(v, "ok", 2),
+           "masked-off x/0 lanes with ZM=0: %s (exception 0x%lx)", v, (unsigned long)g_cr.exc_code);
+    CHECKF(t_child_find(&g_cr, "STEP2=", v, sizeof v) && !strncmp(v, "ok", 2),
+           "vdivps {rz-sae} x/0 with ZM=0: %s (exception 0x%lx)", v, (unsigned long)g_cr.exc_code);
+    CHECKF(t_child_find(&g_cr, "BEFORE=", v, sizeof v), "child did not reach the active-lane step");
+    CHECKF(!t_child_find(&g_cr, "AFTER=", v, sizeof v), "active x/0 lane with ZM=0 did not raise #XM");
+    CHECKF(zx_is_float_status(g_cr.exc_code), "active-lane #XM reported as 0x%lx, want a STATUS_FLOAT_* code",
+           (unsigned long)g_cr.exc_code);
+    t_info("xm_exception", "0x%lx", (unsigned long)g_cr.exc_code);
+}
 
 /* =============================================================================================
  * 14. preservation: callbacks (ABI), threads (preemption), suspend/context, exceptions
@@ -2502,6 +2743,9 @@ static void zx_cb_case(void (*fn)(void *), void *arg, const char *label) {
         snprintf(what, sizeof what, "xmm%d[127:0] across %s (nonvolatile)", i, label);
         CHECK_REG(what, out.v[i], in.v[i], 16);
     }
+#else
+    t_note("x86 ABI: every vector and opmask register is volatile across %s; observation only (the spinning-thread "
+           "cases carry the hard OS checks)", label);
 #endif
     int changed = 0, kchanged = 0;
     for (int i = 0; i < T_NZMM; i++) if (memcmp(out.v[i], in.v[i], 64)) changed++;
@@ -2708,6 +2952,62 @@ TEST(zmm_preserve_256_threads) {
     NEED_F();
     zx_spin_group(256, 0, 600, 0x7200, 65536, "256 threads");
 }
+TEST(zmm_preserve_cpu_migration) {
+    NEED_F();
+    /* the spinning thread is moved from CPU to CPU by affinity changes: its state must follow it */
+    DWORD_PTR pm = 0, sm = 0;
+    if (!GetProcessAffinityMask(GetCurrentProcess(), &pm, &sm) || !pm) SKIP("no process affinity mask");
+    DWORD_PTR cpus[64]; int nc = 0;
+    for (unsigned b = 0; b < sizeof(DWORD_PTR) * 8 && nc < 64; b++) if (pm >> b & 1) cpus[nc++] = (DWORD_PTR)1 << b;
+    if (nc < 2) SKIP("only one CPU in the process affinity mask");
+    zx_spinner *s = &g_sp[0];
+    REQUIRE(zx_spin_start(s, 0x7380, 0, 0));
+    zx_spin_wait_ready(s, 1);
+    int moves = 0;
+    for (int i = 0; i < 300; i++) {
+        if (SetThreadAffinityMask(s->h, cpus[(i * 7 + 1) % nc])) moves++;
+        if (i % 3 == 0) Sleep(1); else SwitchToThread();
+    }
+    SetThreadAffinityMask(s->h, pm);
+    CHECK_EQ(zx_spin_stop(s, 1), 0);
+    CHECK(moves > 0);
+    t_info("affinity_moves", "%d over %d CPUs", moves, nc);
+    t_vregs_check(&s->out, &s->in, T_VK_ZMM, 0, -1, "after migrating between CPUs");
+}
+
+/* other threads with their own AVX-512 values are created, run and terminated around a spinning thread */
+static DWORD WINAPI zx_churn_thread(void *p) {
+    t_vregs *v = p;   /* v[0] in, v[1] out */
+    t_vregs_call(T_VK_ZMM, &v[0], &v[1], zx_cb_sleep0, NULL);
+    return 0;
+}
+TEST(zmm_preserve_thread_churn) {
+    NEED_F();
+    zx_spinner *s = &g_sp[0];
+    REQUIRE(zx_spin_start(s, 0x7390, 0, 0));
+    zx_spin_wait_ready(s, 1);
+    enum { BATCH = 16, ROUNDS = 8 };
+    t_vregs *vv = VirtualAlloc(NULL, sizeof(t_vregs) * 2 * BATCH, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if (!vv) { zx_spin_stop(s, 1); SKIP("VirtualAlloc failed"); }
+    int made = 0;
+    for (int r = 0; r < ROUNDS; r++) {
+        HANDLE h[BATCH]; int n = 0;
+        for (int i = 0; i < BATCH; i++) {
+            t_vregs_pattern(&vv[2 * i], T_VK_ZMM, 0x73A0 + (uint32_t)(r * BATCH + i));
+            h[n] = CreateThread(NULL, 65536, zx_churn_thread, &vv[2 * i], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
+            if (h[n]) n++;
+        }
+        if (n) WaitForMultipleObjects((DWORD)n, h, TRUE, 10000);
+        for (int i = 0; i < n; i++) CloseHandle(h[i]);
+        made += n;
+    }
+    VirtualFree(vv, 0, MEM_RELEASE);
+    CHECK_EQ(zx_spin_stop(s, 1), 0);
+    if (!made) SKIP("could not create any short-lived thread");
+    t_info("short_lived_threads", "%d", made);
+    t_vregs_check(&s->out, &s->in, T_VK_ZMM, 0, -1, "after creating/terminating AVX-512 threads");
+}
+
 TEST_MANUAL(zmm_preserve_1024_threads) {
     NEED_F();
     zx_spin_group(1024, 0, 1500, 0x7600, 65536, "1024 threads");
