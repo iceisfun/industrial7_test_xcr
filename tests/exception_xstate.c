@@ -481,6 +481,48 @@ __asm__(
 );
 #endif
 
+#ifdef T_X64
+/* xc2_ref_capture_avx(CONTEXT *c): hand-built instruction-level reference for ntdll!RtlCaptureContext2, so the
+ * capture checks have a self-check path on systems that do not export it (it needs Windows 10 2004 / build
+ * 19041, x64). Pinned against the Windows 10 19041 ntdll disassembly (corpus explorer, RtlCaptureContext2 at
+ * RVA 0xa12c0): push rcx; pushfq; sub rsp,0x28; store RAX RCX RDX R8-R11; FXSAVE (no REX.W) at +0x100; CS DS ES
+ * SS FS GS; RBX RBP RSI RDI R12-R15; STMXCSR at +0x34; Rsp = caller RSP after the return; Rip = return address;
+ * EFlags = the PUSHFQ image; RtlpSanitizeContextFlags(&Flags, 1); Flags &= 0x100040; when CONTEXT_XSTATE survives,
+ * RtlpMergeContextXState(c, RDSSPQ) writes ONLY the CET_U component (XSTATE feature 11) and its mask bit (it does
+ * not XSAVE AVX); finally Flags |= 0x10000F.
+ * The reference does the same, except: no flag validation (callers pass valid flags), no CET_U merge (the
+ * comparison masks bit 11), and when g_xc2_avx_dst is set (LocateXStateFeature(c, AVX) of a CONTEXT_XSTATE
+ * record) and CONTEXT_XSTATE survived, it stores YMM0-15[255:128] there and sets XSTATE mask bit 2: what a
+ * capture that includes AVX state must produce. Reached only after cpu_has(F_AVX) when g_xc2_avx_dst != NULL. */
+void *g_xc2_avx_dst;
+__asm__(
+    ".text\n.globl xc2_ref_capture_avx\nxc2_ref_capture_avx:\n"
+    "  pushq %rcx\n  pushfq\n  subq $0x28, %rsp\n"
+    "  movq %rax, 0x78(%rcx)\n  movq %rcx, 0x80(%rcx)\n  movq %rdx, 0x88(%rcx)\n"
+    "  movq %r8, 0xb8(%rcx)\n  movq %r9, 0xc0(%rcx)\n  movq %r10, 0xc8(%rcx)\n  movq %r11, 0xd0(%rcx)\n"
+    "  fxsave 0x100(%rcx)\n"
+    "  movw %cs, 0x38(%rcx)\n  movw %ds, 0x3a(%rcx)\n  movw %es, 0x3c(%rcx)\n  movw %ss, 0x42(%rcx)\n"
+    "  movw %fs, 0x3e(%rcx)\n  movw %gs, 0x40(%rcx)\n"
+    "  movq %rbx, 0x90(%rcx)\n  movq %rbp, 0xa0(%rcx)\n  movq %rsi, 0xa8(%rcx)\n  movq %rdi, 0xb0(%rcx)\n"
+    "  movq %r12, 0xd8(%rcx)\n  movq %r13, 0xe0(%rcx)\n  movq %r14, 0xe8(%rcx)\n  movq %r15, 0xf0(%rcx)\n"
+    "  stmxcsr 0x34(%rcx)\n"
+    "  leaq 0x40(%rsp), %rax\n  movq %rax, 0x98(%rcx)\n"
+    "  movq 0x38(%rsp), %rax\n  movq %rax, 0xf8(%rcx)\n"
+    "  movl 0x28(%rsp), %eax\n  movl %eax, 0x44(%rcx)\n"
+    "  movl 0x30(%rcx), %eax\n  andl $0x100040, %eax\n  cmpl $0x100040, %eax\n  jne 1f\n"
+    "  movq g_xc2_avx_dst(%rip), %rdx\n  testq %rdx, %rdx\n  jz 1f\n"
+    "  .irp i," R16L "\n  vextractf128 $1, %ymm\\i, \\i*16(%rdx)\n  .endr\n"
+    "  movslq 0x4e0(%rcx), %rdx\n  orq $4, 0x4d0(%rcx,%rdx)\n"
+    "1:\n  orl $0x10000f, %eax\n  movl %eax, 0x30(%rcx)\n"
+    "  addq $0x30, %rsp\n  popq %rcx\n  ret\n"
+);
+void xc2_ref_capture_avx(CONTEXT *c);
+_Static_assert(offsetof(CONTEXT, ContextFlags) == 0x30 && offsetof(CONTEXT, MxCsr) == 0x34 && offsetof(CONTEXT, SegCs) == 0x38 &&
+               offsetof(CONTEXT, EFlags) == 0x44 && offsetof(CONTEXT, Rax) == 0x78 && offsetof(CONTEXT, Rsp) == 0x98 &&
+               offsetof(CONTEXT, R15) == 0xf0 && offsetof(CONTEXT, Rip) == 0xf8 && offsetof(CONTEXT, FltSave) == 0x100 &&
+               sizeof(CONTEXT) == 0x4d0, "x64 CONTEXT layout used by xc2_ref_capture_avx");
+#endif
+
 /* ---- kind table ---------------------------------------------------------------------------------- */
 typedef struct xk {
     const char *name;
@@ -2130,6 +2172,45 @@ TEST(vch_context_edit_takes_effect) {
     xf_check_out(f, "after a continue handler edited xmm7");
     xf_free(f);
 }
+/* Self-check of the two continue-handler cases without relying on the dispatcher to call continue handlers
+ * (Wine never does): a reference dispatcher, registered at the head of the vectored list, runs the normal
+ * handler and, when it returns EXCEPTION_CONTINUE_EXECUTION, runs the continue handler on the same
+ * EXCEPTION_POINTERS, which is what ntdll!RtlDispatchException does (19041 decomp: RtlpCallVectoredHandlers(rec,
+ * ctx, 0); ... RtlpCallVectoredHandlers(rec, ctx, 1) on the same CONTEXT before returning). The expectations
+ * (handler order, the continue handler's xmm7 edit is what resumes) are then checked exactly as above, so a
+ * PASS here and an XFAIL above isolate the gap to continue-handler dispatch. */
+static LONG CALLBACK vch_ref_dispatch_mod(EXCEPTION_POINTERS *ep) {
+    LONG r = xh_veh(ep);
+    if (r == EXCEPTION_CONTINUE_EXECUTION) (void)vch_mod_xmm(ep);
+    return r;
+}
+static LONG CALLBACK vch_ref_dispatch_order(EXCEPTION_POINTERS *ep) {
+    LONG r = ord_veh3(ep);
+    if (r == EXCEPTION_CONTINUE_EXECUTION) (void)ord_vch(ep);
+    return r;
+}
+TEST(vch_reference_dispatch_selfcheck) {
+    xs_init();
+    PVOID h = AddVectoredExceptionHandler(1, vch_ref_dispatch_order);
+    REQUIRE(h);
+    ord_reset();
+    RaiseException(XC_ORDER, 0, 0, NULL);
+    RemoveVectoredExceptionHandler(h);
+    static const int want[] = { 3, 9 };
+    ord_expect(want, 2, "reference dispatch: VEH(continue) then continue handler");
+    const xk *k = xk_find("div0");
+    xf *f = xf_alloc(); REQUIRE(f);
+    xh *s = &g_main_xh; memset(s, 0, sizeof *s);
+    xf_init(f, 0x8102, 16, 0, 0); xk_prepare(k, f, &s->e);
+    s->veh_on = 1;
+    h = AddVectoredExceptionHandler(1, vch_ref_dispatch_mod);
+    REQUIRE(h);
+    CHECK_EQ(xk_arm_and_run(s, k, f, V_VEH), 1);
+    RemoveVectoredExceptionHandler(h);
+    CHECKF(s->nested_calls == 1, "reference continue phase ran %ld times", (long)s->nested_calls);
+    xf_check_out(f, "after a reference continue phase edited xmm7");
+    xf_free(f);
+}
 /* two vectored handlers share one CONTEXT: the first edits xmm7 and searches, the second sees the edit */
 static uint8_t g_share_val[16]; static volatile LONG g_share_seen;
 static LONG CALLBACK share_first(EXCEPTION_POINTERS *ep) {
@@ -2671,16 +2752,32 @@ static CONTEXT *ctx_alloc_xstate(void **buf, int xstate) {
 }
 static void ctx_free_xstate(void *buf, int xstate) { if (xstate) free(buf); else _aligned_free(buf); }
 
-static void cap_reference(int use2, int how) {
+#define CAP2_SKIP_REASON "ntdll!RtlCaptureContext2 not exported (needs Windows 10 version 2004, build 19041, or later; x64)"
+#define CAP2_SENTINEL 0xA5
+/* use2: capture into an InitializeContext(CONTEXT_ALL | CONTEXT_XSTATE) record with the AVX mask set.
+ * ref: use the hand-built reference xc2_ref_capture_avx instead of the export (needs no RtlCaptureContext2). */
+static void cap_reference_ex(int use2, int how, int ref) {
     xs_init();
     int ymm = use2 && cpu_has(F_AVX);
     pfn_capture cap = (pfn_capture)t_proc("kernel32.dll", "RtlCaptureContext");
-    if (use2) cap = (pfn_capture)t_proc("ntdll.dll", "RtlCaptureContext2");
-    if (!cap) SKIP("%s not exported", use2 ? "RtlCaptureContext2" : "RtlCaptureContext");
+#ifdef T_X64
+    if (use2) cap = ref ? (pfn_capture)xc2_ref_capture_avx : (pfn_capture)t_proc("ntdll.dll", "RtlCaptureContext2");
+#endif
+    if (!cap) SKIP("%s", use2 ? CAP2_SKIP_REASON : "RtlCaptureContext not exported");
     void *buf;
     CONTEXT *c = ctx_alloc_xstate(&buf, use2);
-    if (!c) SKIP("InitializeContext(CONTEXT_XSTATE) / SetXStateFeaturesMask unavailable");
+    if (!c) SKIP("InitializeContext(CONTEXT_XSTATE) / SetXStateFeaturesMask unavailable (needs Windows 7 SP1 or later)");
     if (!use2) c->ContextFlags = CONTEXT_ALL;
+    /* AVX area of the record before the capture: a sentinel (the 19041 export leaves it alone) */
+    uint8_t *avx_area = NULL; (void)avx_area;
+#ifdef T_X64
+    g_xc2_avx_dst = NULL;
+    if (ymm) {
+        DWORD l = 0; avx_area = (uint8_t *)g_locate(c, XSF_AVX, &l);
+        if (avx_area && l >= 256) { memset(avx_area, CAP2_SENTINEL, 256); if (ref) g_xc2_avx_dst = avx_area; }
+        else avx_area = NULL;
+    }
+#endif
     xf *f = xf_alloc(); REQUIRE(f);
     xf_init(f, 0xB100u + (uint32_t)use2 * 16u + (uint32_t)how, ymm ? 32 : 16, 0, 0);
     f->ctxp = (uint64_t)(uintptr_t)c; f->capfn = (uint64_t)(uintptr_t)cap;
@@ -2721,16 +2818,33 @@ static void cap_reference(int use2, int how) {
             CHECK_REG(what, &c->FltSave.XmmRegisters[i], f->vin[i], 16);
         }
         if (ymm) {
-            CHECKF((c->ContextFlags & X_CONTEXT_XSTATE) == X_CONTEXT_XSTATE, "RtlCaptureContext2 did not capture XSTATE (flags 0x%lx)",
-                   (unsigned long)c->ContextFlags);
+            /* 19041 RtlpSanitizeContextFlags + "Flags &= 0x100040": a valid CONTEXT_XSTATE request survives */
+            CHECKF((c->ContextFlags & X_CONTEXT_XSTATE) == X_CONTEXT_XSTATE, "%s dropped CONTEXT_XSTATE (flags 0x%lx)",
+                   ref ? "reference capture" : "RtlCaptureContext2", (unsigned long)c->ContextFlags);
             DWORD64 m = 0; DWORD len = 0;
             CHECK(g_getmask(c, &m));
             CHECKF(m & XSM_AVX, "captured XSTATE mask 0x%llx lacks AVX", (unsigned long long)m);
             uint8_t *p = (uint8_t *)g_locate(c, XSF_AVX, &len);
-            CHECKF(p && len >= 256, "LocateXStateFeature(AVX) %p len %lu", (void *)p, (unsigned long)len);
-            if (p && len >= 256) for (int i = 0; i < 16; i++) {
-                char what[48]; snprintf(what, sizeof what, "captured ymm%d[255:128]", i);
-                CHECK_REG(what, p + 16 * i, f->vin[i] + 16, 16);
+            CHECKF(p && len >= 256 && p == avx_area, "LocateXStateFeature(AVX) %p len %lu (before the capture %p)", (void *)p,
+                   (unsigned long)len, (void *)avx_area);
+            if (p && len >= 256) {
+                /* Reference: hard, every upper half. Export: 19041 does not write the AVX component (see
+                 * xc2_ref_capture_avx), a later build may: each upper half is the sentinel or the live value. */
+                uint8_t sent[16]; memset(sent, CAP2_SENTINEL, 16);
+                int live = 0, untouched = 0;
+                for (int i = 0; i < 16; i++) {
+                    char what[64]; snprintf(what, sizeof what, "captured ymm%d[255:128]", i);
+                    int is_live = !memcmp(p + 16 * i, f->vin[i] + 16, 16), is_sent = !memcmp(p + 16 * i, sent, 16);
+                    live += is_live; untouched += is_sent;
+                    if (ref) CHECK_REG(what, p + 16 * i, f->vin[i] + 16, 16);
+                    else if (!is_live && !is_sent) CHECK_REG(what, p + 16 * i, f->vin[i] + 16, 16);
+                }
+                if (!ref) {
+                    t_info("ymm_upper_captured", "%d of 16 live, %d of 16 untouched (19041 leaves the AVX component untouched)", live,
+                           untouched);
+                    CHECKF(live == 16 || untouched == 16, "RtlCaptureContext2 wrote only part of the AVX component (%d live, %d untouched)",
+                           live, untouched);
+                }
             }
         }
         CHECK_EQ(f->pass, 2);
@@ -2755,11 +2869,127 @@ static void cap_reference(int use2, int how) {
     xf_free(f);
     ctx_free_xstate(buf, use2);
 }
+static void cap_reference(int use2, int how) { cap_reference_ex(use2, how, 0); }
 TEST(cap_rtlcapturecontext_reference) { cap_reference(0, 0); }
 TEST(cap_rtlcapturecontext2_xstate_x64) {
 #ifdef T_X64
     if (!cpu_has(F_AVX)) SKIP("AVX not usable");
     cap_reference(1, 0);
+#else
+    SKIP("RtlCaptureContext2 is x64 only");
+#endif
+}
+/* Self-check paths that need no RtlCaptureContext2: the hand-built reference capture goes through exactly the
+ * checks above (validating them where the export is missing), and its XSTATE record (AVX uppers + mask) feeds
+ * RtlRestoreContext / NtContinue, which then must XRSTOR the edited upper halves. */
+TEST(cap_reference_capture2_selfcheck_x64) {
+#ifdef T_X64
+    if (!cpu_has(F_AVX)) SKIP("AVX not usable");
+    cap_reference_ex(1, 0, 1);
+#else
+    SKIP("x64 only (RtlCaptureContext2 is an x64 export)");
+#endif
+}
+TEST(cap_rtlrestorecontext_ymm_refcapture_x64) {
+#ifdef T_X64
+    if (!cpu_has(F_AVX)) SKIP("AVX not usable");
+    cap_reference_ex(1, 1, 1);
+#else
+    SKIP("RtlRestoreContext is not exported on x86");
+#endif
+}
+TEST(cap_ntcontinue_ymm_refcapture_x64) {
+#ifdef T_X64
+    if (!cpu_has(F_AVX)) SKIP("AVX not usable");
+    cap_reference_ex(1, 2, 1);
+#else
+    SKIP("x64 only");
+#endif
+}
+
+#ifdef T_X64
+/* One capture of the same register image by the export and by the reference, compared field by field.
+ * Pinned (19041 disassembly, see xc2_ref_capture_avx): every field the export writes must equal the reference
+ * (Rcx = each record's own address); the XSTATE mask may differ only in bit 11 (CET_U merge); the AVX component
+ * is untouched by 19041 (sentinel) or equal to the reference; fields neither writes stay as initialized. */
+static CONTEXT *cap2_capture(pfn_capture cap, int ref, void **buf, uint32_t tag, uint64_t *frame) {
+    CONTEXT *c = ctx_alloc_xstate(buf, 1);
+    if (!c) return NULL;
+    DWORD l = 0; uint8_t *a = (uint8_t *)g_locate(c, XSF_AVX, &l);
+    if (!a || l < 256) { ctx_free_xstate(*buf, 1); *buf = NULL; return NULL; }
+    memset(a, CAP2_SENTINEL, 256);
+    g_xc2_avx_dst = ref ? a : NULL;
+    xf *f = xf_alloc();
+    if (!f) { ctx_free_xstate(*buf, 1); *buf = NULL; return NULL; }
+    xf_init(f, tag, 32, 0, 0);
+    f->ctxp = (uint64_t)(uintptr_t)c; f->capfn = (uint64_t)(uintptr_t)cap; f->cb = 0;
+    xcap_probe(f);
+    g_xc2_avx_dst = NULL;
+    *frame = (uint64_t)(uintptr_t)f;
+    CHECKF(f->pass == 2, "capture probe did not return normally (pass %llu)", (unsigned long long)f->pass);
+    xf_free(f);
+    return c;
+}
+/* api_is_ref: comparator self-check (reference vs reference) where the export is missing */
+static void cap2_compare(pfn_capture api, int api_is_ref) {
+    void *ba = NULL, *bb = NULL;
+    uint64_t fa = 0, fr = 0;
+    CONTEXT *a = cap2_capture(api, api_is_ref, &ba, 0xB2C0u, &fa);
+    CONTEXT *r = cap2_capture((pfn_capture)xc2_ref_capture_avx, 1, &bb, 0xB2C0u, &fr);
+    if (!a || !r) { if (ba) ctx_free_xstate(ba, 1); if (bb) ctx_free_xstate(bb, 1); REQUIREF(0, "InitializeContext(CONTEXT_XSTATE) failed"); }
+    CHECKF(a->ContextFlags == r->ContextFlags, "ContextFlags 0x%lx, reference 0x%lx", (unsigned long)a->ContextFlags,
+           (unsigned long)r->ContextFlags);
+    CHECKF(a->MxCsr == r->MxCsr, "MxCsr 0x%lx, reference 0x%lx", (unsigned long)a->MxCsr, (unsigned long)r->MxCsr);
+    CHECKF(a->EFlags == r->EFlags, "EFlags 0x%lx, reference 0x%lx", (unsigned long)a->EFlags, (unsigned long)r->EFlags);
+    static const struct { const char *n; size_t off; } seg[] = {
+        { "SegCs", offsetof(CONTEXT, SegCs) }, { "SegDs", offsetof(CONTEXT, SegDs) }, { "SegEs", offsetof(CONTEXT, SegEs) },
+        { "SegFs", offsetof(CONTEXT, SegFs) }, { "SegGs", offsetof(CONTEXT, SegGs) }, { "SegSs", offsetof(CONTEXT, SegSs) } };
+    for (size_t i = 0; i < T_COUNTOF(seg); i++) {
+        WORD va, vr; memcpy(&va, (uint8_t *)a + seg[i].off, 2); memcpy(&vr, (uint8_t *)r + seg[i].off, 2);
+        CHECKF(va == vr, "%s 0x%x, reference 0x%x", seg[i].n, va, vr);
+    }
+    for (int i = 0; i < 16; i++) {
+        DWORD64 va = (&a->Rax)[i], vr = (&r->Rax)[i];
+        if (i == 1) { CHECKF(va == (DWORD64)(uintptr_t)a, "Rcx 0x%llx, want the record address %p", (unsigned long long)va, (void *)a);
+                      CHECKF(vr == (DWORD64)(uintptr_t)r, "reference Rcx 0x%llx", (unsigned long long)vr); continue; }
+        if (i == 3) { CHECKF(va == fa && vr == fr, "Rbx 0x%llx / reference 0x%llx, want each probe frame", (unsigned long long)va,
+                             (unsigned long long)vr); continue; }
+        CHECKF(va == vr, "%s 0x%llx, reference 0x%llx", g_gname[i], (unsigned long long)va, (unsigned long long)vr);
+    }
+    CHECKF(a->Rip == r->Rip, "Rip %p, reference %p", (void *)(uintptr_t)a->Rip, (void *)(uintptr_t)r->Rip);
+    /* FXSAVE image: bytes 0..463 are written by FXSAVE (464..511 are software-available, never written) */
+    CHECK_MEM(&a->FltSave, &r->FltSave, 464);
+    /* fields neither capture writes */
+    CHECK_MEM(&a->P1Home, &r->P1Home, offsetof(CONTEXT, ContextFlags) - offsetof(CONTEXT, P1Home));
+    CHECK_MEM(&a->Dr0, &r->Dr0, offsetof(CONTEXT, Rax) - offsetof(CONTEXT, Dr0));
+    CHECK_MEM(&a->VectorRegister, &r->VectorRegister, sizeof(CONTEXT) - offsetof(CONTEXT, VectorRegister));
+    DWORD64 ma = 0, mr = 0;
+    CHECK(g_getmask(a, &ma)); CHECK(g_getmask(r, &mr));
+    t_info("xstate_mask", "export 0x%llx reference 0x%llx", (unsigned long long)ma, (unsigned long long)mr);
+    CHECKF(((ma ^ mr) & ~(1ull << 11)) == 0, "XSTATE mask 0x%llx, reference 0x%llx (only bit 11, CET_U, may differ)",
+           (unsigned long long)ma, (unsigned long long)mr);
+    DWORD la = 0, lr = 0;
+    uint8_t *pa = (uint8_t *)g_locate(a, XSF_AVX, &la), *pr = (uint8_t *)g_locate(r, XSF_AVX, &lr);
+    if (pa && pr && la >= 256 && lr >= 256) {
+        uint8_t sent[256]; memset(sent, CAP2_SENTINEL, sizeof sent);
+        int same = !memcmp(pa, pr, 256), untouched = !memcmp(pa, sent, 256);
+        t_info("avx_component", "%s", same ? "captured (equals the reference)" : untouched ? "untouched (19041 behaviour)" : "other");
+        if (!same && !untouched) CHECK_MEM(pa, pr, 256);
+    } else CHECKF(0, "LocateXStateFeature(AVX) export %p/%lu reference %p/%lu", (void *)pa, (unsigned long)la, (void *)pr, (unsigned long)lr);
+    ctx_free_xstate(ba, 1); ctx_free_xstate(bb, 1);
+}
+#endif
+TEST(cap_rtlcapturecontext2_vs_reference_x64) {
+#ifdef T_X64
+    xs_init();
+    if (!cpu_has(F_AVX)) SKIP("AVX not usable");
+    if (!g_initctx || !g_setmask || !g_locate || !g_getmask) SKIP("XSTATE context APIs unavailable (needs Windows 7 SP1 or later)");
+    pfn_capture api = (pfn_capture)t_proc("ntdll.dll", "RtlCaptureContext2");
+    if (!api) {
+        cap2_compare((pfn_capture)xc2_ref_capture_avx, 1);    /* the comparator agrees with itself */
+        SKIP(CAP2_SKIP_REASON "; comparator self-checked reference vs reference");
+    }
+    cap2_compare(api, 0);
 #else
     SKIP("RtlCaptureContext2 is x64 only");
 #endif
