@@ -50,4 +50,9 @@ foreach(src ${XCR_TESTS})
   if(NOT MSVC)
     target_link_options(${name} PRIVATE -static)
   endif()
+  if(name STREQUAL "cet_xstate")   # CET shadow-stack compatible: same post-link step as the Makefile
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_custom_command(TARGET ${name} POST_BUILD
+      COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/pe_cetcompat.py $<TARGET_FILE:${name}>)
+  endif()
 endforeach()
