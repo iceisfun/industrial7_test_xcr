@@ -82,22 +82,11 @@ typedef void (*body_fn)(void *);
 typedef struct { body_fn fn; void *arg; } thr_arg;
 static DWORD WINAPI thr_tramp(void *p) { thr_arg *a = (thr_arg *)p; a->fn(a->arg); return 0; }
 
-/* Run fn(arg) on a fresh thread. Returns 0 ok, -1 CreateThread failed, -2 timeout (thread terminated). */
+/* Run fn(arg) on a fresh thread. Returns 0 ok, -1 CreateThread failed. A worker that does not finish within `tmo` (or a failed
+ * wait) retires the process (t_run_worker: one attributed CRASH row, no TerminateThread, no later row in this process), so a hung
+ * fiber case cannot contaminate the cases after it. */
 static int run_thread_ex(body_fn fn, void *arg, SIZE_T stack, DWORD tmo, DWORD *code) {
-    thr_arg a = { fn, arg };
-    HANDLE h = CreateThread(NULL, stack, thr_tramp, &a, 0, NULL);
-    if (!h) return -1;
-    DWORD w = WaitForSingleObject(h, tmo);
-    if (w != WAIT_OBJECT_0) {
-        CHECKF(0, "worker thread did not finish within %lu ms", (unsigned long)tmo);
-        TerminateThread(h, 0xDEADu);
-        WaitForSingleObject(h, 2000);
-        CloseHandle(h);
-        return -2;
-    }
-    if (code) GetExitCodeThread(h, code);
-    CloseHandle(h);
-    return 0;
+    return t_run_worker(fn, arg, stack, tmo, code);
 }
 #define RUN_WORKER(fn, arg) do { int rc_ = run_thread_ex((fn), (arg), 0, 60000, NULL); \
     if (rc_ == -1) SKIP("CreateThread failed: %lu", (unsigned long)GetLastError()); } while (0)
@@ -1112,8 +1101,7 @@ static void term_run(term_ctx *c) {
     HANDLE h = CreateThread(NULL, 0, th_term, c, 0, NULL);
     if (!h) SKIP("CreateThread failed");
     DWORD w = WaitForSingleObject(h, 10000);
-    CHECKF(w == WAIT_OBJECT_0, "thread did not exit (wait %lu)", (unsigned long)w);
-    if (w != WAIT_OBJECT_0) { TerminateThread(h, 1); WaitForSingleObject(h, 2000); }
+    if (w != WAIT_OBJECT_0) t_retire_process("fiber_xstate: terminating-call thread did not exit within 10 s (no TerminateThread)");
     GetExitCodeThread(h, &c->code);
     CloseHandle(h);
     CHECK_EQ(c->ran, 1);
@@ -1310,8 +1298,8 @@ TEST(fiber_migrate_threads_1000) {
     }
     SetEvent(m.ev[0]);
     DWORD w = WaitForMultipleObjects(MIG_T, th, TRUE, 60000);
-    CHECKF(w < WAIT_OBJECT_0 + MIG_T, "migration threads did not finish (%lu)", (unsigned long)w);
-    for (int i = 0; i < MIG_T; i++) { if (w >= WAIT_OBJECT_0 + MIG_T) TerminateThread(th[i], 1); CloseHandle(th[i]); CloseHandle(m.ev[i]); }
+    if (w >= WAIT_OBJECT_0 + MIG_T) t_retire_process("fiber_xstate: migration threads did not finish within 60 s (no TerminateThread)");
+    for (int i = 0; i < MIG_T; i++) { CloseHandle(th[i]); CloseHandle(m.ev[i]); }
     CHECK_EQ(m.hops, 1000);
     CHECK_EQ(m.bad_timeout, 0);
     CHECKF(m.tid_changes >= 999, "fiber changed threads only %ld times", m.tid_changes);
@@ -1356,8 +1344,7 @@ TEST(fiber_threads_16x_ping_pong) {
     }
     for (int i = 0; i < n; i++) {
         DWORD w = WaitForSingleObject(th[i], 60000);
-        CHECKF(w == WAIT_OBJECT_0, "thread %d did not finish", i);
-        if (w != WAIT_OBJECT_0) TerminateThread(th[i], 1);
+        if (w != WAIT_OBJECT_0) t_retire_process("fiber_xstate: duo thread did not finish within 60 s (no TerminateThread)");
         CloseHandle(th[i]);
     }
     if (n < 2) { for (int i = 0; i < MT_N; i++) duo_free(&d[i]); SKIP("could not create threads"); }
@@ -1642,8 +1629,7 @@ static void ctx_case(int do_set) {
     }
     InterlockedExchange(&c.stop, 1);
     DWORD w = WaitForSingleObject(h, 10000);
-    CHECK(w == WAIT_OBJECT_0);
-    if (w != WAIT_OBJECT_0) TerminateThread(h, 1);
+    if (w != WAIT_OBJECT_0) t_retire_process("fiber_xstate: GetThreadContext fiber worker did not stop within 10 s (no TerminateThread)");
     CloseHandle(h); CloseHandle(c.ready);
     CHECKF(found, "GetThreadContext never showed the fiber's XMM pattern (%d tries)", tries);
     CHECK_EQ(c.done, 1);

@@ -123,6 +123,17 @@ const char *t_exe_name(void);         /* e.g. "xmm_registers" */
 const char *t_self_path(void);        /* full path of this exe */
 int         t_on_case_thread(void);   /* 1 on the thread running the case */
 
+/* Retire the process after a case-level failure that makes the rest of the run untrustworthy: the running case is recorded as
+ * CRASH with `why`, the summary is written and the process exits 1. Never returns. */
+T_NORETURN void t_retire_process(const char *why);
+/* Run fn(arg) on a fresh thread and wait up to timeout_ms. Returns 0 when it finished (exit code in *code when non-NULL), -1
+ * when CreateThread failed (GetLastError preserved). When the worker does not finish, or the wait itself fails, the process is
+ * retired through t_retire_process: no TerminateThread, no later case in this process (a terminated worker may hold a critical
+ * section or the heap lock, and its stack frame must stay valid while it could still run). The record tells WAIT_TIMEOUT from
+ * WAIT_FAILED (with GetLastError). */
+typedef void (*t_worker_fn)(void *);
+int t_run_worker(t_worker_fn fn, void *arg, SIZE_T stack, DWORD timeout_ms, DWORD *code);
+
 /* ---- child processes ---------------------------------------------------- */
 #define T_CHILD_UNKNOWN 0x7E57C0DEu   /* exit code when --child=<name> is not registered */
 typedef struct t_child_result {

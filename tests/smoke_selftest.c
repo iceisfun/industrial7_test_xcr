@@ -57,6 +57,7 @@ TEST_MANUAL(demo_mxcsr_restored) {
 }
 TEST_MANUAL(demo_note_info) { t_note("a note with \"quotes\" and \\ backslash"); t_info("key", "value %d", 7); CHECK(1); }
 TEST_MANUAL(demo_fail_then_skip) { CHECK(0); SKIP("too late: already failed"); }
+TEST_MANUAL(demo_fail_then_xfail) { CHECK(0); XFAIL("too late: real failed CHECK must outrank XFAIL"); }
 
 static const struct { const char *name, *result; } g_expect[] = {
     { "demo_pass", "PASS" }, { "demo_fail", "FAIL" }, { "demo_skip", "SKIP" }, { "demo_xfail", "XFAIL" },
@@ -64,6 +65,7 @@ static const struct { const char *name, *result; } g_expect[] = {
     { "demo_crash_av", "CRASH" }, { "demo_after_crash", "PASS" }, { "demo_crash_ud", "CRASH" },
     { "demo_crash_noncont", "CRASH" }, { "demo_worker_fail", "FAIL" }, { "demo_mxcsr_dirty", "PASS" },
     { "demo_mxcsr_restored", "PASS" }, { "demo_note_info", "PASS" }, { "demo_fail_then_skip", "FAIL" },
+    { "demo_fail_then_xfail", "FAIL" },
 };
 
 /* ======================= minimal JSON validator =========================== */
@@ -146,6 +148,34 @@ static char *read_file(const char *path, size_t *len) {
 }
 
 /* ======================= harness behaviour ================================== */
+/* ---- worker timeout (review finding): a hung worker holding a lock retires the process with ONE attributed record ---- */
+static CRITICAL_SECTION g_hang_cs;
+static void hang_holding_cs(void *p) { (void)p; EnterCriticalSection(&g_hang_cs); Sleep(INFINITE); }
+TEST_MANUAL(hang_worker_critsec) {
+    InitializeCriticalSection(&g_hang_cs);
+    int rc = t_run_worker(hang_holding_cs, NULL, 0, 500, NULL);
+    CHECKF(0, "t_run_worker returned %d: it must retire the process", rc);   /* not reached */
+}
+TEST_MANUAL(hang_worker_after) { CHECK(1); }                                /* must NOT run in the retired process */
+static void quick_worker(void *p) { *(int *)p = 7; }
+TEST(harness_worker_timeout) {
+    int v = 0; DWORD code = 99;
+    CHECK_EQ(t_run_worker(quick_worker, &v, 0, 5000, &code), 0);            /* the normal path is unchanged */
+    CHECK_EQ(v, 7); CHECK_EQ(code, 0);
+    static t_child_result r;
+    REQUIREF(t_run_self("--include-manual --filter=hang_worker_ --case-timeout=60", 30000, &r), "spawn failed: error %lu", r.spawn_error);
+    CHECK(!r.timed_out);                                                    /* bounded: no hang behind the held lock */
+    CHECK(r.ms < 15000.0);
+    CHECK_EQ(r.exit_code, 1);
+    CHECK(strstr(r.out, "WAIT_TIMEOUT") != NULL);
+    CHECK(strstr(r.out, "process retired") != NULL);
+    CHECK(strstr(r.out, "hang_worker_after") == NULL);                      /* no later case ran in the retired process */
+    /* a fresh process runs the sentinel normally */
+    static t_child_result s;
+    REQUIREF(t_run_self("--include-manual --filter=hang_worker_after", 30000, &s), "spawn failed: error %lu", s.spawn_error);
+    CHECK_EQ(s.exit_code, 0);
+}
+
 TEST(harness_result_kinds) {
     char json[MAX_PATH], args[MAX_PATH + 128];
     t_tmpfile(json, sizeof json, "demo.json");

@@ -268,7 +268,7 @@ void t_expect_fail(const char *fmt, ...) {
 /* ---- result emission --------------------------------------------------------- */
 static int classify(void) {
     if (g_c.crashed) return R_CRASH;
-    if (g_c.xfail_now) return R_XFAIL;
+    if (g_c.xfail_now) return (g_c.fails && !g_c.expect_fail) ? R_FAIL : R_XFAIL;   /* real failed CHECKs outrank XFAIL */
     if (g_c.fails) return g_c.expect_fail ? R_XFAIL : R_FAIL;
     if (g_c.skip) return R_SKIP;
     if (g_c.nperf) return R_PERF;
@@ -338,11 +338,16 @@ static T_NORETURN void fatal_finish(const char *why, DWORD code, unsigned long l
         g_count[R_CRASH]++;
     }
     emit_summary();
-    if (g_json) fclose(g_json);
+    if (g_json) { if (g_json == stdout) fflush(g_json); else fclose(g_json); }
     fflush(stdout);
     TerminateProcess(GetCurrentProcess(), 1);
     for (;;) Sleep(1000);
 }
+
+/* A case that must not continue (a worker it started will not finish, forced thread termination would leave locks and
+ * heap state unknown): record the running case once as CRASH with `why`, write the summary, exit 1. The caller never returns.
+ * Later cases are NOT run in this process; the runner reruns the remainder in a fresh one (the exe's exit code is 1). */
+T_NORETURN void t_retire_process(const char *why) { fatal_finish(why, 0, 0, 0); }
 
 /* ---- crash recovery ------------------------------------------------------ */
 static int is_fatal_code(DWORD c) { return (c & 0xF0000000u) == 0xC0000000u || (c & 0xF0000000u) == 0x80000000u || c == 0xE06D7363u; }
@@ -393,8 +398,15 @@ static DWORD WINAPI watchdog(void *arg) {
     for (;;) {
         Sleep(250);
         if (!g_case_timeout_ms || !g_c.active) continue;
-        LONG seq = g_c.seq;
-        if (qpc_ms_since(g_c.t0) > (double)g_case_timeout_ms && g_c.active && seq == g_c.seq) {
+        /* snapshot start time and sequence under the lock (t0 is 64-bit: unlocked reads can tear on x86) */
+        int got = 0; for (int i = 0; i < 4 && !(got = TryEnterCriticalSection(&g_lock)); i++) Sleep(10);
+        LARGE_INTEGER t0 = g_c.t0; LONG seq = g_c.seq; int act = g_c.active && !g_c.finished;
+        if (got) LeaveCriticalSection(&g_lock);
+        if (!act) continue;
+        if (qpc_ms_since(t0) > (double)g_case_timeout_ms) {
+            /* recheck under the lock: the case may have finished/emitted meanwhile */
+            int got2 = 0; for (int i = 0; i < 200 && !(got2 = TryEnterCriticalSection(&g_lock)); i++) Sleep(10);
+            if (got2 && !(g_c.active && !g_c.finished && seq == g_c.seq)) { LeaveCriticalSection(&g_lock); continue; }
             char why[160];
             snprintf(why, sizeof why, "watchdog: case still running after %lu s (--case-timeout)", g_case_timeout_ms / 1000);
             fatal_finish(why, 0, 0, 0);
@@ -427,8 +439,8 @@ static void run_case(int i) {
 #ifdef T_X86
     __asm__ volatile("movl %%fs:0, %0" : "=r"(g_seh_head));
 #endif
-    QueryPerformanceCounter(&g_c.t0);
-    InterlockedIncrement(&g_c.seq);
+    { LARGE_INTEGER t0n; QueryPerformanceCounter(&t0n);
+      EnterCriticalSection(&g_lock); g_c.t0 = t0n; InterlockedIncrement(&g_c.seq); LeaveCriticalSection(&g_lock); }
     SetLastError(0);
     fp_env_reset();
     if (__builtin_setjmp(g_jb) == 0) {
@@ -533,7 +545,9 @@ int main(int argc, char **argv) {
     }
 
     if (json_path) {
-        g_json = fopen(json_path, "wb");
+        /* --json=-: the JSON lines go to stdout, mixed with the text lines (for runners that have no file to read back; the
+         * lines are told apart by their leading {"type":) */
+        g_json = !strcmp(json_path, "-") ? stdout : fopen(json_path, "wb");
         if (!g_json) { printf("harness error: cannot open --json file '%s'\n", json_path); return 2; }
     }
     QueryPerformanceCounter(&g_run_t0);
@@ -555,12 +569,12 @@ int main(int argc, char **argv) {
     EnterCriticalSection(&g_lock);
     if (!ran) {
         out_line("harness error: no case matched (filter=%s)", filter ? filter : "");
-        if (g_json) fclose(g_json);
+        if (g_json && g_json != stdout) fclose(g_json);
         return 2;
     }
     emit_summary();
     int ec = exit_code_now();
-    if (g_json) { fclose(g_json); g_json = NULL; }
+    if (g_json) { if (g_json == stdout) fflush(g_json); else fclose(g_json); g_json = NULL; }
     LeaveCriticalSection(&g_lock);
     fflush(stdout);
     /* Do not run DLL detach / CRT teardown while stray test threads may still be running. */
