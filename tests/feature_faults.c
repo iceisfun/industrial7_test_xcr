@@ -47,6 +47,14 @@
  *  - KiOverflowTrap (INTO): STATUS_INTEGER_OVERFLOW at RIP-1.  KiBoundFault: STATUS_ARRAY_BOUNDS_EXCEEDED.
  *  - KiRaiseAssertion (int 2C): RIP -= 2, STATUS_ASSERTION_FAILURE.
  *  - KiRaiseSecurityCheckFailure (int 29): fast fail, STATUS_STACK_BUFFER_OVERRUN, no handlers run.
+ *  - KiPreprocessFault (re-checked in review): class 0x10000002 (#UD) sets STATUS_ILLEGAL_INSTRUCTION and decodes
+ *    with the #UD table mask; class 0x10000001 (#GP) sets STATUS_ACCESS_VIOLATION and, unless a KiOp handler
+ *    changes it, rewrites the parameters to {0, 0xFFFFFFFFFFFFFFFF}.  INT 80h / INT 21h (DPL0 or absent gates)
+ *    therefore are ACCESS_VIOLATION: a Linux-hosted layer that runs INT 80h as a Linux system call is wrong.
+ * Review additions: ExceptionFlags must be 0 for every hardware exception; worker-thread delivery; the same
+ * fault repeated hundreds of times in one process (every repetition identical, callee-saved registers intact);
+ * XSAVES/XRSTORS at CPL3; MOV to DR7/CR8, INVD; reserved EVEX.L'L and KMOVW VEX.L=1 encodings; AMD parts that
+ * still execute de-enumerated FMA4/XOP/3DNow!/TBM/SSE4a are NOTE, not FAIL; SYSEXIT on AMD may be #UD.
  */
 #include "t.h"
 
@@ -115,6 +123,7 @@ static const char *fp_code_name(unsigned long c) {
 __attribute__((used, aligned(64))) uint8_t  fp_scratch[8192];
 __attribute__((used, aligned(32))) uint8_t  fp_pat[64];          /* register pattern for context probes */
 __attribute__((used, aligned(16))) uint8_t  fp_xmm6_save[16];
+__attribute__((used, aligned(16))) uint8_t  fp_xmm15_save[16];
 __attribute__((used, aligned(16))) uint8_t  fp_dt[16];           /* SGDT/SIDT image for LGDT/LIDT */
 __attribute__((used)) uintptr_t fp_saved_sp;
 __attribute__((used)) uint64_t  fp_out[4];
@@ -233,6 +242,12 @@ FP_DEF(ud_vex_f3_prefix, "", ".byte 0xf3,0xc5,0xf8,0x77", "")  /* F3 before VEX 
 FP_DEF(ud_vex_lock_prefix, "", ".byte 0xf0,0xc5,0xf8,0x77", "") /* LOCK before VEX */
 FP_DEF(ud_vex_l1_vmovd, "", ".byte 0xc5,0xfd,0x6e,0xc0", "")   /* VMOVD with VEX.L=1 */
 FP_DEF(ud_vex_vvvv_vmovdqa, "", ".byte 0xc5,0xf1,0x6f,0xc1", "") /* VMOVDQA with VEX.vvvv != 1111b */
+/* KMOVW k1,eax with VEX.L=1 (KMOV* are L0-only): #UD with or without AVX-512 (VEX 0F 92 is undefined otherwise) */
+FP_DEF(ud_vex_kmovw_l1, "", ".byte 0xc5,0xfc,0x92,0xc8", "")
+/* EVEX VADDPS with EVEX.L'L = 11b and EVEX.b = 0 (reserved vector length): #UD with AVX-512; without AVX-512
+ * 62 is #UD in 64-bit mode and BOUND with a register operand (#UD) in 32-bit mode. */
+FP_DEF(ud_evex_ll11, "", ".byte 0x62,0xf1,0x7c,0x68,0x58,0xc0", "")
+FP_DEF(ud_movbe_reg, "", ".byte 0x0f,0x38,0xf0,0xc0", "")       /* 0F 38 F0 with mod=11 and no F2: undefined */
 #ifdef T_X64
 FP_DEF(ud_vex_rex_prefix, "", ".byte 0x40,0xc5,0xf8,0x77", "") /* REX before VEX */
 FP_DEF(ud_x64_daa, "", ".byte 0x27", "")
@@ -242,6 +257,7 @@ FP_DEF(ud_x64_pusha, "", ".byte 0x60", "")
 FP_DEF(ud_x64_into, "", ".byte 0xce", "")
 FP_DEF(ud_x64_push_es, "", ".byte 0x06", "")
 FP_DEF(ud_x64_jmp_far, "", ".byte 0xea,0,0,0,0,0x33,0", "")
+FP_DEF(ud_cmpxchg16b_reg, "", ".byte 0x48,0x0f,0xc7,0xc8", "")  /* REX.W cmpxchg16b with mod=11 */
 #endif
 
 /* ---- ISA extensions: executed only when the feature is not usable ------------------------- */
@@ -283,6 +299,8 @@ FP_DEF(feat_movdiri, FP_LEA(fp_scratch, FP_AX), ".byte 0x0f,0x38,0xf9,0x08", "")
 FP_DEF(feat_3dnow_femms, "", ".byte 0x0f,0x0e", "")
 FP_DEF(feat_sse4a_extrq, "", ".byte 0x66,0x0f,0x78,0xc0,0x00,0x00", "")
 FP_DEF(feat_xgetbv_no_osxsave, "xor %ecx, %ecx\n", ".byte 0x0f,0x01,0xd0", "")
+FP_DEF(feat_xsaveopt, FP_LEA(fp_scratch, FP_CX) "mov $3, %eax\n xor %edx, %edx\n", ".byte 0x0f,0xae,0x31", "")
+FP_DEF(feat_xsavec, FP_LEA(fp_scratch, FP_CX) "mov $3, %eax\n xor %edx, %edx\n", ".byte 0x0f,0xc7,0x21", "")
 FP_DEF(feat_xsave_no_osxsave, FP_LEA(fp_scratch, FP_CX) "mov $3, %eax\n xor %edx, %edx\n", ".byte 0x0f,0xae,0x21", "")
 
 /* ---- defined behaviour without a fault --------------------------------------------------- */
@@ -325,12 +343,18 @@ FP_DEF(priv_lldt, "xor %eax, %eax\n", ".byte 0x0f,0x00,0xd0", "")
 FP_DEF(priv_ltr, "xor %eax, %eax\n", ".byte 0x0f,0x00,0xd8", "")
 FP_DEF(priv_lmsw, ".byte 0x0f,0x01,0xe0\n", ".byte 0x0f,0x01,0xf0", "")     /* smsw eax; lmsw ax */
 FP_DEF(priv_sysexit, "", ".byte 0x0f,0x35", "")
+FP_DEF(priv_invd, "", ".byte 0x0f,0x08", "")
+FP_DEF(priv_mov_to_dr7, "xor %eax, %eax\n", ".byte 0x0f,0x23,0xf8", "")      /* mov dr7, eax (value 0) */
+/* XSAVES/XRSTORS: #GP at CPL>0 (supervisor state), #UD when not implemented */
+FP_DEF(gp_xsaves_user, FP_LEA(fp_scratch, FP_CX) "mov $3, %eax\n xor %edx, %edx\n", ".byte 0x0f,0xc7,0x29", "")
+FP_DEF(gp_xrstors_user, FP_LEA(fp_scratch, FP_CX) "mov $3, %eax\n xor %edx, %edx\n", ".byte 0x0f,0xc7,0x19", "")
 FP_DEF(priv_xsetbv, "xor %ecx, %ecx\n mov " FP_GO(fp_arg, 0) ", %eax\n mov " FP_GO(fp_arg, 4) ", %edx\n",
        ".byte 0x0f,0x01,0xd1", "")
 FP_DEF(gp_xgetbv_ecx2, "mov $2, %ecx\n", ".byte 0x0f,0x01,0xd0\n" FP_ST("%eax", 0), "")
 FP_DEF(gp_xgetbv_ecx_ffffffff, "mov $0xffffffff, %ecx\n", ".byte 0x0f,0x01,0xd0\n" FP_ST("%eax", 0), "")
 #ifdef T_X64
 FP_DEF(priv_mov_from_cr8, "", ".byte 0x44,0x0f,0x20,0xc0", "")
+FP_DEF(priv_mov_to_cr8, "xor %eax, %eax\n", ".byte 0x44,0x0f,0x22,0xc0", "")  /* mov cr8, rax (value 0) */
 FP_DEF(priv_swapgs, "", ".byte 0x0f,0x01,0xf8", "")
 FP_DEF(priv_sysret, "lea fp_priv_sysret_res(%rip), %rcx\n pushf\n pop %r11\n", ".byte 0x48,0x0f,0x07", "")
 #endif
@@ -350,6 +374,14 @@ FP_DEF(gp_xsave_misaligned, FP_LEAO(fp_scratch, 8, FP_CX) "mov $3, %eax\n xor %e
 FP_DEF(gp_xrstor_bad_header, FP_LEA(fp_scratch, FP_CX) "mov $0xffffffff, %eax\n mov $0xffffffff, %edx\n",
        ".byte 0x0f,0xae,0x29", "")
 FP_DEF(gp_int_0e, "", ".byte 0xcd,0x0e", "")
+/* INT 80h / INT 21h: DPL0 (absent) gates on Windows -> #GP. A Linux-hosted layer may run INT 80h as a
+ * Linux system call instead (EAX=20 = i386 getpid: harmless if it does). */
+FP_DEF(gp_int_80, "mov $20, %eax\n", ".byte 0xcd,0x80\n" FP_ST("%eax", 0), "")
+FP_DEF(gp_int_21, "mov $0x3000, %eax\n", ".byte 0xcd,0x21\n" FP_ST("%eax", 0), "")
+/* Alignment check: EFLAGS.AC=1 and a misaligned load; #AC only if the OS sets CR0.AM (recorded only).
+ * AC is cleared by the probe's cleanup on the resume path. */
+FP_DEF(ac_misaligned_load, FP_LEAO(fp_scratch, 1, FP_AX) "pushf\n orl $0x40000, (" FP_SP ")\n popf\n",
+       "mov (" FP_AX "), %ecx\n" FP_ST("%ecx", 0), "pushf\n andl $0xfffbffff, (" FP_SP ")\n popf\n")
 #ifdef T_X64
 FP_DEF(gp_cmpxchg16b_misaligned, "lea fp_scratch+8(%rip), %r8\n xor %eax, %eax\n xor %edx, %edx\n xor %ebx, %ebx\n xor %ecx, %ecx\n",
        ".byte 0x49,0x0f,0xc7,0x08", "")
@@ -411,12 +443,13 @@ FP_DEF(sseu_precision, "ldmxcsr " FP_G(fp_mx_pm) "\n movss " FP_G(fp_f32) ", %xm
 /* ---- exception-context integrity --------------------------------------------------------- */
 #ifdef T_X64
 FP_DEF(ctx_gpr_xmm,
-       "movdqu %xmm6, fp_xmm6_save(%rip)\n movdqu fp_pat(%rip), %xmm6\n movdqu fp_pat+16(%rip), %xmm15\n"
+       "movdqu %xmm6, fp_xmm6_save(%rip)\n movdqu %xmm15, fp_xmm15_save(%rip)\n"
+       "movdqu fp_pat(%rip), %xmm6\n movdqu fp_pat+16(%rip), %xmm15\n"
        "ldmxcsr fp_mx_ctx(%rip)\n fldcw fp_cw_ctx(%rip)\n"
        "movabs $0x5A5A0000C0DE00C1, %rcx\n movabs $0x5A5A0000C0DE00D1, %rdx\n"
        "movabs $0x5A5A0000C0DE0008, %r8\n movabs $0x5A5A0000C0DE0009, %r9\n"
        "movabs $0x5A5A0000C0DE0010, %r10\n movabs $0x5A5A0000C0DE0011, %r11\n",
-       "ud2", "movdqu fp_xmm6_save(%rip), %xmm6\n pxor %xmm15, %xmm15\n")
+       "ud2", "movdqu fp_xmm6_save(%rip), %xmm6\n movdqu fp_xmm15_save(%rip), %xmm15\n")   /* XMM6/15 are callee-saved */
 FP_DEF(ctx_ymm_ud2,
        "movdqu %xmm6, fp_xmm6_save(%rip)\n vmovdqu fp_pat(%rip), %ymm6\n", "ud2",
        "vzeroupper\n movdqu fp_xmm6_save(%rip), %xmm6\n")
@@ -553,18 +586,59 @@ static void fp_prepare(const char *name) {
     if (!strcmp(name, "ctx_ymm_ud2")) { g_ctxmode = 2; g_locate = (pfn_locate)t_proc("kernel32.dll", "LocateXStateFeature"); }
 }
 
+static DWORD WINAPI fp_thread_main(LPVOID arg) {
+    const fp_probe *p = (const fp_probe *)arg;
+    g_cur = p;
+    p->fn();
+    g_cur = NULL;
+    return 0x600Du;
+}
+
+/* argv[1] = probe; optional argv[2]: "thread" (run it on a new thread) or "repeat=N" (run it N times in
+ * a row; every run must give one exception with the same code and address). */
 CHILD(probe) {
     if (argc < 2) { printf("FP_USAGE\n"); return 3; }
     const fp_probe *p = fp_find(argv[1]);
     if (!p) { printf("FP_UNKNOWN %s\n", argv[1]); return 3; }
+    int on_thread = argc > 2 && !strcmp(argv[2], "thread");
+    int repeat = argc > 2 && !strncmp(argv[2], "repeat=", 7) ? atoi(argv[2] + 7) : 0;
+    if (repeat > 5000) repeat = 5000;
     fp_prepare(p->name);
     PVOID h = AddVectoredExceptionHandler(1, fp_veh);
     if (!h) { printf("FP_NOVEH\n"); return 4; }
     printf("FP_BEGIN %s\n", p->name);
     fflush(stdout);
-    g_cur = p;
-    p->fn();
-    g_cur = NULL;
+    if (repeat > 0) {
+        int good = 0, first_bad = -1;
+        DWORD code0 = 0; long long ea0 = 0;
+        for (int i = 0; i < repeat; i++) {
+            g_hits = 0; g_code = 0; g_ea = 0; g_marker = -1;
+            g_cur = p;
+            p->fn();
+            g_cur = NULL;
+            if (i == 0) { code0 = g_code; ea0 = g_ea; }
+            int ok = g_hits == 1 && g_code == code0 && g_ea == ea0 && g_marker == 1;
+            if (ok) good++;
+            else if (first_bad < 0) first_bad = i;
+        }
+        RemoveVectoredExceptionHandler(h);
+        printf("FPR probe=%s iters=%d good=%d first_bad=%d code=0x%08lx ea=%lld\n", p->name, repeat, good, first_bad,
+               (unsigned long)code0, ea0);
+        fflush(stdout);
+        return 0;
+    }
+    if (on_thread) {
+        HANDLE th = CreateThread(NULL, 0, fp_thread_main, (LPVOID)p, 0, NULL);
+        if (!th) { printf("FP_NOTHREAD %lu\n", GetLastError()); return 5; }
+        DWORD w = WaitForSingleObject(th, 5000), tx = 0;
+        GetExitCodeThread(th, &tx);
+        CloseHandle(th);
+        if (w != WAIT_OBJECT_0 || tx != 0x600Du) { printf("FP_THREAD_FAILED wait=%lu exit=0x%lx\n", w, tx); return 6; }
+    } else {
+        g_cur = p;
+        p->fn();
+        g_cur = NULL;
+    }
     RemoveVectoredExceptionHandler(h);
     printf("FP probe=%s fault=%d code=0x%08lx xflags=0x%lx ea=%lld ip=%lld np=%lu p0=0x%llx p1=0x%llx "
            "marker=%d hits=%ld setup=%d fsw=0x%x mxcsr=0x%x cflags=0x%lx ctxbad=0x%x ymm=%d "
@@ -605,10 +679,12 @@ static long long fp_kvs(const char *s, const char *key) {
     return p ? strtoll(p + strlen(k), NULL, 0) : 0;
 }
 
-static void fp_run(const char *probe, fp_res *r) {
+static void fp_run_mode(const char *probe, const char *mode, DWORD tmo, fp_res *r) {
     memset(r, 0, sizeof *r);
     REQUIREF(fp_find(probe), "probe '%s' is not built into this exe", probe);
-    REQUIREF(t_child_run("probe", probe, 8000, &g_cr), "child did not start (error %lu)", g_cr.spawn_error);
+    char args[160];
+    snprintf(args, sizeof args, "%s%s%s", probe, mode ? " " : "", mode ? mode : "");
+    REQUIREF(t_child_run("probe", args, tmo, &g_cr), "child did not start (error %lu)", g_cr.spawn_error);
     r->timed_out = g_cr.timed_out;
     r->exit_code = g_cr.exit_code;
     r->exc_code = g_cr.exc_code;
@@ -650,6 +726,7 @@ static void fp_run(const char *probe, fp_res *r) {
         t_info("exception", "none");
     }
 }
+static void fp_run(const char *probe, fp_res *r) { fp_run_mode(probe, NULL, 8000, r); }
 
 /* Child started, did not hang, reached the vectored handler (or ran through) and exited normally. */
 static int fp_survived(const char *probe, const fp_res *r) {
@@ -681,6 +758,8 @@ static int fp_expect_fault(const char *probe, const fp_res *r, const DWORD *code
     if (fx & FX_IPEA) CHECKF(r->ip == r->ea, "%s: context IP (insn%+lld) != ExceptionAddress (insn%+lld)", probe, r->ip, r->ea);
     if (fx & FX_MARK) CHECKF(r->marker == 1, "%s: callee-saved marker register(s) wrong in the exception context", probe);
     if (fx & FX_ONE) CHECKF(r->hits == 1, "%s: %ld exceptions for one instruction", probe, r->hits);
+    /* A processor exception is dispatched as a continuable exception: ExceptionFlags = 0. */
+    CHECKF(r->xflags == 0, "%s: ExceptionFlags 0x%lx, expected 0 (continuable hardware exception)", probe, r->xflags);
     return ok;
 }
 static void fp_expect_code(const char *probe, DWORD code) {
@@ -723,6 +802,17 @@ TEST(ud_vex_after_f3_prefix)   { fp_vex_ud("ud_vex_f3_prefix"); }
 TEST(ud_vex_after_lock_prefix) { fp_vex_ud("ud_vex_lock_prefix"); }
 TEST(ud_vex_vmovd_l1)          { fp_vex_ud("ud_vex_l1_vmovd"); }
 TEST(ud_vex_vmovdqa_vvvv)      { fp_vex_ud("ud_vex_vvvv_vmovdqa"); }
+TEST(ud_vex_kmovw_l1)          { fp_vex_ud("ud_vex_kmovw_l1"); }
+TEST(ud_evex_reserved_ll11)    { fp_vex_ud("ud_evex_ll11"); }
+TEST(ud_movbe_register_form) {
+    /* 0F 38 F0 is MOVBE Gy,My (memory-only operand); the register form is not listed in the #UD conditions of
+     * the MOVBE page, so a processor that executes it is only recorded. If it faults it must be #UD. */
+    static fp_res r; fp_run("ud_movbe_reg", &r);
+    if (!fp_survived("ud_movbe_reg", &r)) return;
+    if (!r.fault) { t_note("0F 38 F0 C0 (MOVBE register form) executed without a fault"); return; }
+    DWORD c[1] = { S_ILL };
+    fp_expect_fault("ud_movbe_reg", &r, c, 1, 0, FX_FAULT);
+}
 #ifdef T_X64
 TEST(ud_vex_after_rex_prefix)  { fp_vex_ud("ud_vex_rex_prefix"); }
 TEST(ud_x64_daa)      { fp_ud("ud_x64_daa"); }
@@ -732,6 +822,7 @@ TEST(ud_x64_pusha)    { fp_ud("ud_x64_pusha"); }
 TEST(ud_x64_into)     { fp_ud("ud_x64_into"); }
 TEST(ud_x64_push_es)  { fp_ud("ud_x64_push_es"); }
 TEST(ud_x64_jmp_far)  { fp_ud("ud_x64_jmp_far"); }
+TEST(ud_cmpxchg16b_register) { fp_ud("ud_cmpxchg16b_reg"); }
 #else
 TEST(ud_vex_after_rex_prefix) { SKIP("x64 only (0x40 is INC EAX in 32-bit mode)"); }
 TEST(ud_x64_invalid_opcodes)  { SKIP("x64 only: DAA/AAA/AAM/PUSHA/INTO/PUSH ES/JMP FAR are valid in 32-bit mode"); }
@@ -747,13 +838,18 @@ static void fp_feat(const char *probe, t_feature f, int f2, uint64_t xmask, cons
     const t_cpu_info *c = cpu();
     int xoff = xmask && (!c->osxsave || (c->xcr0 & xmask) != xmask);
     int hw = cpu_hw(f) && (f2 < 0 || cpu_hw((t_feature)f2));
-    int hard = xoff || !c->hypervisor;
+    /* AMD family 17h (Zen 1) is known to execute FMA4 (and other AMD-legacy encodings) although CPUID no
+     * longer enumerates them: on AMD a "hidden but implemented" result is a NOTE even on bare metal. */
+    int amd_legacy = c->is_amd && (f == F_FMA4 || f == F_XOP || f == F_AMD3DNOW || f == F_TBM || f == F_SSE4A);
+    int hard = xoff || (!c->hypervisor && !amd_legacy);
     t_info("mode", "%s", hw ? "os-disabled (CPUID set, XCR0 state off)" : xoff ? "absent (and XCR0 state off)" : "absent");
     static fp_res r;
     fp_run(probe, &r);
     if (!fp_survived(probe, &r)) return;
     if (!r.fault && !hard) {
-        t_note("%s executed although CPUID reports it absent: a hypervisor hides the bit but the processor implements it", what);
+        t_note("%s executed although CPUID reports it absent: %s", what,
+               amd_legacy ? "AMD processors may still implement de-enumerated legacy extensions"
+                          : "a hypervisor hides the bit but the processor implements it");
         return;
     }
     DWORD c1[1] = { S_ILL };
@@ -799,6 +895,9 @@ TEST(feat_rdtscp_absent)         { fp_feat("feat_rdtscp", F_RDTSCP, -1, 0, "RDTS
 TEST(feat_movdiri)               { fp_feat("feat_movdiri", F_MOVDIRI, -1, 0, "MOVDIRI"); }
 TEST(feat_3dnow_femms)           { fp_feat("feat_3dnow_femms", F_AMD3DNOW, -1, 0, "3DNow!"); }
 TEST(feat_sse4a_extrq)           { fp_feat("feat_sse4a_extrq", F_SSE4A, -1, 0, "SSE4a"); }
+/* XCR0 bit 0 is always set when OSXSAVE is: xmask 1 makes "OSXSAVE clear" a hardware-enforced #UD. */
+TEST(feat_xsaveopt_absent)       { fp_feat("feat_xsaveopt", F_XSAVEOPT, -1, 1, "XSAVEOPT"); }
+TEST(feat_xsavec_absent)         { fp_feat("feat_xsavec", F_XSAVEC, -1, 1, "XSAVEC"); }
 TEST(feat_xgetbv_without_osxsave) {
     if (cpu()->osxsave) SKIP("CR4.OSXSAVE is set: XGETBV is legal");
     fp_ud("feat_xgetbv_no_osxsave");
@@ -911,9 +1010,19 @@ TEST(priv_wbinvd)        { fp_priv("priv_wbinvd"); }
 TEST(priv_invlpg)        { fp_priv("priv_invlpg"); }
 TEST(priv_lldt)          { fp_priv("priv_lldt"); }
 TEST(priv_ltr)           { fp_priv("priv_ltr"); }
+TEST(priv_invd)          { fp_priv("priv_invd"); }
+TEST(priv_mov_to_dr7)    { fp_priv("priv_mov_to_dr7"); }
 TEST(priv_sysexit) {
     /* Intel: #GP at CPL!=0; AMD: #UD in long mode. Windows lists 0F 35 for any fault type -> PRIV. */
     static fp_res r; fp_run("priv_sysexit", &r);
+    if (!cpu()->is_intel) {
+        /* AMD: SYSEXIT is #UD in long mode (64-bit and compatibility); whether Windows' #UD path rewrites
+         * 0F 35 is not pinned down, so either code is accepted there. */
+        DWORD c2[2] = { S_PRIV, S_ILL };
+        if (fp_expect_fault("priv_sysexit", &r, c2, 2, 0, FX_FAULT) && r.code == S_ILL)
+            t_note("non-Intel: SYSEXIT reported as STATUS_ILLEGAL_INSTRUCTION (#UD in long mode)");
+        return;
+    }
     if (t_is_wine() && r.fault && (r.code == S_AV || r.code == S_ILL))
         t_expect_fail("Wine does not translate SYSEXIT faults to STATUS_PRIVILEGED_INSTRUCTION");
     DWORD c[1] = { S_PRIV };
@@ -935,6 +1044,7 @@ TEST(priv_lidt) { fp_priv_after_setup("priv_lidt", "SIDT"); }
 TEST(priv_lmsw) { fp_priv_after_setup("priv_lmsw", "SMSW"); }
 #ifdef T_X64
 TEST(priv_mov_from_cr8) { fp_priv("priv_mov_from_cr8"); }
+TEST(priv_mov_to_cr8)   { fp_priv("priv_mov_to_cr8"); }
 TEST(priv_swapgs)       { fp_priv("priv_swapgs"); }
 TEST(priv_sysret)       { fp_priv("priv_sysret"); }
 #else
@@ -985,6 +1095,41 @@ TEST(gp_fxsave_misaligned)  { if (!cpu_hw(F_FXSR)) SKIP("no FXSR"); fp_gp("gp_fx
 TEST(gp_xsave_misaligned)   { if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable"); fp_gp("gp_xsave_misaligned"); }
 TEST(gp_xrstor_bad_header)  { if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable"); fp_gp("gp_xrstor_bad_header"); }
 TEST(gp_int_n_dpl0_gate)    { fp_gp("gp_int_0e"); }
+static void fp_gp_int(const char *probe, const char *what) {
+    static fp_res r; fp_run(probe, &r);
+    if (t_is_wine() && r.line && !r.fault)
+        t_expect_fail("%s executed without a fault under Wine (the Linux kernel handled the gate), result 0x%llx", what, r.out0);
+    DWORD c[2] = { S_AV, S_PRIV };
+    fp_expect_fault(probe, &r, c, 2, 0, FX_FAULT);
+}
+TEST(gp_int_80_not_a_system_call) { fp_gp_int("gp_int_80", "INT 80h"); }
+TEST(gp_int_21_not_a_system_call) { fp_gp_int("gp_int_21", "INT 21h"); }
+/* XSAVES/XRSTORS manage supervisor state: #GP at CPL3 when implemented (Windows: not a listed
+ * privileged opcode -> ACCESS_VIOLATION; PRIVILEGED_INSTRUCTION tolerated), #UD when absent or OSXSAVE clear. */
+static void fp_xsaves(const char *probe, const char *what) {
+    const t_cpu_info *c = cpu();
+    if (!c->osxsave) { t_note("OSXSAVE clear: %s is #UD", what); fp_ud(probe); return; }
+    if (cpu_hw(F_XSAVES)) { fp_gp(probe); return; }
+    static fp_res r; fp_run(probe, &r);
+    if (c->hypervisor) {
+        DWORD cc[3] = { S_ILL, S_AV, S_PRIV };
+        if (fp_expect_fault(probe, &r, cc, 3, 0, FX_FAULT) && r.code != S_ILL)
+            t_note("%s not enumerated but raised #GP (hidden by a hypervisor, CPL check)", what);
+        return;
+    }
+    DWORD cc[1] = { S_ILL };
+    fp_expect_fault(probe, &r, cc, 1, 0, FX_FAULT);
+}
+TEST(gp_xsaves_user_mode)  { fp_xsaves("gp_xsaves_user", "XSAVES"); }
+TEST(gp_xrstors_user_mode) { fp_xsaves("gp_xrstors_user", "XRSTORS"); }
+TEST(ac_alignment_check_recorded) {
+    /* Whether the OS sets CR0.AM (so user EFLAGS.AC enables #AC) is an OS choice: record only. */
+    static fp_res r; fp_run("ac_misaligned_load", &r);
+    if (!r.line) { t_note("EFLAGS.AC + misaligned load: %s", r.text); return; }
+    if (r.fault) t_note("EFLAGS.AC + misaligned load raised 0x%08lx %s (np=%lu)", (unsigned long)r.code, fp_code_name(r.code), r.np);
+    else t_note("EFLAGS.AC + misaligned load executed (CR0.AM clear or alignment checking not delivered)");
+    t_info("alignment_check", "%s", r.fault ? fp_code_name(r.code) : "none");
+}
 #ifdef T_X64
 TEST(gp_cmpxchg16b_misaligned) { if (!cpu_hw(F_CX16)) SKIP("no CMPXCHG16B"); fp_gp("gp_cmpxchg16b_misaligned"); }
 TEST(cmpxchg16b_aligned_is_legal) {
@@ -1220,6 +1365,61 @@ TEST(sse_unmasked_overflow)  { fp_sseu("sseu_overflow", S_FOVF, 0, 0x08); }
 TEST(sse_unmasked_underflow) { fp_sseu("sseu_underflow", S_FUND, 0, 0x10); }
 TEST(sse_unmasked_precision) { fp_sseu("sseu_precision", S_FINEX, 0, 0x20); }
 
+/* ---- the same fault on a worker thread, and many times in a row --------------------------------- */
+static void fp_on_thread(const char *probe, DWORD code) {
+    static fp_res r; fp_run_mode(probe, "thread", 8000, &r);
+    char v[64];
+    if (t_child_find(&g_cr, "FP_NOTHREAD", v, sizeof v)) SKIP("CreateThread failed in the child (%s)", v);
+    if (t_child_find(&g_cr, "FP_THREAD_FAILED", v, sizeof v)) CHECKF(0, "%s on a worker thread: thread did not finish (%s)", probe, v);
+    DWORD c[1] = { code };
+    fp_expect_fault(probe, &r, c, 1, 0, FX_FAULT);
+}
+/* AVX-512 #UD is certain when the ZMM state is off in XCR0, or on bare metal without the CPUID bit. */
+static int fp_avx512_surely_ud(void) {
+    const t_cpu_info *c = cpu();
+    return !c->osxsave || (c->xcr0 & XS_ZMM) != XS_ZMM || (!c->hypervisor && !cpu_hw(F_AVX512F));
+}
+TEST(thread_ud2_on_worker_thread) { fp_on_thread("ud_ud2", S_ILL); }
+TEST(thread_absent_avx512_on_worker_thread) {
+    if (cpu_has(F_AVX512F)) SKIP("AVX-512F is usable here");
+    if (!fp_avx512_surely_ud()) SKIP("AVX-512 may be implemented but hidden: covered by feat_avx512f_vaddps_zmm");
+    fp_on_thread("feat_avx512f_vaddps_zmm", S_ILL);
+}
+TEST(thread_av_null_read_on_worker_thread) { fp_on_thread("av_null_read", S_AV); }
+
+static void fp_repeat(const char *probe, int n) {
+    static fp_res r;
+    char mode[32]; snprintf(mode, sizeof mode, "repeat=%d", n);
+    fp_run_mode(probe, mode, 20000, &r);
+    CHECKF(!r.timed_out, "%s x%d: child timed out", probe, n);
+    CHECKF(r.began, "%s x%d: child did not reach the probe", probe, n);
+    char v[300];
+    if (!t_child_find(&g_cr, "FPR ", v, sizeof v)) {
+        CHECKF(0, "%s x%d: child died before its summary (%s); output: %.200s", probe, n, r.text, g_cr.out);
+        return;
+    }
+    char sv[320]; snprintf(sv, sizeof sv, " %s", v);
+    t_note("%s", v);
+    long good = (long)fp_kvs(sv, "good"), first_bad = (long)fp_kvs(sv, "first_bad");
+    DWORD code = (DWORD)fp_kv(sv, "code", NULL);
+    t_info("exception", "0x%08lx %s", (unsigned long)code, fp_code_name(code));
+    CHECKF(code != 0, "%s: first iteration raised no exception", probe);
+    CHECKF(good == n, "%s: %ld of %d iterations gave exactly one exception with the first iteration's code/address "
+           "and intact callee-saved registers (first bad iteration %ld)", probe, good, n, first_bad);
+    CHECKF(r.exit_code == 0, "%s x%d: child exit code 0x%08lx", probe, n, (unsigned long)r.exit_code);
+}
+TEST(repeat_ud2_500)            { fp_repeat("ud_ud2", 500); }
+TEST(repeat_null_read_200)      { fp_repeat("av_null_read", 200); }
+TEST(repeat_movaps_gp_200)      { fp_repeat("gp_movaps_misaligned", 200); }
+TEST(repeat_hlt_200)            { fp_repeat("priv_hlt", 200); }
+TEST(repeat_sse_zerodiv_200)    { fp_repeat("sseu_zerodiv", 200); }
+TEST(repeat_x87_zerodiv_200)    { fp_repeat("x87u_zerodiv", 200); }
+TEST(repeat_absent_avx512_200) {
+    if (cpu_has(F_AVX512F)) SKIP("AVX-512F is usable here");
+    if (!fp_avx512_surely_ud()) SKIP("AVX-512 may be implemented but hidden");
+    fp_repeat("feat_avx512f_vaddps_zmm", 200);
+}
+
 /* ---- exception context integrity ------------------------------------------------------------ */
 TEST(ctx_ud2_gpr_xmm_mxcsr_fcw) {
     static fp_res r; fp_run("ctx_gpr_xmm", &r);
@@ -1420,13 +1620,25 @@ TEST(mmx_aliases_x87_mantissa) {
 }
 
 /* ---- CPUID: out-of-range leaves are not faults ---------------------------------------------- */
+/* Leaves compared below may carry per-CPU data (x2APIC ID in 0Bh/1Fh, core type in 1Ah on hybrid parts):
+ * keep both CPUID executions on one CPU. */
+static uintptr_t g_cpuid_pin;
+static void cpuid_pin(void) {
+    g_cpuid_pin = t_pin_thread(0);
+    if (!g_cpuid_pin) t_note("could not pin to CPU 0: comparisons assume no migration between CPUID executions");
+}
+static void cpuid_unpin(void) { if (g_cpuid_pin) t_unpin_thread(g_cpuid_pin); g_cpuid_pin = 0; }
+
 TEST(cpuid_above_max_basic_leaf) {
     const t_cpu_info *c = cpu();
     uint32_t leaf = c->max_basic + 1;
     if (leaf >= 0x40000000u) SKIP("max basic leaf 0x%x leaves no room below 0x40000000", c->max_basic);
-    t_cpuid_regs hi, top;
+    t_cpuid_regs hi, top, beyond;
+    cpuid_pin();
     cpuid_ex(leaf, 0, &hi);
     cpuid_ex(c->max_basic, 0, &top);
+    cpuid_ex(0x3FFFFFF0u, 0, &beyond);
+    cpuid_unpin();
     t_info("leaf", "0x%x -> %08x %08x %08x %08x (max 0x%x -> %08x %08x %08x %08x)", leaf, hi.eax, hi.ebx, hi.ecx, hi.edx,
            c->max_basic, top.eax, top.ebx, top.ecx, top.edx);
     if (c->is_intel && !c->hypervisor) {
@@ -1437,8 +1649,6 @@ TEST(cpuid_above_max_basic_leaf) {
     } else {
         t_note("non-Intel: CPUID(max_basic+1) result is vendor-defined (%s)", (hi.eax | hi.ebx | hi.ecx | hi.edx) ? "non-zero" : "zeros");
     }
-    t_cpuid_regs beyond;
-    cpuid_ex(0x3FFFFFF0u, 0, &beyond);
     if (c->is_intel && !c->hypervisor) CHECKF(!memcmp(&beyond, &top, sizeof beyond), "Intel: CPUID(0x3FFFFFF0) must return the highest basic leaf data");
 }
 TEST(cpuid_above_max_extended_leaf) {
@@ -1447,8 +1657,10 @@ TEST(cpuid_above_max_extended_leaf) {
     uint32_t leaf = c->max_ext + 1;
     if (leaf >= 0x8FFFFFFFu) SKIP("extended range full");
     t_cpuid_regs hi, top;
+    cpuid_pin();
     cpuid_ex(leaf, 0, &hi);
     cpuid_ex(c->max_basic, 0, &top);
+    cpuid_unpin();
     t_info("leaf", "0x%x -> %08x %08x %08x %08x", leaf, hi.eax, hi.ebx, hi.ecx, hi.edx);
     if (c->is_intel && !c->hypervisor)
         CHECKF(!memcmp(&hi, &top, sizeof hi), "Intel: CPUID(0x%x) above the extended maximum must return the highest basic leaf data", leaf);
