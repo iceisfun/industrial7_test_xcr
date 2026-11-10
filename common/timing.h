@@ -15,8 +15,9 @@ double   t_now_ms(void);                   /* monotonic ms since first call */
 uint64_t t_rdtsc(void);                    /* requires cpu_has(F_TSC) */
 uint64_t t_rdtscp(uint32_t *aux);          /* requires cpu_has(F_RDTSCP); aux may be NULL */
 
-typedef struct t_stats { int n; double min, max, mean, median, stddev; } t_stats;
-/* Statistics over v[0..n-1] (v is not modified). n == 0 gives all zeros. */
+typedef struct t_stats { int n; double min, max, mean, median, stddev; double q1, q3; } t_stats;
+/* Statistics over v[0..n-1] (v is not modified). n == 0 gives all zeros. q1/q3: first and third
+ * quartiles (linear interpolation between order statistics, as numpy percentile 25/75); IQR = q3 - q1. */
 void t_stats_compute(const double *v, int n, t_stats *s);
 
 /* Affinity: pin the calling thread to logical processor `cpu` of its current group.

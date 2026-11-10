@@ -34,6 +34,11 @@ void t_stats_compute(const double *v, int n, t_stats *s) {
     double sum = 0; for (int i = 0; i < n; i++) sum += c[i];
     s->n = n; s->min = c[0]; s->max = c[n - 1]; s->mean = sum / n;
     s->median = (n & 1) ? c[n / 2] : 0.5 * (c[n / 2 - 1] + c[n / 2]);
+    for (int k = 0; k < 2; k++) {                  /* quartiles: position p*(n-1), linear interpolation */
+        double pos = (k ? 0.75 : 0.25) * (n - 1); int i = (int)pos; double fr = pos - i;
+        double q = i + 1 < n ? c[i] + fr * (c[i + 1] - c[i]) : c[i];
+        if (k) s->q3 = q; else s->q1 = q;
+    }
     double var = 0; for (int i = 0; i < n; i++) var += (c[i] - s->mean) * (c[i] - s->mean);
     s->stddev = n > 1 ? sqrt(var / (n - 1)) : 0;
     free(c);

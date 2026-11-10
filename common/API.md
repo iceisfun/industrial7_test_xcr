@@ -159,7 +159,7 @@ QPC is the time base for every PERF number. Never assume TSC ticks equal core cy
 ```c
 t_qpc(), t_qpc_freq(), t_qpc_sec(t0,t1), t_qpc_ms(t0,t1), t_now_ms()
 t_rdtsc() (F_TSC), t_rdtscp(&aux) (F_RDTSCP)
-t_stats_compute(v, n, &s)            // n, min, max, mean, median, stddev
+t_stats_compute(v, n, &s)            // n, min, max, mean, median, stddev, q1, q3 (quartiles; IQR = q3 - q1)
 t_bench(fn, ctx, warmup, reps, min_sample_ms, &s)  // s = seconds per call; reps <= 256
 t_pin_thread(cpu) -> prev mask (0 = failed); t_unpin_thread(prev); t_cpu_count()
 T_SINK(x); t_sink_ptr(p)             // defeat dead-code elimination
@@ -222,7 +222,7 @@ The `--json` file is in JSON-lines format:
 1. `{"type":"env", ...}`: compiler, version, OS, wine, CPU, features_hw / features_usable, xcr0,
    xinuse, xsave sizes, api_xstate_features, pf_present, ncpu, affinity, ...
 2. One `{"type":"case", "exe", "arch", "case", "result", "ms", "checks", "failed", "reason", "failures":[...],
-   "notes":[...], "info":{...}, "perf":[{metric, value, unit, n, min, max, mean, stddev}], "exception"?}`
+   "notes":[...], "info":{...}, "perf":[{metric, value, unit, n, min, max, mean, stddev, q1, q3}], "exception"?}`
    line per case.
 3. `{"type":"summary", total, pass, fail, crash, skip, xfail, perf, checks, checks_failed, ms, exit_code}`.
 

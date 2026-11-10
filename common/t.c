@@ -85,6 +85,36 @@ static struct {
 } g_c;
 
 static void *g_jb[5];              /* __builtin_setjmp buffer for the case thread */
+/* CET user shadow stacks (a CET-compatible exe, e.g. cet_xstate): __builtin_longjmp leaves the shadow
+ * stack where it was, so the next RET in the setjmp frame would raise #CP (fast fail). g_jb_ssp holds the
+ * SSP of the setjmp frame; t__ssp_unwind() pops the shadow stack back to it (INCSSP) right before each
+ * longjmp. It must be inlined into the function that longjmps (a RET after INCSSP would mismatch).
+ * RDSSP is in the reserved-NOP space and leaves 0 when shadow stacks are not active, so everywhere else
+ * this does nothing; INCSSP only executes when RDSSP returned nonzero. */
+static uintptr_t g_jb_ssp;
+static inline __attribute__((always_inline)) uintptr_t t__rdssp(void) {
+    uintptr_t s = 0;
+#ifdef T_X64
+    __asm__ volatile("rdsspq %0" : "+r"(s));
+#else
+    __asm__ volatile("rdsspd %0" : "+r"(s));
+#endif
+    return s;
+}
+static inline __attribute__((always_inline)) void t__ssp_unwind(void) {
+    uintptr_t want = g_jb_ssp, cur = t__rdssp();
+    if (!want || !cur || cur >= want) return;
+    uintptr_t n = (want - cur) / sizeof(void *);
+    while (n) {
+        uintptr_t k = n > 255 ? 255 : n;
+#ifdef T_X64
+        __asm__ volatile("incsspq %0" :: "r"(k) : "memory");
+#else
+        __asm__ volatile("incsspd %0" :: "r"(k) : "memory");
+#endif
+        n -= k;
+    }
+}
 #ifdef T_X86
 static void *g_seh_head;           /* FS:[0] at case start (restored after an abort/crash) */
 #endif
@@ -202,6 +232,8 @@ static void perf_add(const char *metric, double v, const char *unit, const t_sta
         sb_addf(&g_c.perf_j, ",\"max\":"); sb_num(&g_c.perf_j, s->max);
         sb_addf(&g_c.perf_j, ",\"mean\":"); sb_num(&g_c.perf_j, s->mean);
         sb_addf(&g_c.perf_j, ",\"stddev\":"); sb_num(&g_c.perf_j, s->stddev);
+        sb_addf(&g_c.perf_j, ",\"q1\":"); sb_num(&g_c.perf_j, s->q1);
+        sb_addf(&g_c.perf_j, ",\"q3\":"); sb_num(&g_c.perf_j, s->q3);
     }
     sb_addf(&g_c.perf_j, "}");
     g_c.nperf++;
@@ -212,7 +244,7 @@ void t_perf_stats(const char *metric, const struct t_stats *s, const char *unit)
 
 /* ---- leaving a case early -------------------------------------------------- */
 T_NORETURN void t_abort_case(void) {
-    if (t_on_case_thread()) __builtin_longjmp(g_jb, 1);
+    if (t_on_case_thread()) { t__ssp_unwind(); __builtin_longjmp(g_jb, 1); }
     ExitThread(0xAB0127);          /* worker thread: result already recorded; end only this thread */
 }
 void t_skip(const char *fmt, ...) {
@@ -316,6 +348,7 @@ static T_NORETURN void fatal_finish(const char *why, DWORD code, unsigned long l
 static int is_fatal_code(DWORD c) { return (c & 0xF0000000u) == 0xC0000000u || (c & 0xF0000000u) == 0x80000000u || c == 0xE06D7363u; }
 
 static T_NOINLINE T_NORETURN void crash_landing(void) {
+    t__ssp_unwind();
     __builtin_longjmp(g_jb, 1);
 }
 
@@ -340,7 +373,7 @@ static LONG WINAPI case_uef(EXCEPTION_POINTERS *ep) {
     }
     g_c.crashed = 1; g_c.exc_code = c; g_c.exc_addr = addr;
     snprintf(g_c.reason, sizeof g_c.reason, "unhandled exception 0x%08lx at 0x%llx", c, addr);
-    if (ep->ExceptionRecord->ExceptionFlags & EXCEPTION_NONCONTINUABLE) __builtin_longjmp(g_jb, 1);
+    if (ep->ExceptionRecord->ExceptionFlags & EXCEPTION_NONCONTINUABLE) { t__ssp_unwind(); __builtin_longjmp(g_jb, 1); }
     /* Resume at crash_landing on a fresh, aligned part of the same stack. */
     CONTEXT *ctx = ep->ContextRecord;
 #ifdef T_X64
@@ -399,6 +432,7 @@ static void run_case(int i) {
     SetLastError(0);
     fp_env_reset();
     if (__builtin_setjmp(g_jb) == 0) {
+        g_jb_ssp = t__rdssp();     /* SSP of this frame (0 without shadow stacks) */
         g_c.active = 1;
         run_case_body(g_t[i].f);
     }
