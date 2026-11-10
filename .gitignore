@@ -1,0 +1,5 @@
+build/
+results/
+*.o
+*.exe
+__pycache__/
