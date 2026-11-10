@@ -1341,34 +1341,78 @@ TEST(xcr0_unchanged_under_thread_context_ops) {
     CHECK_EQ(t_xgetbv(0), x.xcr0);
 }
 
+/* Forced per-group, per-CPU placement: each worker gets a single-CPU GROUP_AFFINITY through SetThreadGroupAffinity
+ * while suspended, so it can only run on that logical processor (documented SetThreadGroupAffinity /
+ * GROUP_AFFINITY contract); it reads XCR0 and CPUID.(0Dh,0) there and reports GetCurrentProcessorNumberEx, which
+ * must name that group and number. On a single-group system the same path runs over group 0 (self-check of the
+ * placement plumbing) plus a nonexistent group that SetThreadGroupAffinity must refuse, and the case then SKIPs:
+ * the multi-group half needs more than 64 logical processors, or a test boot with "bcdedit /set groupsize <n>"
+ * (Windows 7 / Server 2008 R2 or later), to create a second group. */
+typedef struct xp_gres { xp_tres t; PROCESSOR_NUMBER pn; int pn_ok; } xp_gres;
+static __typeof__(&GetCurrentProcessorNumberEx) g_gcpnex;
+static DWORD WINAPI xp_grp_worker(void *p) {
+    xp_gres *g = (xp_gres *)p;
+    xp_cpu_worker(&g->t);
+    if (g_gcpnex) { g_gcpnex(&g->pn); g->pn_ok = 1; }
+    return 0;
+}
 TEST(xcr0_identical_across_processor_groups) {
     xp_raw x; xp_need_xcr0(&x);
     const t_env *e = t_env_get();
     __typeof__(&GetActiveProcessorGroupCount) gc = T_PROC("kernel32.dll", GetActiveProcessorGroupCount);
     __typeof__(&GetActiveProcessorCount) pc = T_PROC("kernel32.dll", GetActiveProcessorCount);
     __typeof__(&SetThreadGroupAffinity) sga = T_PROC("kernel32.dll", SetThreadGroupAffinity);
+    g_gcpnex = T_PROC("kernel32.dll", GetCurrentProcessorNumberEx);
     int groups = gc ? gc() : e->active_groups;
     t_info("groups", "%d", groups);
-    if (groups < 2 || !pc || !sga) SKIP("single processor group (the per-CPU case covers it)");
+    if (!pc || !sga) SKIP("processor group API not exported (needs Windows 7 / Server 2008 R2 or later)");
+    int placed = 0, total = 0;
     for (int g = 0; g < groups && g < 64; g++) {
         DWORD n = pc((WORD)g);
-        if (!n) continue;
-        static xp_tres r;
-        memset(&r, 0, sizeof r);
-        HANDLE h = CreateThread(NULL, 64 * 1024, xp_cpu_worker, &r, CREATE_SUSPENDED, NULL);
-        if (!h) { t_note("CreateThread failed for group %d", g); continue; }
-        GROUP_AFFINITY ga; memset(&ga, 0, sizeof ga);
-        ga.Group = (WORD)g;
-        ga.Mask = n >= 8 * sizeof(KAFFINITY) ? ~(KAFFINITY)0 : (((KAFFINITY)1 << n) - 1);
-        int pinned = sga(h, &ga, NULL) != 0;
-        ResumeThread(h);
-        CHECK(WaitForSingleObject(h, 5000) == WAIT_OBJECT_0);
-        CloseHandle(h);
-        if (!pinned) { t_note("SetThreadGroupAffinity(group %d) failed", g); continue; }
-        CHECKF(r.ran, "group %d worker did not run", g);
-        CHECKF(r.xcr0 == x.xcr0, "group %d: XCR0 0x%llx differs from 0x%llx", g, (unsigned long long)r.xcr0, (unsigned long long)x.xcr0);
-        CHECKF(r.d0ebx == x.d0.ebx, "group %d: CPUID.(0Dh,0):EBX differs", g);
+        t_info(g == 0 ? "group0_cpus" : "groupN_cpus", "group %d: %lu", g, (unsigned long)n);
+        for (DWORD cpu = 0; cpu < n && cpu < 8 * sizeof(KAFFINITY) && total < 256; cpu++) {
+            static xp_gres r;
+            memset(&r, 0, sizeof r);
+            HANDLE h = CreateThread(NULL, 64 * 1024, xp_grp_worker, &r, CREATE_SUSPENDED, NULL);
+            if (!h) { t_note("CreateThread failed for group %d cpu %lu", g, (unsigned long)cpu); continue; }
+            total++;
+            GROUP_AFFINITY ga; memset(&ga, 0, sizeof ga);
+            ga.Group = (WORD)g; ga.Mask = (KAFFINITY)1 << cpu;
+            int pinned = sga(h, &ga, NULL) != 0;
+            DWORD err = pinned ? 0 : GetLastError();
+            ResumeThread(h);
+            CHECKF(WaitForSingleObject(h, 5000) == WAIT_OBJECT_0, "group %d cpu %lu worker did not finish", g, (unsigned long)cpu);
+            CloseHandle(h);
+            if (!pinned) {
+                /* the processor may be outside the process's allowed set (job / affinity): recorded */
+                t_note("SetThreadGroupAffinity(group %d, cpu %lu) failed: %lu", g, (unsigned long)cpu, (unsigned long)err);
+                continue;
+            }
+            placed++;
+            CHECKF(r.t.ran, "group %d cpu %lu worker did not run", g, (unsigned long)cpu);
+            if (r.pn_ok) CHECKF(r.pn.Group == g && r.pn.Number == cpu, "worker pinned to group %d cpu %lu ran on group %u cpu %u", g,
+                                (unsigned long)cpu, r.pn.Group, r.pn.Number);
+            CHECKF(r.t.xcr0 == x.xcr0, "group %d cpu %lu: XCR0 0x%llx differs from 0x%llx", g, (unsigned long)cpu,
+                   (unsigned long long)r.t.xcr0, (unsigned long long)x.xcr0);
+            CHECKF(r.t.d0ebx == x.d0.ebx, "group %d cpu %lu: CPUID.(0Dh,0):EBX %u differs from %u", g, (unsigned long)cpu, r.t.d0ebx, x.d0.ebx);
+        }
     }
+    t_info("placed_workers", "%d of %d", placed, total);
+    CHECKF(placed > 0, "no worker could be placed with SetThreadGroupAffinity");
+    /* a group that does not exist must be refused (the thread's affinity is left alone) */
+    {
+        GROUP_AFFINITY ga, prev; memset(&ga, 0, sizeof ga); memset(&prev, 0, sizeof prev);
+        ga.Group = (WORD)(groups < 1 ? 1 : groups); ga.Mask = 1;
+        SetLastError(0);
+        BOOL ok = sga(GetCurrentThread(), &ga, &prev);
+        DWORD err = GetLastError();
+        t_info("nonexistent_group", "SetThreadGroupAffinity(group %u) -> %d err %lu", ga.Group, ok, (unsigned long)err);
+        if (ok) sga(GetCurrentThread(), &prev, NULL);
+        CHECKF(!ok, "SetThreadGroupAffinity accepted nonexistent group %u", ga.Group);
+    }
+    if (groups < 2)
+        SKIP("single processor group: forced placement self-checked on group 0; the multi-group half needs > 64 logical processors "
+             "or a test boot with bcdedit /set groupsize (Windows 7 / Server 2008 R2 or later)");
 }
 
 /* Run another exe with a timeout and capture stdout into r->out (minimal, for the other-arch build). */
