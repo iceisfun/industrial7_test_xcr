@@ -19,6 +19,11 @@
  *   - x87 init: FCW=037Fh FSW=0 FTW=empty FOP/FIP/FDP=0 ST0-7=0; SSE init: XMM=0; AVX init: upper YMM=0.
  *   - MMX writes set TOP=0, all tags valid and exponent bits 79:64 to 1s; EMMS empties all tags.
  *   - XSETBV / XSAVES / XRSTORS at CPL3 -> #GP.
+ *   - FXRSTOR/XRSTOR load FOP/FIP/FDP and (F)XSAVE store them (AMD only with ES=1 unless
+ *     CPUID.8000_0008h:EBX[2]); x87 init (XRSTOR XSTATE_BV[0]=0, FNINIT) zeroes them; the OS must keep them
+ *     across context switches.
+ *   - OS: XSAVE-family accesses to demand-zero / page-straddling areas fault transparently; a too-small
+ *     area or a read-only page gives STATUS_ACCESS_VIOLATION with the right access type and address.
  *   Windows: #GP in user mode is delivered as STATUS_ACCESS_VIOLATION or STATUS_PRIVILEGED_INSTRUCTION
  *   (the kernel decodes privileged opcodes); both are accepted, the exact code is recorded as INFO.
  *   kernelbase!GetEnabledXStateFeatures (decomp checked): returns RtlGetEnabledExtendedFeatures(~0), or 3
@@ -834,6 +839,129 @@ TEST(fxsave_fdp_and_forms) {
     t_info("fcs_fds_deprecated", "%u", (cpu()->l7_0.ebx >> 13) & 1);
 }
 
+/* ---- x87 pointer registers FOP/FIP/FDP through (F)XRSTOR -> (F)XSAVE -------------------------------
+ * Intel SDM: FXRSTOR/XRSTOR load FOP, FIP, FDP and FXSAVE/XSAVE store them (FDP_EXCPTN_ONLY / FOP
+ * deprecation only change when the processor UPDATES them). AMD stores them only when FSW.ES=1 unless
+ * CPUID.8000_0008h:EBX[2] (XSaveErPtr, "always save error pointers") is set -> strict only for Intel or
+ * XSaveErPtr; elsewhere loaded / zero / not-written are accepted and recorded.
+ * Layout: FOP@6; 64-bit forms FIP@8 (8 B) FDP@16 (8 B); 32-bit forms FIP@8 FCS@12 FDP@16 FDS@20.
+ * FCS/FDS are not compared: deprecated (CPUID.(7,0):EBX[13]) and not preserved by a 64-bit kernel's
+ * context switch of a 32-bit process. */
+#define PTR_FOP 0x05A3u
+#ifdef T_X64
+#define PTR_FIP 0x00007FF612345670ull
+#define PTR_FDP 0x00007FF6ABCDEF08ull
+#else
+#define PTR_FIP 0x12345670ull
+#define PTR_FDP 0x2BCDEF08ull
+#endif
+static int ptrs_strict(void) { return is_intel() || ((cpu()->e8.ebx >> 2) & 1); }
+static void put_ptrs(uint8_t *a) {
+    p16(a + 6, PTR_FOP);
+#ifdef T_X64
+    p64(a + 8, PTR_FIP); p64(a + 16, PTR_FDP);
+#else
+    p32(a + 8, (uint32_t)PTR_FIP); p16(a + 12, 0x0023); p16(a + 14, 0);
+    p32(a + 16, (uint32_t)PTR_FDP); p16(a + 20, 0x002B); p16(a + 22, 0);
+#endif
+}
+typedef struct { uint32_t fop; uint64_t fip, fdp; } x87_ptrs;
+static x87_ptrs get_ptrs(const uint8_t *a) {
+    x87_ptrs r; r.fop = g16(a + 6);
+#ifdef T_X64
+    r.fip = g64(a + 8); r.fdp = g64(a + 16);
+#else
+    r.fip = g32(a + 8); r.fdp = g32(a + 16);
+#endif
+    return r;
+}
+static int ptrs_eq(x87_ptrs a, x87_ptrs b) { return (a.fop & 0x7FF) == (b.fop & 0x7FF) && a.fip == b.fip && a.fdp == b.fdp; }
+static int ptrs_unwritten(x87_ptrs a) {
+    return (a.fop == 0 && a.fip == 0 && a.fdp == 0) ||
+           (a.fop == 0x5A5A && a.fip == (SENT64 & (sizeof(void *) == 8 ? ~0ull : 0xFFFFFFFFull)) &&
+            a.fdp == (SENT64 & (sizeof(void *) == 8 ? ~0ull : 0xFFFFFFFFull)));
+}
+static void check_ptrs(x87_ptrs got, const char *lbl) {
+    x87_ptrs want = { PTR_FOP, PTR_FIP, PTR_FDP };
+    if (ptrs_strict())
+        CHECKF(ptrs_eq(got, want), "%s: FOP/FIP/FDP 0x%03x/0x%llx/0x%llx, loaded 0x%03x/0x%llx/0x%llx", lbl, got.fop,
+               (unsigned long long)got.fip, (unsigned long long)got.fdp, PTR_FOP, (unsigned long long)PTR_FIP, (unsigned long long)PTR_FDP);
+    else
+        CHECKF(ptrs_eq(got, want) || ptrs_unwritten(got), "%s: FOP/FIP/FDP 0x%x/0x%llx/0x%llx are neither the loaded values nor 0/unwritten",
+               lbl, got.fop, (unsigned long long)got.fip, (unsigned long long)got.fdp);
+    CHECKF((got.fop & ~0x7FFu) == 0 || ptrs_unwritten(got), "%s: FOP 0x%04x has bits above 10 (FOP is 11 bits)", lbl, got.fop);
+}
+TEST(x87_pointers_fxrstor_fxsave) {
+    need_fxsr();
+    xs_state p; st_pattern(&p, 0x1B0);
+    put_legacy(g_a.b, &p); put_ptrs(g_a.b);
+    memset(g_b.b, SENT, 512);
+    xs_req q; q_init(&q);
+    q_rst(&q, Q_R1, g_a.b, 0, XR_FXRSTOR);
+    q_sav(&q, Q_S1, g_b.b, 0, XO_FXSAVE);
+    xs_run(&q, T_VK_XMM);
+    check_ptrs(get_ptrs(g_b.b), "FXRSTOR -> FXSAVE");
+    xs_cmp(g_b.b, 0, &p, 3 | XW_MX, 0, "FXRSTOR -> FXSAVE (with pointer fields)");
+    t_info("strict", "%d (intel %d, XSaveErPtr %u)", ptrs_strict(), is_intel(), (cpu()->e8.ebx >> 2) & 1);
+}
+TEST(x87_pointers_xrstor_xsave) {
+    need_xsave();
+    xs_state p; st_pattern(&p, 0x1B1);
+    xs_make_std(g_a.b, &p, 1); put_ptrs(g_a.b);
+    memset(g_b.b, SENT, std_size()); memset(g_c.b, SENT, 512);
+    xs_req q; q_init(&q);
+    q_rst(&q, Q_R1, g_a.b, 1, XR_XRSTOR);
+    q_sav(&q, Q_S1, g_b.b, 1, XO_XSAVE);
+    q_sav(&q, Q_S2, g_c.b, 0, XO_FXSAVE);
+    xs_run(&q, T_VK_XMM);
+    check_ptrs(get_ptrs(g_b.b), "XRSTOR(x87) -> XSAVE(x87)");
+    check_ptrs(get_ptrs(g_c.b), "XRSTOR(x87) -> FXSAVE");
+    xs_cmp(g_b.b, 0, &p, 1, 0, "XRSTOR(x87) -> XSAVE(x87)");
+    CHECK_EQ(g64(g_b.b + 512) & 1, 1);
+#ifdef T_X64
+    /* 32-bit form in 64-bit mode stores FIP[31:0] / FDP[31:0] (+ FCS/FDS) */
+    memset(g_c.b, SENT, 512);
+    q_init(&q);
+    q_rst(&q, Q_R1, g_a.b, 1, XR_XRSTOR);
+    q_sav(&q, Q_S1, g_c.b, 1, XO_XSAVE32);
+    xs_run(&q, T_VK_XMM);
+    if (ptrs_strict()) {
+        CHECK_EQ(g32(g_c.b + 8), (uint32_t)PTR_FIP);
+        CHECK_EQ(g32(g_c.b + 16), (uint32_t)PTR_FDP);
+    }
+    t_info("xsave32_form_fcs_fds", "fcs=0x%04x fds=0x%04x", g16(g_c.b + 12), g16(g_c.b + 20));
+#endif
+}
+/* x87 init (XRSTOR with XSTATE_BV[0]=0, or FNINIT) sets FOP/FIP/FDP (and FCS/FDS) to 0 (SDM 13.6 x87
+ * initial configuration; FINIT/FNINIT operation). */
+TEST(x87_pointers_cleared_by_init) {
+    need_xsave();
+    xs_state p; st_pattern(&p, 0x1B2);
+    put_legacy(g_c.b, &p); put_ptrs(g_c.b);
+    for (int v = 0; v < 2; v++) {
+        memset(g_b.b, SENT, 512);
+        xs_req q; q_init(&q);
+        q_rst(&q, Q_R1, g_c.b, 0, XR_FXRSTOR);
+        if (v == 0) q_rst(&q, Q_R2, g_z.b, 1, XR_XRSTOR);      /* XSTATE_BV[0]=0 -> x87 init */
+        else q_x87(&q, 0, 0x037F);                           /* FNINIT (+FLDCW, a control instruction) */
+        q_sav(&q, Q_S1, g_b.b, 0, XO_FXSAVE);
+        xs_run(&q, T_VK_XMM);
+        const char *lbl = v ? "FNINIT" : "XRSTOR x87 init";
+        x87_ptrs got = get_ptrs(g_b.b);
+        if (ptrs_strict()) CHECKF(got.fop == 0 && got.fip == 0 && got.fdp == 0, "%s: FOP/FIP/FDP 0x%x/0x%llx/0x%llx want 0", lbl,
+                                  got.fop, (unsigned long long)got.fip, (unsigned long long)got.fdp);
+        else CHECKF(ptrs_unwritten(got), "%s: FOP/FIP/FDP 0x%x/0x%llx/0x%llx neither 0 nor unwritten", lbl, got.fop,
+                    (unsigned long long)got.fip, (unsigned long long)got.fdp);
+#ifndef T_X64
+        CHECKF(g16(g_b.b + 12) == 0 || g16(g_b.b + 12) == 0x5A5A, "%s: FCS 0x%04x", lbl, g16(g_b.b + 12));
+        CHECKF(g16(g_b.b + 20) == 0 || g16(g_b.b + 20) == 0x5A5A, "%s: FDS 0x%04x", lbl, g16(g_b.b + 20));
+#endif
+        CHECK_EQ(g16(g_b.b), 0x037F);
+        CHECK_EQ(g16(g_b.b + 2), 0);
+        CHECK_EQ(g_b.b[4], 0);
+    }
+}
+
 /* ======================= XSAVE (standard format) ============================== */
 TEST(xsave_legacy_matches_fxsave) {
     need_xsave();
@@ -863,6 +991,7 @@ TEST(xsave_xmm_and_header) {
     static t_vregs vin; st_to_vregs(&p, &vin);
     xs_req q; q_init(&q);
     memset(g_a.b, 0, std_size());
+    memset(g_a.b + 520, SENT, 56);                       /* XCOMP_BV + reserved header bytes: must stay as they are */
     q.s[Q_VIN] = (uintptr_t)&vin; q.s[Q_MXCSR] = (uintptr_t)&p.mxcsr;
     q_sav(&q, Q_S1, g_a.b, g_m, XO_XSAVE);
     xs_run(&q, T_VK_XMM);
@@ -872,8 +1001,7 @@ TEST(xsave_xmm_and_header) {
     uint64_t bv = g64(g_a.b + 512);
     CHECKF(bv & 2, "XSTATE_BV[1]=0 although XMM registers hold non-zero data (0x%llx)", (unsigned long long)bv);
     CHECKF((bv & ~g_m) == 0, "XSTATE_BV 0x%llx has bits outside RFBM 0x%llx (header was zero)", (unsigned long long)bv, (unsigned long long)g_m);
-    CHECK_EQ(g64(g_a.b + 520), 0);                     /* XCOMP_BV never written by XSAVE */
-    CHECK(all_eq(g_a.b + 528, 48, 0));
+    CHECK_UNTOUCHED(g_a.b + 520, 56, "XCOMP_BV and header bytes 16..63 (XSAVE writes only XSTATE_BV)");
 }
 TEST(xsave_ymm_upper_halves) {
     need_avx();
@@ -1010,6 +1138,93 @@ TEST(xsave_exact_size_guard_page) {
     q_rst(&q, Q_R2, a, 0, XR_FXRSTOR);
     xs_run(&q, T_VK_XMM);
     t_guarded_free(base);
+}
+/* OS contract: an XSAVE-family access to committed-but-never-touched (demand-zero) pages, with the area
+ * straddling a page boundary, takes page faults that the OS resolves transparently and restarts the
+ * instruction. Each operation gets brand-new pages. */
+static uint8_t *fresh_area(size_t sz, size_t before, void **base) {
+    SYSTEM_INFO si; GetSystemInfo(&si);
+    size_t pg = si.dwPageSize ? si.dwPageSize : 4096;
+    size_t tot = (before + sz + 2 * pg) / pg * pg;
+    uint8_t *m = (uint8_t *)VirtualAlloc(NULL, tot, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    *base = m;
+    return m ? m + pg - before : NULL;                    /* `before` bytes in the first page */
+}
+TEST(xsave_fresh_pages_straddle) {
+    need_xsave();
+    make_vals(0x8A);
+    xs_state p; st_pattern(&p, 0x118);
+    static t_vregs vin; st_to_vregs(&p, &vin);
+    size_t sz = std_size();
+    xs_state e; st_loaded(&e, &p, g_kind, 3, g_vals, 0x037F, 1);
+    /* 1. XSAVE: legacy region in page 0, header + extended components in page 1 */
+    void *b1 = NULL; uint8_t *A = fresh_area(sz, 512, &b1);
+    REQUIRE(A != NULL);
+    xs_req q; q_init(&q);
+    q_rst(&q, Q_R1, g_z.b, g_m, XR_XRSTOR);
+    q_x87(&q, 3, 0x037F);
+    q.s[Q_VIN] = (uintptr_t)&vin; q.s[Q_MXCSR] = (uintptr_t)&p.mxcsr;
+    q_sav(&q, Q_S1, A, g_m, XO_XSAVE);
+    xs_run(&q, g_kind);
+    xs_cmp(A, 0, &e, comps_of(g_m), 0, "XSAVE to fresh straddling pages");
+    CHECK_EQ(g64(A + 512) & ~g_m, 0);
+    CHECK(all_eq(A + 520, 56, 0));                        /* header bytes 8..63 never written: still demand-zero */
+    CHECK(all_eq((uint8_t *)b1, (size_t)(A - (uint8_t *)b1), 0));
+    /* 2. XRSTOR from it into a fresh XSAVE target (page boundary inside the XMM area) */
+    void *b2 = NULL; uint8_t *B = fresh_area(sz, 256, &b2);
+    REQUIRE(B != NULL);
+    static t_vregs vout; memset(&vout, 0, sizeof vout);
+    q_init(&q);
+    q_rst(&q, Q_R1, A, g_m, XR_XRSTOR);
+    q_sav(&q, Q_S1, B, g_m, XO_XSAVE);
+    q.s[Q_VOUT] = (uintptr_t)&vout;
+    xs_run(&q, g_kind);
+    xs_cmp(B, 0, &e, comps_of(g_m), 0, "XRSTOR straddling -> XSAVE fresh (boundary in XMM area)");
+    xs_cmp_vregs(&vout, &e, g_kind, (unsigned)g_m & kind_what(g_kind), 0, "registers after straddling XRSTOR");
+    /* 3. XRSTOR from never-touched zero pages: XSTATE_BV=0 -> every RFBM component init; MXCSR field 0 is
+     * loaded (standard form) or MXCSR initialised */
+    void *b3 = NULL; uint8_t *Z = fresh_area(sz, 64, &b3);
+    REQUIRE(Z != NULL);
+    uint32_t mx = 0xFFFFFFFFu;
+    memset(B, SENT, sz);
+    q_init(&q);
+    q_rst(&q, Q_R1, A, g_m, XR_XRSTOR);
+    q_rst(&q, Q_R2, Z, g_m, XR_XRSTOR);
+    q_sav(&q, Q_S1, B, g_m, XO_XSAVE);
+    q.s[Q_STMX] = (uintptr_t)&mx;
+    xs_run(&q, g_kind);
+    xs_state z; st_init(&z);
+    xs_cmp(B, 0, &z, comps_of(g_m) & ~XW_MX, 0, "XRSTOR from untouched zero pages");
+    CHECKF(mx == 0 || mx == 0x1F80, "MXCSR 0x%08x after XRSTOR of an all-zero area (want 0 from memory or 0x1F80)", mx);
+    t_info("zero_area_mxcsr", "0x%08x", mx);
+    /* 4. FXSAVE straddling fresh pages, 5. XSAVEC straddling fresh pages + compacted XRSTOR back */
+    void *b4 = NULL; uint8_t *F = fresh_area(512, 256, &b4);
+    REQUIRE(F != NULL);
+    q_init(&q);
+    q_rst(&q, Q_R1, A, g_m, XR_XRSTOR);
+    q_sav(&q, Q_S1, F, 0, XO_FXSAVE);
+    xs_run(&q, T_VK_XMM);
+    xs_cmp(F, 0, &e, 3 | XW_MX, 0, "FXSAVE to fresh straddling pages");
+    void *b5 = NULL;
+    if (cpu_has(F_XSAVEC)) {
+        uint8_t *C = fresh_area(xsave_compacted_size(g_m), 512, &b5);
+        REQUIRE(C != NULL);
+        memset(B, SENT, sz);
+        q_init(&q);
+        q_rst(&q, Q_R1, A, g_m, XR_XRSTOR);
+        q_sav(&q, Q_S1, C, g_m, XO_XSAVEC);
+        xs_run(&q, g_kind);
+        CHECK_EQ(g64(C + 520), XS_COMPACT | g_m);
+        xs_cmp(C, XS_COMPACT | g_m, &e, (unsigned)(g_m & 0xE7), CF_BV, "XSAVEC to fresh straddling pages");
+        q_init(&q);
+        q_rst(&q, Q_R1, g_z.b, g_m, XR_XRSTOR);
+        q_rst(&q, Q_R2, C, g_m, XR_XRSTOR);
+        q_sav(&q, Q_S1, B, g_m, XO_XSAVE);
+        xs_run(&q, g_kind);
+        xs_cmp(B, 0, &e, comps_of(g_m), 0, "compacted XRSTOR from straddling pages");
+    }
+    VirtualFree(b1, 0, MEM_RELEASE); VirtualFree(b2, 0, MEM_RELEASE); VirtualFree(b3, 0, MEM_RELEASE);
+    VirtualFree(b4, 0, MEM_RELEASE); if (b5) VirtualFree(b5, 0, MEM_RELEASE);
 }
 TEST(xsave_software_bytes_untouched_all_forms) {
     need_xsave();
@@ -1628,6 +1843,56 @@ TEST(xsavec_compacted_mxcsr_load) {
     CHECK_EQ(g16(g_env + 8), 0xFFFF);                     /* x87 initialised */
     CHECK_EQ(g16(g_env), 0x037F);
 }
+/* XSAVEC pseudocode writes XSTATE_BV (= XINUSE & RFBM = 0) and XCOMP_BV (= 1<<63 | RFBM) unconditionally;
+ * with RFBM = 0 no component and no MXCSR (RFBM[1]=0) is written. */
+TEST(xsavec_rfbm_zero_header_only) {
+    need_xsavec();
+    memset(g_a.b, SENT, 1024);
+    xs_req q; q_init(&q);
+    q_sav(&q, Q_S1, g_a.b, 0, XO_XSAVEC);
+    xs_run(&q, T_VK_XMM);
+    CHECK_EQ(g64(g_a.b + 512), 0);
+    CHECK_EQ(g64(g_a.b + 520), XS_COMPACT);
+    CHECK_UNTOUCHED(g_a.b, 512, "legacy region with RFBM=0");
+    CHECK_UNTOUCHED(g_a.b + 576, 1024 - 576, "bytes past the 576-byte compacted size");
+    t_info("header_16_63", "%s", all_eq(g_a.b + 528, 48, SENT) ? "untouched" : all_eq(g_a.b + 528, 48, 0) ? "zeroed" : "other");
+}
+/* Compacted XRSTOR: RFBM[i]=1 with XSTATE_BV[i]=0 initialises component i, and XSTATE_BV may only name
+ * components of XCOMP_BV - so RFBM bits outside XCOMP_BV mean "initialise". XCOMP_BV = 1<<63 alone (no
+ * components, 576-byte area) is a valid compacted image that initialises every RFBM component. */
+static void xrstor_cmp_partial_xcomp(uint64_t xcomp, uint64_t bv, const char *lbl) {
+    xs_state p1, p2; st_pattern(&p1, 0x194); st_pattern(&p2, 0x195);
+    xs_make_std(g_a.b, &p1, g_m);
+    xs_make_cmp(g_c.b, &p2, xcomp, bv);
+    memset(g_b.b, SENT, std_size());
+    static t_vregs vout; memset(&vout, 0xEE, sizeof vout);
+    uint32_t mx = 0;
+    xs_req q; q_init(&q);
+    q_rst(&q, Q_R1, g_a.b, g_m, XR_XRSTOR);
+    q_rst(&q, Q_R2, g_c.b, g_m, XR_XRSTOR);
+    q_sav(&q, Q_S1, g_b.b, g_m, XO_XSAVE);
+    q.s[Q_VOUT] = (uintptr_t)&vout; q.s[Q_STMX] = (uintptr_t)&mx; q.s[Q_ENV] = (uintptr_t)g_env;
+    xs_run(&q, g_kind);
+    xs_state e; st_init(&e);
+    st_take(&e, &p2, (unsigned)(bv & 0xE7));
+    int mx_known = (bv & 2) != 0;                         /* SSE loaded -> MXCSR from the area */
+    if (mx_known) e.mxcsr = p2.mxcsr;
+    xs_cmp(g_b.b, 0, &e, comps_of(g_m) & ~(mx_known ? 0 : XW_MX), 0, lbl);
+    xs_cmp_vregs(&vout, &e, g_kind, (unsigned)g_m & kind_what(g_kind), 0, lbl);
+    if (bv & 1) check_env(g_env, &e, lbl);
+    else CHECK_EQ(g16(g_env + 8), 0xFFFF);
+    if (mx_known) CHECKF(mx == e.mxcsr, "%s: MXCSR 0x%08x want 0x%08x", lbl, mx, e.mxcsr);
+    else {
+        CHECKF(mx == 0x1F80 || mx == p2.mxcsr, "%s: MXCSR 0x%08x neither 0x1F80 nor the area value 0x%08x", lbl, mx, p2.mxcsr);
+        t_info("mxcsr", "%s: %s", lbl, mx == 0x1F80 ? "initialised" : "loaded-from-area");
+    }
+}
+TEST(xrstor_cmp_empty_xcomp_inits_all) { need_xsavec(); xrstor_cmp_partial_xcomp(0, 0, "XCOMP_BV=1<<63, XSTATE_BV=0, RFBM=all"); }
+TEST(xrstor_cmp_rfbm_outside_xcomp_inits) {
+    need_xsavec();
+    if (!(g_m & ~3ull)) SKIP("no component beyond x87/SSE enabled in XCR0 (0x%llx)", (unsigned long long)cpu()->xcr0);
+    xrstor_cmp_partial_xcomp(3, 3, "XCOMP_BV=XSTATE_BV=x87|SSE, RFBM=all");
+}
 TEST(xsavec_init_component_not_saved) {
     need_xsavec();
     uint32_t csz = xsave_compacted_size(g_m);
@@ -1712,6 +1977,7 @@ typedef struct thr_ctx {
     volatile long *stop;
     int bad; unsigned first_diff; uint32_t first_tag;
 } thr_ctx;
+static x87_ptrs g_ptr_ref;   /* mode 3: pointer fields read back without a preemption window */
 static size_t thr_area_size(void) { return ((size_t)xsave_std_size(g_m) + 63) & ~(size_t)63; }
 static DWORD WINAPI thr_iso(void *arg) {
     thr_ctx *t = (thr_ctx *)arg;
@@ -1723,7 +1989,7 @@ static DWORD WINAPI thr_iso(void *arg) {
         uint32_t tag = 0x10000u + (uint32_t)t->idx * 256u + (uint32_t)it;
         xs_state s; st_pattern(&s, tag);
         xs_req q; q_init(&q);
-        q.s[Q_SPIN] = t->spin;
+        q.s[Q_SPIN] = t->spin; q.s[Q_STOP] = (uintptr_t)t->stop;
         unsigned d = 0;
         if (t->mode == 0) {                       /* XRSTOR -> preemption window -> XSAVE */
             xs_make_std(A, &s, g_m);
@@ -1739,6 +2005,14 @@ static DWORD WINAPI thr_iso(void *arg) {
             q_sav(&q, Q_S1, B, 0, XO_FXSAVE);
             xs_run(&q, T_VK_XMM);
             d = xs_cmp(B, 0, &s, 3 | XW_MX, CF_QUIET, "thread");
+        } else if (t->mode == 3) {                /* FXRSTOR with FOP/FIP/FDP -> window -> FXSAVE */
+            put_legacy(A, &s); put_ptrs(A);
+            memset(B, SENT, 512);
+            q_rst(&q, Q_R1, A, 0, XR_FXRSTOR);
+            q_sav(&q, Q_S1, B, 0, XO_FXSAVE);
+            xs_run(&q, T_VK_XMM);
+            d = xs_cmp(B, 0, &s, 3 | XW_MX, CF_QUIET, "thread");
+            if (!ptrs_eq(get_ptrs(B), g_ptr_ref)) d |= 0x200;
         } else {                                  /* XRSTOR A -> window -> XSAVEOPT A */
             xs_make_std(A, &s, g_m);
             q_rst(&q, Q_R1, A, g_m, XR_XRSTOR);
@@ -1755,20 +2029,28 @@ static void run_iso(int mode, int iters, unsigned long spin) {
     int ncpu = t_cpu_count();
     int n = 2 * ncpu; if (n < 4) n = 4; if (n > 32) n = 32;
     static thr_ctx ctx[32]; HANDLE h[32]; int started = 0;
+    static volatile long stop;
+    stop = 0;
+    (void)mx_mask();                  /* initialise the lazily computed MXCSR_MASK before workers use it */
     for (int i = 0; i < n; i++) {
         memset(&ctx[i], 0, sizeof ctx[i]);
-        ctx[i].idx = i; ctx[i].iters = iters; ctx[i].mode = mode; ctx[i].spin = spin;
+        ctx[i].idx = i; ctx[i].iters = iters; ctx[i].mode = mode; ctx[i].spin = spin; ctx[i].stop = &stop;
         h[started] = CreateThread(NULL, 0, thr_iso, &ctx[i], 0, NULL);
         if (h[started]) started++;
     }
     if (!started) SKIP("CreateThread failed: %lu", GetLastError());
     DWORD w = WaitForMultipleObjects((DWORD)started, h, TRUE, 30000);
     CHECKF(w != WAIT_TIMEOUT, "worker threads did not finish within 30 s");
+    if (w == WAIT_TIMEOUT) {          /* end the spin windows; workers must be gone before the case returns */
+        stop = 1;
+        w = WaitForMultipleObjects((DWORD)started, h, TRUE, 10000);
+        REQUIREF(w != WAIT_TIMEOUT, "worker threads still running 10 s after the stop request");
+    }
     for (int i = 0; i < started; i++) CloseHandle(h[i]);
     int total = 0;
     for (int i = 0; i < started; i++) {
         CHECKF(ctx[i].bad >= 0, "thread %d: VirtualAlloc failed", i);
-        CHECKF(ctx[i].bad == 0, "thread %d: %d/%d iterations lost state (first tag 0x%x parts 0x%x: bit0 x87 1 sse 2 avx 5 k 6 zmmh 7 hi16 8 mxcsr)",
+        CHECKF(ctx[i].bad == 0, "thread %d: %d/%d iterations lost state (first tag 0x%x parts 0x%x: bit0 x87 1 sse 2 avx 5 k 6 zmmh 7 hi16 8 mxcsr 9 FOP/FIP/FDP)",
                i, ctx[i].bad, iters, ctx[i].first_tag, ctx[i].first_diff);
         if (ctx[i].bad > 0) total += ctx[i].bad;
     }
@@ -1778,16 +2060,43 @@ static void run_iso(int mode, int iters, unsigned long spin) {
 TEST(thread_xrstor_xsave_isolation) { need_xsave(); run_iso(0, 12, 300000); }
 TEST(thread_fxrstor_fxsave_isolation) { need_fxsr(); run_iso(1, 12, 300000); }
 TEST(thread_xsaveopt_tracking) { need_xsaveopt(); run_iso(2, 12, 300000); }
+/* The OS must preserve the x87 last-instruction/operand pointers across context switches (they are part
+ * of the x87 XSAVE component). Reference = the same FXRSTOR->FXSAVE without a window. */
+TEST(thread_x87_pointer_preservation) {
+    need_fxsr();
+    if (!ptrs_strict()) SKIP("processor stores FOP/FIP/FDP only when FSW.ES=1 (no XSaveErPtr): nothing to preserve");
+    xs_state p; st_pattern(&p, 0x1B3);
+    put_legacy(g_a.b, &p); put_ptrs(g_a.b);
+    memset(g_b.b, SENT, 512);
+    xs_req q; q_init(&q);
+    q_rst(&q, Q_R1, g_a.b, 0, XR_FXRSTOR);
+    q_sav(&q, Q_S1, g_b.b, 0, XO_FXSAVE);
+    xs_run(&q, T_VK_XMM);
+    g_ptr_ref = get_ptrs(g_b.b);
+    check_ptrs(g_ptr_ref, "reference without window");
+    run_iso(3, 12, 300000);
+}
 
 static xs_state g_hold_s;
-static volatile long g_hold_stop;
+static volatile long g_hold_stop, g_hold_rounds, g_hold_bad;
+static unsigned g_hold_first;
+/* Holds its pattern in the registers (XRSTOR -> spin -> XSAVE) round after round until told to stop, so
+ * it occupies CPU 0 for the whole observation window however fast PAUSE is; bounded to 20 s. */
 static DWORD WINAPI thr_holder(void *arg) {
     uint8_t *B = (uint8_t *)arg;
-    xs_req q; q_init(&q);
-    q_rst(&q, Q_R1, g_a.b, g_m, XR_XRSTOR);
-    q.s[Q_SPIN] = 50000000ul; q.s[Q_STOP] = (uintptr_t)&g_hold_stop;
-    q_sav(&q, Q_S1, B, g_m, XO_XSAVE);
-    xs_run(&q, T_VK_XMM);
+    double t0 = t_now_ms();
+    while (!g_hold_stop && t_now_ms() - t0 < 20000.0) {
+        memset(B, SENT, std_size());
+        xs_req q; q_init(&q);
+        q_rst(&q, Q_R1, g_a.b, g_m, XR_XRSTOR);
+        q.s[Q_SPIN] = 2000000ul; q.s[Q_STOP] = (uintptr_t)&g_hold_stop;
+        q_sav(&q, Q_S1, B, g_m, XO_XSAVE);
+        xs_run(&q, T_VK_XMM);
+        unsigned d = xs_cmp(B, 0, &g_hold_s, comps_of(g_m), CF_QUIET, "holder");
+        if (d && !g_hold_bad) g_hold_first = d;
+        if (d) { g_hold_bad++; break; }                   /* keep the bad image in B for diagnostics */
+        g_hold_rounds++;
+    }
     return 0;
 }
 TEST(thread_no_pattern_leak_same_cpu) {
@@ -1803,7 +2112,7 @@ TEST(thread_no_pattern_leak_same_cpu) {
     for (int i = 0; i < 8; i++) { words[nw++] = g_hold_s.k[i]; words[nw++] = g64(g_hold_s.st[i].b); }
     uintptr_t prev = t_pin_thread(0);
     if (!prev) SKIP("cannot pin to CPU 0");
-    g_hold_stop = 0;
+    g_hold_stop = 0; g_hold_rounds = 0; g_hold_bad = 0; g_hold_first = 0;
     HANDLE h = CreateThread(NULL, 0, thr_holder, g_c.b, CREATE_SUSPENDED, NULL);
     if (!h) { t_unpin_thread(prev); SKIP("CreateThread failed: %lu", GetLastError()); }
     SetThreadAffinityMask(h, 1);
@@ -1831,8 +2140,10 @@ TEST(thread_no_pattern_leak_same_cpu) {
     t_unpin_thread(prev);
     CHECKF(w == WAIT_OBJECT_0, "holder thread did not stop");
     CHECKF(leaks == 0, "%d register words of another thread appeared in this thread's XSAVE image", leaks);
-    xs_cmp(g_c.b, 0, &g_hold_s, comps_of(g_m), 0, "holder state after sharing CPU 0");
-    t_info("iterations", "%d", iters);
+    CHECKF(g_hold_bad == 0, "holder thread lost its state while sharing CPU 0 (parts 0x%x)", g_hold_first);
+    if (g_hold_bad) xs_cmp(g_c.b, 0, &g_hold_s, comps_of(g_m), 0, "holder state after sharing CPU 0");
+    CHECKF(g_hold_rounds + g_hold_bad > 0, "holder thread completed no round");
+    t_info("iterations", "%d, holder rounds %ld", iters, (long)g_hold_rounds);
 }
 
 /* ======================= deliberate faults (child processes) ======================= */
@@ -1879,6 +2190,17 @@ static T_NOINLINE void f_xsetbv(uint64_t v) {
                      : "a"((uint32_t)v), "d"((uint32_t)(v >> 32)), "c"(0) : "memory", "cc", SITE_CLOB);
 }
 
+/* Usable size for the guard-page overrun children: the guard must start inside bytes the instruction is
+ * certain to access. 64-bit mode: the last 64 bytes (the last component is fully saved/loaded). Outside
+ * 64-bit mode XMM8-15 / YMM8-15 halves / ZMM16-31 are not accessible, so the tail of the area may be
+ * skipped: the guard starts at the first extended component (YMM0-7 upper halves) or at the header. */
+static size_t guard_cut(size_t sz) {
+#ifdef T_X64
+    return ((sz + 63) & ~(size_t)63) - 64;
+#else
+    return sz > 576 ? 576 : 512;
+#endif
+}
 CHILD(xsf) {
     const char *n = argc > 1 ? argv[1] : "";
     cpu_detect();
@@ -1963,8 +2285,37 @@ CHILD(xsf) {
     } else if (!strcmp(n, "xrstors")) {
         xs_make_cmp(A, &p, g_m, 0);
         f_xrstors(A, g_m);
+    } else if (!strcmp(n, "xrstor_mxcsr_reserved_low")) {
+        uint32_t m = mx_mask(), bit = 0;
+        while (bit < 32 && (m >> bit & 1)) bit++;              /* lowest MXCSR bit the processor does not implement */
+        if (bit == 32) { printf("RESULT fault=9\n"); return 6; }
+        lo = bit;
+        p.mxcsr = 0x1F80u | (1u << bit);
+        xs_make_std(A, &p, g_m);
+        f_xrstor(A, g_m);
+        intact = t_get_mxcsr() == mx0;
+    } else if (!strcmp(n, "xrstor_cmp_without_xsavec")) {
+        xs_make_cmp(A, &p, g_m, g_m);                         /* XCOMP_BV[63]=1 on a CPU without compaction */
+        f_xrstor(A, g_m);
+        intact = t_get_mxcsr() == mx0;
+    } else if (!strcmp(n, "xsave_readonly")) {
+        uint8_t *g = (uint8_t *)VirtualAlloc(NULL, 2 * sz + 8192, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        DWORD old;
+        if (!g || !VirtualProtect(g, 2 * sz + 8192, PAGE_READONLY, &old)) { printf("RESULT fault=8\n"); return 4; }
+        lo = (unsigned long long)(uintptr_t)g; hi = (unsigned long long)(uintptr_t)(g + sz);
+        f_xsave(g, g_m);
+        intact = all_eq(g, sz, 0);
+    } else if (!strcmp(n, "xrstor_guard")) {
+        size_t asz = guard_cut(sz);
+        void *base = NULL;
+        uint8_t *g = (uint8_t *)t_guarded_alloc(asz, &base);
+        if (!g) { printf("RESULT fault=8\n"); return 4; }
+        xs_make_std(g_b.b, &p, g_m);                          /* every component in use: all are read */
+        memcpy(g, g_b.b, asz);
+        lo = (unsigned long long)(uintptr_t)(g + asz); hi = (unsigned long long)(uintptr_t)(g + sz);
+        f_xrstor(g, g_m);
     } else if (!strcmp(n, "xsave_guard")) {
-        size_t asz = ((sz + 63) & ~(size_t)63) - 64;
+        size_t asz = guard_cut(sz);
         void *base = NULL;
         uint8_t *g = (uint8_t *)t_guarded_alloc(asz, &base);
         if (!g) { printf("RESULT fault=8\n"); return 4; }
@@ -1982,7 +2333,7 @@ CHILD(xsf) {
     return 0;
 }
 
-enum { EXP_GP, EXP_GP_OR_UD, EXP_PF, EXP_NONE };
+enum { EXP_GP, EXP_GP_OR_UD, EXP_PF, EXP_NONE, EXP_PFR };
 static void fault_case(const char *scen, int exp, int intact_hard) {
     static t_child_result r;
     REQUIREF(t_child_run("xsf", scen, 15000, &r), "spawn failed (error %lu)", r.spawn_error);
@@ -2001,9 +2352,9 @@ static void fault_case(const char *scen, int exp, int intact_hard) {
     } else {
         CHECKF(fault == 1, "%s: expected exactly one exception at the instruction, got %d", scen, fault);
         CHECKF(site == 1, "%s: exception address is not the faulting instruction", scen);
-        if (exp == EXP_PF) {
+        if (exp == EXP_PF || exp == EXP_PFR) {
             CHECKF(code == EXC_AV, "%s: code 0x%08lx want STATUS_ACCESS_VIOLATION", scen, code);
-            CHECKF(i0 == 1, "%s: access type %llu want 1 (write)", scen, i0);
+            CHECKF(i0 == (exp == EXP_PF ? 1u : 0u), "%s: access type %llu want %d (%s)", scen, i0, exp == EXP_PF, exp == EXP_PF ? "write" : "read");
             CHECKF(i1 >= lo && i1 < hi, "%s: fault address 0x%llx outside [0x%llx, 0x%llx) (the guard page part of the area)", scen, i1, lo, hi);
         } else {
             int gp = code == EXC_AV || code == EXC_PRIV;
@@ -2038,3 +2389,19 @@ TEST(fault_xsetbv_cpl3)   { need_xsave(); fault_case("xsetbv", EXP_GP, 0); }
 TEST(fault_xsaves_cpl3)   { need_xsave(); fault_case("xsaves", cpu_hw(F_XSAVES) ? EXP_GP : EXP_GP_OR_UD, 0); }
 TEST(fault_xrstors_cpl3)  { need_xsave(); fault_case("xrstors", cpu_hw(F_XSAVES) ? EXP_GP : EXP_GP_OR_UD, 0); }
 TEST(fault_xsave_guard_overrun) { need_xsave(); fault_case("xsave_guard", EXP_PF, 0); }
+TEST(fault_xrstor_guard_overrun) { need_xsave(); fault_case("xrstor_guard", EXP_PFR, 0); }
+TEST(fault_xsave_readonly_page)  { need_xsave(); fault_case("xsave_readonly", EXP_PF, 1); }
+/* any MXCSR bit outside MXCSR_MASK (bit 16 on most CPUs, DAZ on the oldest) -> #GP, not only bit 31 */
+TEST(fault_xrstor_mxcsr_lowest_reserved_bit) {
+    need_xsave();
+    uint32_t m = mx_mask(), bit = 0;
+    while (bit < 32 && (m >> bit & 1)) bit++;
+    if (bit == 32) SKIP("MXCSR_MASK 0x%08x implements every bit", m);
+    t_info("bit", "%u", bit);
+    fault_case("xrstor_mxcsr_reserved_low", EXP_GP, 0);
+}
+TEST(fault_xrstor_compacted_without_xsavec) {
+    need_xsave();
+    if (cpu_hw(F_XSAVEC)) SKIP("XSAVEC/compaction supported: XCOMP_BV[63]=1 is legal here (covered by the compacted cases)");
+    fault_case("xrstor_cmp_without_xsavec", EXP_GP, 0);
+}
