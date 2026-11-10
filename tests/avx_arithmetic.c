@@ -1678,6 +1678,10 @@ static void simd_exc_case(const char *kind) {
 #else
     if (k->flag == MX_ZE || k->flag == MX_IE) want = "0xc00002b5";
 #endif
+#ifdef T_X64
+    if (want && t_is_wine() && !strcmp(v, "0xc00002b5"))   /* known Wine gap (seen with Wine 9; Wine 11 is exact) */
+        t_expect_fail("Wine %s reports an x64 #XM as STATUS_FLOAT_MULTIPLE_TRAPS", t_wine_version());
+#endif
     if (want) CHECKF(!strcmp(v, want), "%s: exception code %s, want %s", kind, v, want);
     char mxs[32] = "";
     t_child_find(&r, "CTX_MXCSR=", mxs, sizeof mxs);
