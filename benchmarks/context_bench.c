@@ -89,7 +89,7 @@ TEST(ctx_rtlcapturecontext2_xstate) {
     SKIP("RtlCaptureContext2 is an x64 export");
 #else
     rcc2_fn f = (rcc2_fn)t_proc("ntdll.dll", "RtlCaptureContext2");
-    if (!f) SKIP("ntdll!RtlCaptureContext2 not exported (before Windows 10 2004)");
+    if (!f) SKIP("ntdll!RtlCaptureContext2 not exported (needs Windows 10 version 2004, build 19041, or later; x64); simd_bench ctx_capture2_reference_selfcheck runs the reference capture");
     BM_NEED(AVX);
     if (!T_PROC("kernel32.dll", InitializeContext) || !T_PROC("kernel32.dll", SetXStateFeaturesMask)) SKIP("XSTATE context APIs not exported");
     DWORD flags = CX_FP_FLAGS | CONTEXT_XSTATE;

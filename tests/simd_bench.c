@@ -38,6 +38,7 @@
 #include "simd_bench_yuv.h"
 #include "simd_bench_asm.h"
 #include "simd_bench_ctx.h"
+#include "capture2_ref.h"
 
 /* =====================================================================================================
  * mode / environment / methodology
@@ -1367,36 +1368,56 @@ TEST(ctx_copycontext_xstate) {
 typedef VOID (WINAPI *rcc2_fn)(PCONTEXT);
 typedef struct cap2_ctx { rcc2_fn f; CONTEXT *c; DWORD flags; } cap2_ctx;
 static void cap2_bench(void *p) { cap2_ctx *x = (cap2_ctx *)p; x->c->ContextFlags = x->flags; x->f(x->c); }
-TEST(ctx_rtlcapturecontext2_xstate) {
+/* ref: the hand-built reference capture (tests/capture2_ref.h), which also stores the AVX upper halves, so the
+ * same checks and the same timing loop run where RtlCaptureContext2 is missing (self-check of this case's
+ * checks; its rate is the cost of a plain user-mode capture to compare the export against). */
+static void cap2_case(int ref) {
 #ifndef T_X64
+    (void)ref;
     SKIP("RtlCaptureContext2 is an x64 export");
 #else
-    rcc2_fn f = (rcc2_fn)t_proc("ntdll.dll", "RtlCaptureContext2");
-    if (!f) SKIP("ntdll!RtlCaptureContext2 not exported (before Windows 10 2004)");
+    rcc2_fn f = ref ? (rcc2_fn)xc2_ref_capture_avx : (rcc2_fn)t_proc("ntdll.dll", "RtlCaptureContext2");
+    if (!f) SKIP(CAP2_SKIP_REASON "; ctx_capture2_reference_selfcheck runs the same checks on the reference");
     BM_NEED(AVX);
-    if (!T_PROC("kernel32.dll", InitializeContext) || !T_PROC("kernel32.dll", LocateXStateFeature)) SKIP("XSTATE context APIs not exported");
+    if (!T_PROC("kernel32.dll", InitializeContext) || !T_PROC("kernel32.dll", LocateXStateFeature))
+        SKIP("XSTATE context APIs not exported (needs Windows 7 SP1 or later)");
     DWORD flags = CX_FP_FLAGS | CONTEXT_XSTATE;
     xctx xc;
     if (!xctx_init(&xc, flags, XSTATE_MASK_AVX)) { free(xc.buf); return; }
+    const char *who = ref ? "reference capture" : "RtlCaptureContext2";
     static T_ALIGN(32) uint8_t pat[16][32];
     for (int i = 0; i < 16; i++) t_pattern_reg(pat[i], 32, 0xC2, (uint32_t)i);
+    __typeof__(&LocateXStateFeature) pLoc = T_PROC("kernel32.dll", LocateXStateFeature);
+    DWORD len = 0; uint8_t *hi = (uint8_t *)pLoc(xc.c, XSTATE_AVX, &len);
+    if (hi && len < 256) hi = NULL;
+    g_xc2_avx_dst = ref ? hi : NULL;
     xc.c->ContextFlags = flags;
     cap_call_ymm((void *)f, xc.c, (const uint8_t (*)[32])pat);
+    g_xc2_avx_dst = NULL;
     t_info("context_flags_after", "0x%lx", xc.c->ContextFlags);
-    CHECKF((xc.c->ContextFlags & 0x10000F) == 0x10000F, "ContextFlags 0x%lx lacks CONTROL|INTEGER|SEGMENTS|FLOATING_POINT", xc.c->ContextFlags);
+    CHECKF((xc.c->ContextFlags & 0x10000F) == 0x10000F, "%s: ContextFlags 0x%lx lacks CONTROL|INTEGER|SEGMENTS|FLOATING_POINT", who,
+           xc.c->ContextFlags);
     if (!(xc.c->ContextFlags & 0x40)) t_note("CONTEXT_XSTATE dropped from ContextFlags (0x%lx)", xc.c->ContextFlags);
-    cap_xmm_compare(xc.c, (const uint8_t (*)[32])pat, "RtlCaptureContext2 FltSave XMM6-15");
-    CHECKF(xc.c->MxCsr == t_get_mxcsr(), "MxCsr 0x%lx, live 0x%x", xc.c->MxCsr, t_get_mxcsr());
-    __typeof__(&LocateXStateFeature) pLoc = T_PROC("kernel32.dll", LocateXStateFeature);
-    DWORD len = 0; const uint8_t *hi = (const uint8_t *)pLoc(xc.c, XSTATE_AVX, &len);
+    char lab[64]; snprintf(lab, sizeof lab, "%s FltSave XMM6-15", who);
+    cap_xmm_compare(xc.c, (const uint8_t (*)[32])pat, lab);
+    CHECKF(xc.c->MxCsr == t_get_mxcsr(), "%s: MxCsr 0x%lx, live 0x%x", who, xc.c->MxCsr, t_get_mxcsr());
     int same = 0;
-    if (hi && len >= 256) for (int i = 6; i < 16; i++) same += !memcmp(hi + 16 * i, pat[i] + 16, 16);
-    t_info("ymm6_15_upper_captured", "%d of 10 (19041 does not capture AVX here; INFO only)", same);
+    if (hi) for (int i = 6; i < 16; i++) same += !memcmp(hi + 16 * i, pat[i] + 16, 16);
+    if (ref) CHECKF(hi && same == 10, "reference capture: %d of YMM6-15 upper halves captured (AVX area %p)", same, (void *)hi);
+    else t_info("ymm6_15_upper_captured", "%d of 10 (19041 does not capture AVX here; INFO only)", same);
     bm_pin();
     cap2_ctx x = { f, xc.c, flags };
-    bm_run("rtlcapturecontext2_xstate", cap2_bench, &x, 1, 1e6, "Mcaptures/s", BM_RATE);
+    bm_run(ref ? "reference_capture2_xstate" : "rtlcapturecontext2_xstate", cap2_bench, &x, 1, 1e6, "Mcaptures/s", BM_RATE);
     bm_unpin();
     free(xc.buf);
+#endif
+}
+TEST(ctx_rtlcapturecontext2_xstate) { cap2_case(0); }
+TEST(ctx_capture2_reference_selfcheck) {
+#ifndef T_X64
+    SKIP("x64 only (RtlCaptureContext2 is an x64 export)");
+#else
+    cap2_case(1);
 #endif
 }
 
