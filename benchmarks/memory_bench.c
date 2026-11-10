@@ -208,7 +208,7 @@ TEST(mem_env_report) {
     memset(g_mb_cache, 0, sizeof g_mb_cache);
     mb_cpuid_caches();
     t_info("cpuid_l1d_l2_l3_bytes", "%u %u %u", (unsigned)g_mb_cache[1], (unsigned)g_mb_cache[2], (unsigned)g_mb_cache[3]);
-    if (os[1] && g_mb_cache[1] && (os[1] != g_mb_cache[1] || os[2] != g_mb_cache[2])) t_note("OS-reported and CPUID cache sizes differ (L1d %u vs %u, L2 %u vs %u)",
+    if (os[1] && g_mb_cache[1] && (os[1] != g_mb_cache[1] || os[2] != g_mb_cache[2])) t_note("OS-reported and CPUID cache sizes differ (L1d %u vs %u, L2 %u vs %u; CPUID describes the core this ran on)",
         (unsigned)os[1], (unsigned)g_mb_cache[1], (unsigned)os[2], (unsigned)g_mb_cache[2]);
     memcpy(g_mb_cache, os, sizeof os);
     if (!os[1] && !os[2] && !os[3]) mb_cpuid_caches();
