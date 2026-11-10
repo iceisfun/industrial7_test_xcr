@@ -15,6 +15,8 @@
  *  - corrupt / mutated input: clean error or documented partial output, never a crash, never an
  *    out-of-bounds read (inputs sit right before a PAGE_NOACCESS page), identical results per kernel;
  *  - many threads decoding the same image concurrently with different kernel sets: identical results;
+ *  - decodes stay exact while another thread suspends the decoders and captures / round-trips their
+ *    XSTATE context, and when run as thread-pool callbacks; an 8K image (> default pixel limit) vs djpeg;
  *  - the decoder neither depends on nor modifies the FP environment where the architecture says so.
  * PERF: MPixel/s per kernel set (4K decode) and kernel micro-benchmarks.
  * x86 (32-bit) builds run everything; there is nothing x64-only here except more XMM registers. */
@@ -975,13 +977,13 @@ static const uint8_t *sj_synth_get(const char *name, size_t *len, const sj_synth
     sj_synth_img *g = &g_synth[idx];
     if (!g->state) {
         uint8_t *rgb = (uint8_t *)malloc((size_t)s->w * s->h * 3);
-        REQUIRE(rgb);
+        if (!rgb) SKIP("%s: no memory for the %dx%d source image", name, s->w, s->h);   /* retried next time */
         je_synth_rgb(rgb, s->w, s->h, s->seed);
         g->jpg = je_encode(rgb, s->w, s->h, s->sub, s->q, s->ri, &g->len);
         free(rgb);
-        g->state = g->jpg ? 1 : -1;
+        if (!g->jpg) SKIP("%s: encoder out of memory", name);
+        g->state = 1;
     }
-    REQUIREF(g->state == 1, "encoding %s failed (out of memory)", name);
     *len = g->len;
     if (sp) *sp = s;
     return g->jpg;
@@ -990,6 +992,7 @@ TEST(synth_encoder_deterministic) {
     for (size_t i = 0; i < T_COUNTOF(sj_synth_list); i++) {
         const sj_synth *s = &sj_synth_list[i];
         size_t n;
+        if ((uint64_t)s->w * s->h > (16u << 20)) continue;   /* > default max_pixels: own case (synth_8k_*) */
         double t0 = t_now_ms();
         const uint8_t *j = sj_synth_get(s->name, &n, NULL);
         t_info(s->name, "%dx%d %u bytes, encoded in %.0f ms", s->w, s->h, (unsigned)n, t_now_ms() - t0);
@@ -1035,6 +1038,45 @@ TEST(synth_4k_420_repeated_decode) {
 TEST(synth_1k_444_restart_vs_djpeg) { sj_synth_decode("synth_1k_444_rst", 0, 2); sj_synth_decode("synth_1k_444_rst", 1, 2); if (cpu_has(F_AVX2)) sj_synth_decode("synth_1k_444_rst", 2, 2); }
 TEST(synth_vga_gray_vs_djpeg)       { sj_synth_decode("synth_vga_gray", 0, 2); sj_synth_decode("synth_vga_gray", 1, 2); if (cpu_has(F_AVX2)) sj_synth_decode("synth_vga_gray", 2, 2); }
 TEST(synth_mt_420_vs_djpeg)         { sj_synth_decode("synth_mt_420", 0, 2); sj_synth_decode("synth_mt_420", 1, 2); if (cpu_has(F_AVX2)) sj_synth_decode("synth_mt_420", 2, 2); }
+/* 8K (7680x4320, 33 MPixel, > the decoder's 16 MPixel default limit): the encoded bytes and every kernel set's
+ * islow fancy and box output against djpeg; float decode identical across kernel sets. About 250 MB peak;
+ * an allocation failure (e.g. a fragmented 32-bit address space) is a resource limit and SKIPs. */
+TEST(synth_8k_420_vs_djpeg) {
+    const sj_synth *s; size_t n;
+    double t0 = t_now_ms();
+    const uint8_t *j = sj_synth_get("synth_8k_420", &n, &s);
+    t_info("encode", "%dx%d %u bytes in %.0f ms", s->w, s->h, (unsigned)n, t_now_ms() - t0);
+    CHECKF(n == s->jpeg_len && jd_fnv64(j, n) == s->jpeg_hash, "8K JPEG bytes differ from the host encoding (%u vs %u bytes)", (unsigned)n, s->jpeg_len);
+    const jd_kernels *ks[3]; int nk = sj_usable(ks);
+    jd_options o; memset(&o, 0, sizeof o);
+    o.max_pixels = (uint32_t)s->w * (uint32_t)s->h;
+    jd_image im;
+    o.k = ks[0]; o.max_pixels--;
+    CHECK_EQ(jd_decode(j, n, &o, &im), JD_ERR_TOO_BIG);
+    o.max_pixels++;
+    uint64_t hf = 0;
+    for (int k = 0; k < nk; k++) {
+        o.k = ks[k];
+        for (int m = 0; m < 3; m++) {
+            o.dct = m == 2 ? JD_DCT_FLOAT : JD_DCT_ISLOW; o.upsample = m == 1 ? JD_UP_BOX : JD_UP_FANCY; o.out_fmt = JD_OUT_NATIVE;
+            double t1 = t_now_ms();
+            int rc = jd_decode(j, n, &o, &im);
+            if (rc == JD_ERR_NOMEM) { if (k == 0 && m == 0) SKIP("8K decode: out of memory"); t_note("%s mode %d: out of memory", ks[k]->name, m); continue; }
+            REQUIREF(rc == JD_OK, "%s mode %d rc %d (%s)", ks[k]->name, m, rc, sj_err(rc));
+            uint64_t h = sj_hash(&im);
+            if (m == 0) CHECKF(h == s->h_int, "%s: 8K islow differs from djpeg -dct int (%016llx want %016llx)", ks[k]->name, (unsigned long long)h, (unsigned long long)s->h_int);
+            else if (m == 1) CHECKF(h == s->h_box, "%s: 8K box differs from djpeg -nosmooth", ks[k]->name);
+            else if (k == 0) hf = h; else CHECKF(h == hf, "%s: 8K float decode differs from scalar", ks[k]->name);
+            CHECK_EQ(im.warnings, 0);
+            char key[48]; snprintf(key, sizeof key, "%s_mode%d_ms", ks[k]->name, m);
+            t_info(key, "%.0f", t_now_ms() - t1);
+            jd_free(&im);
+        }
+    }
+    /* the 33 MB JPEG is not needed by later cases */
+    sj_synth_img *g = &g_synth[s - sj_synth_list];
+    free(g->jpg); g->jpg = NULL; g->state = 0;
+}
 
 /* ============================================================================================ */
 /* multi-threaded decode                                                                         */
@@ -1124,8 +1166,192 @@ TEST(mt_decode_16_threads_512x384) { size_t n; const sj_synth *s; const uint8_t 
 TEST(mt_decode_64_threads_256x192) { const sj_corpus *c = sj_find("c420_256x192"); sj_mt_case(c->data, c->len, c->h_int, 64, 6); }
 TEST(mt_decode_256_threads_96x72)  { const sj_corpus *c = sj_find("prog_custom_96x72"); sj_mt_case(c->data, c->len, c->h_int, 256, 4); }
 TEST(mt_decode_1024_threads_17x13) { const sj_corpus *c = sj_find("c420_17x13"); sj_mt_case(c->data, c->len, c->h_int, 1024, 2); }
-TEST(mt_decode_12_threads_same_cpu) { size_t n; const sj_synth *s; const uint8_t *d = sj_synth_get("synth_mt_420", &n, &s); sj_mt_case_ex(d, n, s->h_int, 12, 6, 0); }
-TEST(mt_decode_48_threads_same_cpu) { const sj_corpus *c = sj_find("c420_rst1b_96x72"); sj_mt_case_ex(c->data, c->len, c->h_int, 48, 8, t_cpu_count() > 1 ? 1 : 0); }
+static int sj_nth_process_cpu(int nth);
+TEST(mt_decode_12_threads_same_cpu) {
+    size_t n; const sj_synth *s; const uint8_t *d = sj_synth_get("synth_mt_420", &n, &s);
+    int cpu = sj_nth_process_cpu(0);
+    if (cpu < 0) SKIP("GetProcessAffinityMask failed");
+    sj_mt_case_ex(d, n, s->h_int, 12, 6, cpu);
+}
+/* the n-th (0-based) logical CPU in the process affinity mask, or -1 */
+static int sj_nth_process_cpu(int nth) {
+    DWORD_PTR pm = 0, sm = 0;
+    if (!GetProcessAffinityMask(GetCurrentProcess(), &pm, &sm) || !pm) return -1;
+    for (int i = 0; i < (int)(8 * sizeof pm); i++)
+        if ((pm >> i) & 1) { if (nth-- == 0) return i; }
+    return -1;
+}
+TEST(mt_decode_48_threads_same_cpu) {
+    const sj_corpus *c = sj_find("c420_rst1b_96x72");
+    int cpu = sj_nth_process_cpu(1);
+    if (cpu < 0) cpu = sj_nth_process_cpu(0);
+    if (cpu < 0) SKIP("GetProcessAffinityMask failed");
+    sj_mt_case_ex(c->data, c->len, c->h_int, 48, 8, cpu);
+}
+
+/* decode while another thread keeps suspending the decoders and capturing (and round-tripping) their
+ * context: the OS must save and restore the complete SSE/AVX state of a thread stopped at an arbitrary
+ * instruction inside the kernels. Documented contract: SuspendThread / GetThreadContext /
+ * SetThreadContext / ResumeThread on a thread of the same process; the context set is exactly the one
+ * read (floating-point + XSTATE parts only, so integer state of a thread stopped in a system call is
+ * never rewritten). The controller does no heap or CRT calls while a worker is suspended. */
+typedef struct sj_sus_shared {
+    const uint8_t *d; size_t n; uint64_t want_int, want_float;
+    const jd_kernels *ks[3]; int nk;
+    volatile LONG stop, bad, failed, decodes, per[8];
+} sj_sus_shared;
+static sj_sus_shared g_sus;
+static DWORD WINAPI sj_sus_worker(void *p) {
+    int tid = (int)(intptr_t)p;
+    for (int it = 0; !g_sus.stop; it++) {
+        const jd_kernels *k = g_sus.ks[(tid + it) % g_sus.nk];
+        int flt = ((tid + it / g_sus.nk) & 1);
+        jd_image im;
+        int rc = sj_dec(g_sus.d, g_sus.n, k, flt ? JD_DCT_FLOAT : JD_DCT_ISLOW, JD_UP_FANCY, JD_OUT_RGB, &im);
+        if (rc) InterlockedIncrement(&g_sus.failed);
+        else if (sj_hash(&im) != (flt ? g_sus.want_float : g_sus.want_int)) InterlockedIncrement(&g_sus.bad);
+        jd_free(&im);
+        InterlockedIncrement(&g_sus.decodes);
+        InterlockedIncrement(&g_sus.per[tid]);
+    }
+    return 0;
+}
+typedef BOOL (WINAPI *sj_initctx_fn)(PVOID, DWORD, PCONTEXT *, PDWORD);
+typedef BOOL (WINAPI *sj_setxmask_fn)(PCONTEXT, DWORD64);
+typedef DWORD64 (WINAPI *sj_getxen_fn)(void);
+#ifndef CONTEXT_XSTATE
+#define CONTEXT_XSTATE (CONTEXT_i386 | 0x40L)   /* winnt.h (i386): not in older mingw headers */
+#endif
+#ifdef T_X64
+#define SJ_CTX_FP (CONTEXT_FLOATING_POINT)
+#else
+#define SJ_CTX_FP (CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS)
+#endif
+static void sj_suspend_case(int roundtrip) {
+    memset((void *)&g_sus, 0, sizeof g_sus);
+    size_t n; const sj_synth *s;
+    g_sus.d = sj_synth_get("synth_mt_420", &n, &s); g_sus.n = n; g_sus.want_int = s->h_int;
+    g_sus.nk = sj_usable(g_sus.ks);
+    jd_image im;
+    REQUIRE(sj_dec(g_sus.d, n, NULL, JD_DCT_FLOAT, JD_UP_FANCY, JD_OUT_RGB, &im) == JD_OK);
+    g_sus.want_float = sj_hash(&im); jd_free(&im);
+
+    /* context buffer: XSTATE-aware (all enabled AVX / AVX-512 components) when the OS enables any, so a
+     * round trip covers the full vector state; legacy CONTEXT otherwise */
+    sj_getxen_fn gx = (sj_getxen_fn)t_proc("kernel32.dll", "GetEnabledXStateFeatures");
+    sj_initctx_fn ic = (sj_initctx_fn)t_proc("kernel32.dll", "InitializeContext");
+    sj_setxmask_fn sm = (sj_setxmask_fn)t_proc("kernel32.dll", "SetXStateFeaturesMask");
+    DWORD64 xmask = gx ? gx() & 0xE4ull /* AVX(2) | opmask(5) | ZMM_Hi256(6) | Hi16_ZMM(7) */ : 0;
+    static CONTEXT plain T_ALIGN(16);
+    CONTEXT *ctx = &plain;
+    void *xbuf = NULL;
+    DWORD getflags = CONTEXT_FULL | SJ_CTX_FP, setflags = SJ_CTX_FP;
+    if (xmask) {
+        DWORD len = 0;
+        if (!ic || !sm) {
+            if (roundtrip) SKIP("XSTATE enabled (mask 0x%llx) but InitializeContext/SetXStateFeaturesMask missing: a full-state round trip is impossible", (unsigned long long)xmask);
+        } else {
+            ic(NULL, CONTEXT_FULL | SJ_CTX_FP | CONTEXT_XSTATE, NULL, &len);
+            xbuf = len ? malloc(len) : NULL;
+            CONTEXT *c2 = NULL;
+            if (xbuf && ic(xbuf, CONTEXT_FULL | SJ_CTX_FP | CONTEXT_XSTATE, &c2, &len) && sm(c2, xmask)) {
+                ctx = c2; getflags = CONTEXT_FULL | SJ_CTX_FP | CONTEXT_XSTATE; setflags = SJ_CTX_FP | CONTEXT_XSTATE;
+            } else {
+                t_note("InitializeContext(CONTEXT_XSTATE) failed (error %lu)", GetLastError());
+                free(xbuf); xbuf = NULL;
+                if (roundtrip) SKIP("no XSTATE-aware CONTEXT: a full-state round trip is impossible");
+            }
+        }
+    }
+    t_info("context", "%s, xstate mask 0x%llx", ctx == &plain ? "legacy CONTEXT" : "InitializeContext XSTATE", (unsigned long long)(ctx == &plain ? 0 : xmask));
+
+    enum { NW = 4 };
+    HANDLE th[NW]; int created = 0;
+    for (int i = 0; i < NW; i++) {
+        th[i] = CreateThread(NULL, 0, sj_sus_worker, (void *)(intptr_t)i, 0, NULL);
+        if (!th[i]) { t_note("CreateThread failed after %d (error %lu)", created, GetLastError()); break; }
+        created++;
+    }
+    if (created < 1) { free(xbuf); SKIP("could not create a decode thread"); }
+    long ops = 0, sus_fail = 0, get_fail = 0, set_fail = 0, res_fail = 0, first_get_err = 0;
+    double t0 = t_now_ms();
+    for (int round = 0;; round++) {
+        double el = t_now_ms() - t0;
+        int all = 1;
+        for (int i = 0; i < created; i++) all &= g_sus.per[i] >= 2;
+        if ((el > 1500 && all) || el > 15000) break;
+        for (int i = 0; i < created; i++) {
+            if (SuspendThread(th[i]) == (DWORD)-1) { sus_fail++; continue; }
+            ctx->ContextFlags = getflags;
+            if (!GetThreadContext(th[i], ctx)) { if (!get_fail++) first_get_err = (long)GetLastError(); }
+            else if (roundtrip) {
+                ctx->ContextFlags = setflags;
+                if (!SetThreadContext(th[i], ctx)) set_fail++;
+            }
+            if (ResumeThread(th[i]) == (DWORD)-1) res_fail++;
+            ops++;
+        }
+        if (round & 1) SwitchToThread();
+    }
+    g_sus.stop = 1;
+    int hung = 0;
+    for (int i = 0; i < created; i++) { if (WaitForSingleObject(th[i], 60000) != WAIT_OBJECT_0) hung++; else CloseHandle(th[i]); }
+    free(xbuf);
+    REQUIREF(hung == 0, "%d decode threads did not stop", hung);
+    t_info("suspend_cycles", "%ld in %.0f ms, %ld decodes on %d threads", ops, t_now_ms() - t0, (long)g_sus.decodes, created);
+    CHECKF(sus_fail == 0 && res_fail == 0, "SuspendThread failed %ld, ResumeThread failed %ld times", sus_fail, res_fail);
+    CHECKF(get_fail == 0, "GetThreadContext(flags 0x%lx) failed %ld of %ld times (first error %ld)", (unsigned long)getflags, get_fail, ops, first_get_err);
+    if (roundtrip) CHECKF(set_fail == 0, "SetThreadContext(flags 0x%lx) of the context just read failed %ld of %ld times", (unsigned long)setflags, set_fail, ops);
+    CHECKF(g_sus.failed == 0, "%ld decodes returned an error", (long)g_sus.failed);
+    CHECKF(g_sus.bad == 0, "%ld of %ld decodes produced wrong pixels while being suspended/context-%s", (long)g_sus.bad, (long)g_sus.decodes, roundtrip ? "round-tripped" : "captured");
+}
+TEST(mt_decode_while_suspended_getcontext) { sj_suspend_case(0); }
+TEST(mt_decode_while_context_roundtrip)    { sj_suspend_case(1); }
+
+/* decodes as Windows thread-pool work callbacks (the pool's worker threads run other callbacks between
+ * them): all exact */
+typedef struct sj_tp_shared { const uint8_t *d; size_t n; uint64_t want_int, want_float; const jd_kernels *ks[3]; int nk;
+                              volatile LONG next, left, bad, failed; HANDLE done; } sj_tp_shared;
+static sj_tp_shared g_tp;
+static void CALLBACK sj_tp_cb(PTP_CALLBACK_INSTANCE inst, void *ctx) {
+    (void)inst; (void)ctx;
+    LONG i = InterlockedIncrement(&g_tp.next) - 1;
+    int flt = (int)((i / g_tp.nk) & 1);
+    jd_image im;
+    int rc = sj_dec(g_tp.d, g_tp.n, g_tp.ks[i % g_tp.nk], flt ? JD_DCT_FLOAT : JD_DCT_ISLOW, JD_UP_FANCY, JD_OUT_RGBA, &im);
+    if (rc) InterlockedIncrement(&g_tp.failed);
+    else if (sj_hash(&im) != (flt ? g_tp.want_float : g_tp.want_int)) InterlockedIncrement(&g_tp.bad);
+    jd_free(&im);
+    if (InterlockedDecrement(&g_tp.left) == 0) SetEvent(g_tp.done);
+}
+TEST(threadpool_callbacks_decode) {
+    memset((void *)&g_tp, 0, sizeof g_tp);
+    const sj_corpus *c = sj_find("prog_custom_96x72");
+    g_tp.d = c->data; g_tp.n = c->len; g_tp.nk = sj_usable(g_tp.ks);
+    jd_image im;
+    REQUIRE(sj_dec(c->data, c->len, NULL, JD_DCT_ISLOW, JD_UP_FANCY, JD_OUT_RGBA, &im) == JD_OK);
+    g_tp.want_int = sj_hash(&im); jd_free(&im);
+    REQUIRE(sj_dec(c->data, c->len, NULL, JD_DCT_FLOAT, JD_UP_FANCY, JD_OUT_RGBA, &im) == JD_OK);
+    g_tp.want_float = sj_hash(&im); jd_free(&im);
+    g_tp.done = CreateEventA(NULL, TRUE, FALSE, NULL);
+    REQUIRE(g_tp.done);
+    enum { N = 192 };
+    g_tp.left = N;
+    int submitted = 0;
+    for (int i = 0; i < N; i++) {
+        if (!TrySubmitThreadpoolCallback(sj_tp_cb, NULL, NULL)) { t_note("TrySubmitThreadpoolCallback failed after %d (error %lu)", submitted, GetLastError()); break; }
+        submitted++;
+    }
+    if (submitted < N) InterlockedExchangeAdd(&g_tp.left, -(N - submitted));
+    if (submitted == 0) { CloseHandle(g_tp.done); SKIP("thread pool unavailable"); }
+    if (g_tp.left == 0) SetEvent(g_tp.done);
+    DWORD w = WaitForSingleObject(g_tp.done, 60000);
+    REQUIREF(w == WAIT_OBJECT_0, "thread-pool decodes did not finish within 60 s (%ld left)", (long)g_tp.left);   /* g_tp is static */
+    CloseHandle(g_tp.done);
+    t_info("callbacks", "%d", submitted);
+    CHECKF(g_tp.failed == 0, "%ld callback decodes failed", (long)g_tp.failed);
+    CHECKF(g_tp.bad == 0, "%ld of %d callback decodes produced wrong pixels", (long)g_tp.bad, submitted);
+}
 
 /* ============================================================================================ */
 /* FP environment                                                                                */
@@ -1158,7 +1384,14 @@ TEST(fpenv_results_independent_of_ftz_daz_rc) {
         REQUIRE(sj_dec(c->data, c->len, ks[k], JD_DCT_FLOAT, JD_UP_FANCY, JD_OUT_RGB, &im) == JD_OK);
         hf[k] = sj_hash(&im); jd_free(&im);
     }
-    static const unsigned modes[] = { 0x8040 /* FTZ|DAZ */, 0x6000 /* RC toward zero */, 0x2000 /* RC down */, 0x4000 /* RC up */ };
+    unsigned modes[] = { 0x8040 /* FTZ|DAZ */, 0x6000 /* RC toward zero */, 0x2000 /* RC down */, 0x4000 /* RC up */ };
+    /* DAZ only where MXCSR_MASK (FXSAVE bytes 28..31; 0 = default 0xFFBF) allows it: LDMXCSR with an
+     * unsupported bit raises #GP (SDM Vol. 1 11.6.6) */
+    static uint8_t fx[512] T_ALIGN(16);
+    t_fxsave(fx);
+    uint32_t mmask; memcpy(&mmask, fx + 28, 4);
+    if (!mmask) mmask = 0xFFBF;
+    if (!(mmask & 0x40)) { modes[0] = 0x8000; t_note("MXCSR_MASK 0x%x: DAZ not supported, FTZ only", mmask); }
     for (size_t mi = 0; mi < T_COUNTOF(modes); mi++)
         for (int k = 0; k < nk; k++) {
             jd_image im;
@@ -1170,7 +1403,7 @@ TEST(fpenv_results_independent_of_ftz_daz_rc) {
             t_set_mxcsr(m0);
             CHECKF(rc == 0 && hi == c->h_int, "%s islow under MXCSR 0x%x differs", ks[k]->name, modes[mi]);
             CHECK(rc2 == 0);
-            if (modes[mi] == 0x8040) CHECKF(h2 == hf[k], "%s float under FTZ|DAZ differs", ks[k]->name);
+            if (mi == 0) CHECKF(h2 == hf[k], "%s float under FTZ|DAZ differs", ks[k]->name);
             else if (k == 0) t_info(modes[mi] == 0x6000 ? "float_rc_zero" : modes[mi] == 0x2000 ? "float_rc_down" : "float_rc_up",
                                     "%s", h2 == hf[k] ? "same pixels" : "different pixels (expected: float IDCT rounds per MXCSR.RC)");
             if (k > 0 && rc2 == 0) {
@@ -1260,7 +1493,7 @@ TEST(perf_decode_mt_scaling) {
             m[i].b.d = j; m[i].b.n = n; m[i].b.k = ks[nk - 1]; m[i].b.dct = JD_DCT_ISLOW; m[i].b.fmt = JD_OUT_RGB;
             m[i].b.want = s->h_int; m[i].b.bad = 0; m[i].reps = reps; m[i].go = go;
             th[i] = CreateThread(NULL, 0, sj_mtp_worker, &m[i], 0, NULL);
-            if (!th[i]) break;
+            if (!th[i]) { t_note("CreateThread failed after %d threads (error %lu)", created, GetLastError()); break; }
             created++;
         }
         uint64_t t0 = t_qpc();
@@ -1269,7 +1502,8 @@ TEST(perf_decode_mt_scaling) {
         for (int i = 0; i < created; i++) { done &= WaitForSingleObject(th[i], 120000) == WAIT_OBJECT_0; CloseHandle(th[i]); }
         double sec = t_qpc_sec(t0, t_qpc());
         CloseHandle(go);
-        REQUIREF(done && created == cnt, "threads: created %d of %d, finished %d", created, cnt, done);
+        REQUIREF(done, "decode threads did not finish within 120 s");
+        if (created < (pass ? 2 : 1)) SKIP("could not create decode threads");
         int bad = 0;
         for (int i = 0; i < created; i++) bad += m[i].b.bad;
         CHECKF(bad == 0, "%d decodes wrong", bad);

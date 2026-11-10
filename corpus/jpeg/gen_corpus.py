@@ -147,6 +147,15 @@ def build():
         if (w, h) in ((16, 16), (17, 13), (3, 77)):
             add("c422_" + tag, "4:2:2 %s" % tag, cjpeg(sp(w, h), "-sample", "2x1"))
             add("c440_" + tag, "4:4:0 %s" % tag, cjpeg(sp(w, h), "-sample", "1x2"))
+    # subsampled widths/heights around the fancy-upsampling cut-offs (libjpeg jdsample.c: h2v1/h2v2 fancy only
+    # when downsampled_width > 2, h1v2 fancy at any width) and around 8/16/32-sample SIMD tails
+    for (w, h) in ((2, 9), (4, 5), (5, 5), (6, 3), (33, 35), (65, 9)):
+        tag = "%dx%d" % (w, h)
+        add("c420_" + tag, "4:2:0 %s" % tag, cjpeg(sp(w, h), "-sample", "2x2"))
+        add("c422_" + tag, "4:2:2 %s" % tag, cjpeg(sp(w, h), "-sample", "2x1"))
+        add("c440_" + tag, "4:4:0 %s" % tag, cjpeg(sp(w, h), "-sample", "1x2"))
+    add("prog_422_33x35", "progressive 4:2:2 33x35", cjpeg(sp(33, 35), "-progressive", "-sample", "2x1"))
+    add("prog_440_5x5", "progressive 4:4:0 5x5", cjpeg(sp(5, 5), "-progressive", "-sample", "1x2"))
     m = sp(96, 72, 11)
     add("c420_96x72", "4:2:0 q75 baseline", cjpeg(m, "-sample", "2x2"))
     add("c422_96x72", "4:2:2", cjpeg(m, "-sample", "2x1"))
@@ -183,6 +192,7 @@ def build():
     add("prog_420_1x1", "progressive 4:2:0 1x1", cjpeg(sp(1, 1), "-progressive"))
     base = cjpeg(m, "-sample", "2x2")
     add("markers_fill_96x72", "COM/APP1 segments, FF fill bytes, garbage before SOS", fill_markers(base))
+    add("nojfif_420_96x72", "APP0/JFIF removed: 3 components ids 1,2,3 -> YCbCr by libjpeg's default rule", drop(base, 0xE0))
     add("c420_256x192", "4:2:0 256x192 (multi-thread / perf)", cjpeg(sp(256, 192, 3), "-sample", "2x2"))
     # ---- negative samples ----
     small = cjpeg(sp(16, 16), "-sample", "2x2")
@@ -243,6 +253,7 @@ SYNTH = [  # name, w, h, sub(0 gray,1 444,2 420), quality, restart MCUs, seed
     ("synth_1k_444_rst", 1024, 768, 1, 90, 64, 2),
     ("synth_vga_gray", 640, 480, 0, 75, 0, 3),
     ("synth_mt_420", 512, 384, 2, 80, 8, 4),
+    ("synth_8k_420", 7680, 4320, 2, 75, 0, 5),
 ]
 
 

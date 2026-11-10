@@ -24,6 +24,26 @@ c440_3x77                   896 B     3x77   nc=3 expect=JD_OK                dj
 gray_77x3                   540 B    77x3    nc=1 expect=JD_OK                djpeg_rc=0 h_int=3eebc1bb9b64d824 h_box=3eebc1bb9b64d824 h_float=03348e7d27a32780  grayscale 77x3
 c444_77x3                  1097 B    77x3    nc=3 expect=JD_OK                djpeg_rc=0 h_int=ae766dad974a00db h_box=ae766dad974a00db h_float=64e050b318916c36  4:4:4 77x3
 c420_77x3                   955 B    77x3    nc=3 expect=JD_OK                djpeg_rc=0 h_int=934388698be18b15 h_box=6bef3e6fae21c3c7 h_float=5bca4905a8e307f2  4:2:0 77x3
+c420_2x9                    684 B     2x9    nc=3 expect=JD_OK                djpeg_rc=0 h_int=3bc3df1e48816cc1 h_box=3bc3df1e48816cc1 h_float=3bc3df1e48816cc1  4:2:0 2x9
+c422_2x9                    700 B     2x9    nc=3 expect=JD_OK                djpeg_rc=0 h_int=ba923c436ae5319f h_box=ba923c436ae5319f h_float=ba923c436ae5319f  4:2:2 2x9
+c440_2x9                    683 B     2x9    nc=3 expect=JD_OK                djpeg_rc=0 h_int=7275f9d2ad0349a0 h_box=f315cca305096cff h_float=79250b5856813fb5  4:4:0 2x9
+c420_4x5                    684 B     4x5    nc=3 expect=JD_OK                djpeg_rc=0 h_int=6dcbddcfa8a382e4 h_box=6dcbddcfa8a382e4 h_float=6dcbddcfa8a382e4  4:2:0 4x5
+c422_4x5                    684 B     4x5    nc=3 expect=JD_OK                djpeg_rc=0 h_int=9d88c382b2e5ca37 h_box=9d88c382b2e5ca37 h_float=9d88c382b2e5ca37  4:2:2 4x5
+c440_4x5                    680 B     4x5    nc=3 expect=JD_OK                djpeg_rc=0 h_int=1bf59ad7dfda723d h_box=ad33b6fc3f3fc782 h_float=1bf59ad7dfda723d  4:4:0 4x5
+c420_5x5                    688 B     5x5    nc=3 expect=JD_OK                djpeg_rc=0 h_int=ac6e37ecf8e1ba85 h_box=0ce7600124ae8060 h_float=092cbc8e315ac6ed  4:2:0 5x5
+c422_5x5                    690 B     5x5    nc=3 expect=JD_OK                djpeg_rc=0 h_int=61ead2854dec90ab h_box=c17c65476f715b10 h_float=9556f602305476e4  4:2:2 5x5
+c440_5x5                    691 B     5x5    nc=3 expect=JD_OK                djpeg_rc=0 h_int=dd8506fd5fc49237 h_box=d77b1cf5307a5f86 h_float=b4b733176213e14e  4:4:0 5x5
+c420_6x3                    682 B     6x3    nc=3 expect=JD_OK                djpeg_rc=0 h_int=b51051de5bd6f838 h_box=2909f3db20abb73d h_float=e010954124c4d909  4:2:0 6x3
+c422_6x3                    680 B     6x3    nc=3 expect=JD_OK                djpeg_rc=0 h_int=f58b1e62d058c720 h_box=dd4a907735a3d336 h_float=c8a17e8ca90e8df7  4:2:2 6x3
+c440_6x3                    683 B     6x3    nc=3 expect=JD_OK                djpeg_rc=0 h_int=2b527852708c70d5 h_box=f61155d770807849 h_float=05d7220229601ed8  4:4:0 6x3
+c420_33x35                 1163 B    33x35   nc=3 expect=JD_OK                djpeg_rc=0 h_int=94e016a956e37855 h_box=8b53245e928e68c4 h_float=a8d5a775b8959fbf  4:2:0 33x35
+c422_33x35                 1268 B    33x35   nc=3 expect=JD_OK                djpeg_rc=0 h_int=a7a3eb7fb5edf141 h_box=83e1610284061c79 h_float=1ebf1dbaf6e10ff5  4:2:2 33x35
+c440_33x35                 1277 B    33x35   nc=3 expect=JD_OK                djpeg_rc=0 h_int=fb0b7411c04fa592 h_box=80c02693e8291df0 h_float=88bcf51f2172f4f5  4:4:0 33x35
+c420_65x9                   981 B    65x9    nc=3 expect=JD_OK                djpeg_rc=0 h_int=9a8503d0b232acb3 h_box=a677a5c9149dd57b h_float=09b05786c67b8106  4:2:0 65x9
+c422_65x9                  1037 B    65x9    nc=3 expect=JD_OK                djpeg_rc=0 h_int=34f60d5f7f4f08e1 h_box=33744ce5a8b15920 h_float=348188a8ed8c422d  4:2:2 65x9
+c440_65x9                  1065 B    65x9    nc=3 expect=JD_OK                djpeg_rc=0 h_int=a2af22bb24dbe509 h_box=056312dbeaa33c5b h_float=0926495c679302f7  4:4:0 65x9
+prog_422_33x35             1188 B    33x35   nc=3 expect=JD_OK                djpeg_rc=0 h_int=a7a3eb7fb5edf141 h_box=83e1610284061c79 h_float=1ebf1dbaf6e10ff5  progressive 4:2:2 33x35
+prog_440_5x5                602 B     5x5    nc=3 expect=JD_OK                djpeg_rc=0 h_int=dd8506fd5fc49237 h_box=d77b1cf5307a5f86 h_float=b4b733176213e14e  progressive 4:4:0 5x5
 c420_96x72                 2712 B    96x72   nc=3 expect=JD_OK                djpeg_rc=0 h_int=27e9b8dd051b46a6 h_box=0a778ea74d94fddd h_float=e6c25c2082e1f32f  4:2:0 q75 baseline
 c422_96x72                 3107 B    96x72   nc=3 expect=JD_OK                djpeg_rc=0 h_int=568711403af086aa h_box=052236768bd6cd81 h_float=7e0bc838a238ea95  4:2:2
 c444_96x72                 4228 B    96x72   nc=3 expect=JD_OK                djpeg_rc=0 h_int=413815757c315d19 h_box=413815757c315d19 h_float=13ab935c1c8470a4  4:4:4
@@ -53,6 +73,7 @@ prog_420_61x45             1476 B    61x45   nc=3 expect=JD_OK                dj
 prog_420_17x13              692 B    17x13   nc=3 expect=JD_OK                djpeg_rc=0 h_int=50d0811addedc062 h_box=33a8f0f656360764 h_float=627fab99c68f91ea  progressive 4:2:0 17x13
 prog_420_1x1                519 B     1x1    nc=3 expect=JD_OK                djpeg_rc=0 h_int=d94d12186c0f2fb7 h_box=d94d12186c0f2fb7 h_float=d94d12186c0f2fb7  progressive 4:2:0 1x1
 markers_fill_96x72         2746 B    96x72   nc=3 expect=JD_OK                djpeg_rc=2 h_int=27e9b8dd051b46a6 h_box=0a778ea74d94fddd h_float=e6c25c2082e1f32f  COM/APP1 segments, FF fill bytes, garbage before SOS
+nojfif_420_96x72           2694 B    96x72   nc=3 expect=JD_OK                djpeg_rc=0 h_int=27e9b8dd051b46a6 h_box=0a778ea74d94fddd h_float=e6c25c2082e1f32f  APP0/JFIF removed: 3 components ids 1,2,3 -> YCbCr by libjpeg's default rule
 c420_256x192              13970 B   256x192  nc=3 expect=JD_OK                djpeg_rc=0 h_int=4c888fe2f97a9402 h_box=376c546681ca3b8e h_float=600a1fd728c12cb9  4:2:0 256x192 (multi-thread / perf)
 err_arith                   323 B     0x0    nc=0 expect=JD_ERR_UNSUPPORTED   djpeg_rc=0 h_int=a48e15c998c8d95c h_box=fb6df5d4340c16ec h_float=a82c2517858bd005  arithmetic coding (SOF9)
 err_sof3                    729 B     0x0    nc=0 expect=JD_ERR_UNSUPPORTED   djpeg_rc=1 h_int=0000000000000000 h_box=0000000000000000 h_float=0000000000000000  lossless SOF3 marker
@@ -97,6 +118,7 @@ synth_4k_420         3840x2160 sub=2 q=85 ri=0 seed=1 len=2500276 jpeg=adf97a420
 synth_1k_444_rst     1024x768 sub=1 q=90 ri=64 seed=2 len=599526 jpeg=cc7843dd1791d1dc h_int=51ab4f5488194ba2 h_box=51ab4f5488194ba2
 synth_vga_gray       640x480 sub=0 q=75 ri=0 seed=3 len=61709 jpeg=e43ebf9926d87ee2 h_int=9b690e4b6bd4c726 h_box=9b690e4b6bd4c726
 synth_mt_420         512x384 sub=2 q=80 ri=8 seed=4 len=60794 jpeg=9c02db547aa21710 h_int=1a05236adb456081 h_box=6d3fedca5242b1df
+synth_8k_420         7680x4320 sub=2 q=75 ri=0 seed=5 len=6580094 jpeg=4b050a4b74d79b10 h_int=ec55abff6bc6773b h_box=cac4b8d652f22ac4
 
 # golden scalar-kernel hashes over 4096 sjv_block() vectors per kind (seed 0x5EED0000+kind)
 ISLOW0=0x59e865eb05016290
