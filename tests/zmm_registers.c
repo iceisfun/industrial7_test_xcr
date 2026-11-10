@@ -1097,8 +1097,11 @@ TEST(zmm_mask_blendm) {
 }
 
 #define MX_FLAGS 0x3Fu
+/* FP expectations assume RN, DAZ=0, FTZ=0, all exceptions masked: pin MXCSR (the harness restores it per case) */
+#define ZX_FP_DEFAULT() t_set_mxcsr(0x1F80)
 TEST(zmm_mask_fp_exceptions_suppressed) {
     NEED_F();
+    ZX_FP_DEFAULT();
     /* SDM 15.6 / exception class E2: masked-off elements do not report FP exceptions */
     static zop p;
     unsigned mx0 = t_get_mxcsr();
@@ -1139,6 +1142,7 @@ TEST(zmm_mask_fp_exceptions_suppressed) {
 
 TEST(zmm_mask_fp_exceptions_reported) {
     NEED_F();
+    ZX_FP_DEFAULT();
     static zop p;
     unsigned mx0 = t_get_mxcsr();
     for (int i = 0; i < 16; i++) { p.s.f[i] = -7.0f; p.a.f[i] = 6.0f; p.b.f[i] = 3.0f; }
@@ -1188,6 +1192,7 @@ TEST(zmm_bcst_integer) {
 
 TEST(zmm_bcst_float) {
     NEED_F();
+    ZX_FP_DEFAULT();
     t_rng r; t_rng_seed(&r, 0xBC02);
     static zop p;
     for (int it = 0; it < 16; it++) {
@@ -1232,6 +1237,7 @@ static const struct { uint32_t a, b, e[4]; } g_rnd[] = {
 
 TEST(zmm_round_embedded_modes_ps) {
     NEED_F();
+    ZX_FP_DEFAULT();
     static zop p;
     void (*fns[4])(zop *) = { zmm_r_addps_rn, zmm_r_addps_rd, zmm_r_addps_ru, zmm_r_addps_rz };
     static const char *mn[4] = { "rn-sae", "rd-sae", "ru-sae", "rz-sae" };
@@ -1270,6 +1276,7 @@ TEST(zmm_round_embedded_modes_ps) {
 
 TEST(zmm_round_embedded_pd) {
     NEED_F();
+    ZX_FP_DEFAULT();
     static zop p;
     for (int i = 0; i < 8; i++) { p.a.g[i] = 1.0; p.b.q[i] = 0x3C30000000000000ull; }   /* 1 + 2^-60 */
     p.b.g[1] = -ldexp(1.0, -60); p.a.g[1] = -1.0;
@@ -1288,6 +1295,7 @@ TEST(zmm_round_embedded_pd) {
 
 TEST(zmm_round_sae_compare) {
     NEED_F();
+    ZX_FP_DEFAULT();
     /* VCMPPS with {sae}: a signalling predicate on QNaN must not set IE; without SAE LT_OS sets IE */
     static zop p;
     for (int i = 0; i < 16; i++) { p.a.f[i] = (float)i; p.b.f[i] = 4.0f; }
@@ -1438,6 +1446,7 @@ static int zx_fcmp(int pred, float a, float b) {
 static const uint8_t g_fcmp_sig[16] = { 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0 };
 TEST(zmm_cmp_float_32_predicates) {
     NEED_F();
+    ZX_FP_DEFAULT();
     static zop p;
     static const float av[16] = { 1, 2, 2, -0.0f, 0, 1, INFINITY, -INFINITY, 5, -5, 3, 1e30f, -1e-30f, 7, 8, 0 };
     static const float bv[16] = { 2, 1, 2, 0.0f, 0, 0, INFINITY, 1, -5, -5, 4, 1e30f, 1e-30f, 8, 7, -0.0f };
@@ -1882,6 +1891,7 @@ T_TARGET("avx512f,avx512dq") T_NOINLINE static void zmm_dq_f(const zv *a, const 
 }
 TEST(zmm_dq_mullq_cvt_movmask) {
     NEED_X(F_AVX512DQ);
+    ZX_FP_DEFAULT();
     t_rng r; t_rng_seed(&r, 0x1A03);
     for (int it = 0; it < 16; it++) {
         zv a, b, o[4], e; uint64_t km[2];
@@ -1909,9 +1919,9 @@ TEST(zmm_dq_mullq_cvt_movmask) {
     }
 }
 
-T_TARGET("avx512f") T_NOINLINE static void zmm_fp_f(const zv *a, const zv *b, const zv *c, zv out[8]) {
+T_TARGET("avx512f") T_NOINLINE static void zmm_fp_f(const zv *a, const zv *b, const zv *c, const zv *x, const zv *y, zv out[8]) {
     __m512d A = _mm512_load_pd(a->g), B = _mm512_load_pd(b->g), C = _mm512_load_pd(c->g);
-    __m512 X = _mm512_load_ps(a->f), Y = _mm512_load_ps(b->f);
+    __m512 X = _mm512_load_ps(x->f), Y = _mm512_load_ps(y->f);
     _mm512_store_pd(out[0].g, _mm512_fmadd_pd(A, B, C));
     _mm512_store_ps(out[1].f, _mm512_roundscale_ps(X, 0x08));
     _mm512_store_ps(out[2].f, _mm512_roundscale_ps(X, 0x09));
@@ -1932,36 +1942,37 @@ static float zx_rmode(float x, int mode) {
 }
 TEST(zmm_fp_fma_rndscale_getexp_scalef) {
     NEED_F();
+    ZX_FP_DEFAULT();
     t_rng r; t_rng_seed(&r, 0xF901);
     for (int it = 0; it < 12; it++) {
-        zv a, b, c, o[8], e;
+        zv a, b, c, x, y, o[8], e;
         for (int i = 0; i < 8; i++) {
             a.g[i] = (double)((int)t_rng_range(&r, 2001) - 1000); b.g[i] = (double)((int)t_rng_range(&r, 201) - 100);
             c.g[i] = (double)((int)t_rng_range(&r, 20001) - 10000);
         }
         a.g[0] = 1.0 + ldexp(1.0, -52); b.g[0] = 1.0 - ldexp(1.0, -52); c.g[0] = -1.0;   /* single rounding */
         for (int i = 0; i < 16; i++) {
-            a.f[i] = (float)((int)t_rng_range(&r, 1601) - 800) / 8.0f;
-            b.f[i] = (float)((int)t_rng_range(&r, 401) - 200) / 10.0f;
+            x.f[i] = (float)((int)t_rng_range(&r, 1601) - 800) / 8.0f;
+            y.f[i] = (float)((int)t_rng_range(&r, 401) - 200) / 10.0f;
         }
-        a.f[0] = 2.5f; a.f[1] = -2.5f; a.f[2] = -0.5f; a.f[3] = 0.5f; a.f[4] = -0.25f; a.f[5] = 1.75f;
-        b.d[0] = 0; b.d[1] = 0x80000000u; b.d[2] = 0x7F800000u; b.d[3] = 0xFF800000u; b.f[4] = ldexpf(1.0f, -140);
-        b.f[5] = 1.0f; b.f[6] = -3.0e10f; b.f[7] = 0.75f;
-        zmm_fp_f(&a, &b, &c, o);
+        x.f[0] = 2.5f; x.f[1] = -2.5f; x.f[2] = -0.5f; x.f[3] = 0.5f; x.f[4] = -0.25f; x.f[5] = 1.75f;
+        y.d[0] = 0; y.d[1] = 0x80000000u; y.d[2] = 0x7F800000u; y.d[3] = 0xFF800000u; y.f[4] = ldexpf(1.0f, -140);
+        y.f[5] = 1.0f; y.f[6] = -3.0e10f; y.f[7] = 0.75f;
+        zmm_fp_f(&a, &b, &c, &x, &y, o);
         for (int i = 0; i < 8; i++) e.g[i] = a.g[i] * b.g[i] + c.g[i];
         e.g[0] = -ldexp(1.0, -104);
         CHECK_LANES("vfmadd213pd (single rounding: (1+u)(1-u)-1 = -2^-104)", o[0].q, e.q, 8, 8);
         for (int m = 0; m < 4; m++) {
-            for (int i = 0; i < 16; i++) e.f[i] = zx_rmode(a.f[i], m);
+            for (int i = 0; i < 16; i++) e.f[i] = zx_rmode(x.f[i], m);
             static const char *nm[4] = { "vrndscaleps 0x08 (RNE)", "vrndscaleps 0x09 (floor)", "vrndscaleps 0x0A (ceil)",
                                          "vrndscaleps 0x0B (trunc)" };
             CHECK_LANES(nm[m], o[1 + m].d, e.d, 16, 4);
         }
-        for (int i = 0; i < 16; i++) e.f[i] = zx_rne(a.f[i] * 2.0f) / 2.0f;
-        for (int i = 0; i < 16; i++) if (e.f[i] == 0.0f) e.f[i] = copysignf(0.0f, a.f[i]);
+        for (int i = 0; i < 16; i++) e.f[i] = zx_rne(x.f[i] * 2.0f) / 2.0f;
+        for (int i = 0; i < 16; i++) if (e.f[i] == 0.0f) e.f[i] = copysignf(0.0f, x.f[i]);
         CHECK_LANES("vrndscaleps 0x18 (M=1, nearest half)", o[5].d, e.d, 16, 4);
         for (int i = 0; i < 16; i++) {
-            float x = b.f[i];
+            float x = y.f[i];
             if (x == 0.0f) e.f[i] = -INFINITY;
             else if (isinf(x)) e.f[i] = INFINITY;
             else { int ex; frexpf(x, &ex); e.f[i] = (float)(ex - 1); }
@@ -1969,9 +1980,9 @@ TEST(zmm_fp_fma_rndscale_getexp_scalef) {
         CHECK_LANES("vgetexpps (incl. 0 -> -inf, inf -> +inf, denormal)", o[6].d, e.d, 16, 4);
         int ok = 1;
         for (int i = 8; i < 16; i++) {   /* lanes with finite moderate exponents */
-            float ex = ldexpf(a.f[i], (int)floorf(b.f[i]));
+            float ex = ldexpf(x.f[i], (int)floorf(y.f[i]));
             if (zx_f2u(o[7].f[i]) != zx_f2u(ex)) { ok = 0; CHECKF(0, "vscalefps lane %d: %g * 2^floor(%g) = %g want %g", i,
-                                                                 (double)a.f[i], (double)b.f[i], (double)o[7].f[i], (double)ex); }
+                                                                 (double)x.f[i], (double)y.f[i], (double)o[7].f[i], (double)ex); }
         }
         if (ok) CHECK(1);
     }
@@ -1984,6 +1995,7 @@ T_TARGET("avx512f") T_NOINLINE static void zmm_approx_f(const zv *a, zv out[2]) 
 }
 TEST(zmm_fp_rcp14_rsqrt14_accuracy) {
     NEED_F();
+    ZX_FP_DEFAULT();
     /* SDM: relative error < 2^-14; implementation-specific values otherwise, so bounds, not bits */
     t_rng r; t_rng_seed(&r, 0xF902);
     double worst_rcp = 0, worst_rsq = 0;
@@ -2009,6 +2021,7 @@ T_TARGET("avx512f") T_NOINLINE static void zmm_cvtu_f(const zv *a, const zv *b, 
 }
 TEST(zmm_cvt_unsigned_dword) {
     NEED_F();
+    ZX_FP_DEFAULT();
     zv a, b, o[2];
     static const float af[16] = { 0.0f, 1.9f, 3e9f, 4294967040.0f, 4294967296.0f, -1.0f, 0, INFINITY,
                                   -0.0f, 0.99f, 2147483648.0f, 65535.5f, 7.0f, 1e20f, -INFINITY, 123456.0f };
@@ -2044,6 +2057,7 @@ static int zx_fpclass(uint32_t x, unsigned imm) {
 ZFPC(0x01) ZFPC(0x02) ZFPC(0x04) ZFPC(0x08) ZFPC(0x10) ZFPC(0x20) ZFPC(0x40) ZFPC(0x80) ZFPC(0x99) ZFPC(0x66) ZFPC(0xFF)
 TEST(zmm_dq_vfpclassps) {
     NEED_X(F_AVX512DQ);
+    ZX_FP_DEFAULT();
     zv a;
     static const uint32_t v[16] = { 0x7FC00000u, 0xFFC00001u, 0x7F800001u, 0xFFA00000u, 0x00000000u, 0x80000000u,
                                     0x7F800000u, 0xFF800000u, 0x00000001u, 0x807FFFFFu, 0x3F800000u, 0xBF800000u,
@@ -2779,14 +2793,15 @@ TEST(zmm_isolation_fresh_thread_no_leak) {
     NEED_F();
     /* polluters keep live AVX-512 patterns on other threads while fresh threads are created */
     int np = 4;
-    for (int i = 0; i < np; i++) REQUIRE(zx_spin_start(&g_sp[i], 0x7400 + (uint32_t)i, 0, 0));
+    for (int i = 0; i < np; i++)
+        if (!zx_spin_start(&g_sp[i], 0x7400 + (uint32_t)i, 0, 0)) { zx_spin_stop(g_sp, i); SKIP("could not start polluter threads"); }
     zx_spin_wait_ready(g_sp, np);
     int leaks = 0, zero_threads = 0;
     for (int it = 0; it < 16; it++) {
         memset(&g_fresh, 0, sizeof g_fresh);
         g_fresh.kbw = (uint32_t)cpu_has(F_AVX512BW);
         HANDLE h = CreateThread(NULL, 0, zx_fresh_thread, &g_fresh, 0, NULL);
-        REQUIRE(h);
+        if (!h) { CHECKF(0, "CreateThread failed: %lu", (unsigned long)GetLastError()); break; }
         WaitForSingleObject(h, 5000); CloseHandle(h);
         int nz = 0;
         for (int r = 0; r < T_NZMM; r++)
