@@ -17,7 +17,11 @@
  *  - many threads decoding the same image concurrently with different kernel sets: identical results;
  *  - decodes stay exact while another thread suspends the decoders and captures / round-trips their
  *    XSTATE context, and when run as thread-pool callbacks; an 8K image (> default pixel limit) vs djpeg;
- *  - the decoder neither depends on nor modifies the FP environment where the architecture says so.
+ *  - the decoder neither depends on nor modifies the FP environment where the architecture says so;
+ *  - OPTIONAL (compile-time, tests/simd_jpeg_stb.h): stb_image as a second, independent in-process decoder,
+ *    its portable C and SSE2 kernels each against host golden hashes (exact) and against each other (exact),
+ *    and against this decoder within a reported per-pixel tolerance; stb decodes also run in the
+ *    multi-threaded and suspend / context-round-trip harnesses next to this decoder's kernels.
  * PERF: MPixel/s per kernel set (4K decode) and kernel micro-benchmarks.
  * x86 (32-bit) builds run everything; there is nothing x64-only here except more XMM registers. */
 #include "t.h"
@@ -25,6 +29,10 @@
 #include "simd_jpeg_dec.h"
 #include "simd_jpeg_enc.h"
 #include "simd_jpeg_corpus.h"
+#include "simd_jpeg_stb.h"          /* optional second decoder (stb_image); SJ_HAVE_STB = 0 without it */
+#if SJ_HAVE_STB
+#include "simd_jpeg_stb_ref.h"
+#endif
 
 /* ============================================================================================ */
 /* helpers                                                                                       */
@@ -1084,15 +1092,28 @@ TEST(synth_8k_420_vs_djpeg) {
 typedef struct sj_mt_shared {
     const uint8_t *d; size_t n; uint64_t want_int, want_float; int iters;
     const jd_kernels *ks[3]; int nk;
+    int nstb; uint64_t want_stb;   /* > 0: extra decoder slots running stb_image (C, SSE2 kernels), RGBA output */
     HANDLE go; volatile LONG bad, decodes, failed_rc;
 } sj_mt_shared;
+/* golden RGBA hash of stb_image for the image the next sj_mt_case / sj_suspend_case decodes; 0 = suite only */
+static uint64_t g_sj_stb_want;
+static int sj_stb_slots(void);
+static int sj_stb_slot_decode(const uint8_t *d, size_t n, int simd, uint64_t want);
 typedef struct sj_mt_arg { sj_mt_shared *sh; int tid; } sj_mt_arg;
 static DWORD WINAPI sj_mt_worker(void *p) {
     sj_mt_arg *a = (sj_mt_arg *)p;
     sj_mt_shared *sh = a->sh;
     WaitForSingleObject(sh->go, 30000);
     for (int it = 0; it < sh->iters; it++) {
-        const jd_kernels *k = sh->ks[(a->tid + it) % sh->nk];
+        int slot = (a->tid + it) % (sh->nk + sh->nstb);
+        if (slot >= sh->nk) {
+            int r = sj_stb_slot_decode(sh->d, sh->n, slot - sh->nk, sh->want_stb);
+            if (r < 0) InterlockedIncrement(&sh->failed_rc); else if (r > 0) InterlockedIncrement(&sh->bad);
+            InterlockedIncrement(&sh->decodes);
+            if (it & 1) SwitchToThread();
+            continue;
+        }
+        const jd_kernels *k = sh->ks[slot];
         int flt = ((a->tid >> 1) + it) & 1;
         jd_image im;
         int rc = sj_dec(sh->d, sh->n, k, flt ? JD_DCT_FLOAT : JD_DCT_ISLOW, JD_UP_FANCY, JD_OUT_RGB, &im);
@@ -1113,6 +1134,7 @@ static void sj_mt_case_ex(const uint8_t *d, size_t n, uint64_t want_int, int nth
     memset((void *)&sh, 0, sizeof sh);
     sh.d = d; sh.n = n; sh.want_int = want_int; sh.iters = iters;
     sh.nk = sj_usable(sh.ks);
+    if (g_sj_stb_want) { sh.nstb = sj_stb_slots(); sh.want_stb = g_sj_stb_want; t_info("decoders", "%d suite kernel sets + %d stb_image kernel sets", sh.nk, sh.nstb); }
     jd_image im;
     REQUIRE(sj_dec(d, n, NULL, JD_DCT_ISLOW, JD_UP_FANCY, JD_OUT_RGB, &im) == JD_OK);
     CHECK(sj_hash(&im) == want_int);
@@ -1198,13 +1220,22 @@ TEST(mt_decode_48_threads_same_cpu) {
 typedef struct sj_sus_shared {
     const uint8_t *d; size_t n; uint64_t want_int, want_float;
     const jd_kernels *ks[3]; int nk;
+    int nstb; uint64_t want_stb;   /* as in sj_mt_shared */
     volatile LONG stop, bad, failed, decodes, per[8];
 } sj_sus_shared;
 static sj_sus_shared g_sus;
 static DWORD WINAPI sj_sus_worker(void *p) {
     int tid = (int)(intptr_t)p;
     for (int it = 0; !g_sus.stop; it++) {
-        const jd_kernels *k = g_sus.ks[(tid + it) % g_sus.nk];
+        int slot = (tid + it) % (g_sus.nk + g_sus.nstb);
+        if (slot >= g_sus.nk) {
+            int r = sj_stb_slot_decode(g_sus.d, g_sus.n, slot - g_sus.nk, g_sus.want_stb);
+            if (r < 0) InterlockedIncrement(&g_sus.failed); else if (r > 0) InterlockedIncrement(&g_sus.bad);
+            InterlockedIncrement(&g_sus.decodes);
+            InterlockedIncrement(&g_sus.per[tid]);
+            continue;
+        }
+        const jd_kernels *k = g_sus.ks[slot];
         int flt = ((tid + it / g_sus.nk) & 1);
         jd_image im;
         int rc = sj_dec(g_sus.d, g_sus.n, k, flt ? JD_DCT_FLOAT : JD_DCT_ISLOW, JD_UP_FANCY, JD_OUT_RGB, &im);
@@ -1232,6 +1263,7 @@ static void sj_suspend_case(int roundtrip) {
     size_t n; const sj_synth *s;
     g_sus.d = sj_synth_get("synth_mt_420", &n, &s); g_sus.n = n; g_sus.want_int = s->h_int;
     g_sus.nk = sj_usable(g_sus.ks);
+    if (g_sj_stb_want) { g_sus.nstb = sj_stb_slots(); g_sus.want_stb = g_sj_stb_want; t_info("decoders", "%d suite kernel sets + %d stb_image kernel sets", g_sus.nk, g_sus.nstb); }
     jd_image im;
     REQUIRE(sj_dec(g_sus.d, n, NULL, JD_DCT_FLOAT, JD_UP_FANCY, JD_OUT_RGB, &im) == JD_OK);
     g_sus.want_float = sj_hash(&im); jd_free(&im);
@@ -1558,3 +1590,354 @@ TEST(perf_kernel_idct_islow) { sj_perf_kernel(SJ_KB_ISLOW, "idct_islow", SJ_KB_B
 TEST(perf_kernel_idct_float) { sj_perf_kernel(SJ_KB_FLOAT, "idct_float", SJ_KB_BLOCKS / 1e6, "Mblocks/s"); }
 TEST(perf_kernel_h2v2_fancy) { sj_perf_kernel(SJ_KB_H2V2, "h2v2_fancy", 16.0 * 2 * SJ_KB_W / 1e6, "MPix/s"); }
 TEST(perf_kernel_ycc_rgb)    { sj_perf_kernel(SJ_KB_YCC, "ycc_rgb", 4.0 * SJ_KB_W / 1e6, "MPix/s"); }
+
+/* ============================================================================================ */
+/* stb_image: optional second, independent in-process decoder (tests/simd_jpeg_stb.h)            */
+/* ============================================================================================ */
+/* What is exact and what is a tolerance:
+ *  - stb_image's JPEG path is integer-only, so each of its kernel sets (portable C, SSE2) must reproduce
+ *    the golden hashes computed on the corpus host (tests/simd_jpeg_stb_ref.h, corpus/jpeg/gen_stb_refs.c)
+ *    bit for bit, native and RGBA output; C and SSE2 must agree with each other (stb documents its SSE2
+ *    IDCT as bit-identical to the C one; upsampling and colour conversion are the same integer formulas).
+ *  - against THIS suite's decoder (islow + fancy = djpeg default, already pinned to libjpeg-turbo) the two
+ *    decoders do not share arithmetic: stb uses a 12-bit fixed-point IDCT (libjpeg islow: 13-bit), 20-bit
+ *    YCbCr constants (libjpeg: 16-bit tables) and one rounding bias for both h2v2 phases (libjpeg 8/7).
+ *    Each step is within 1, so every pixel must be within SJ_STB_TOL = 3, the maximum is reported per
+ *    image. Pixel-identical outputs are reported too (exact where both pipelines degenerate to the same
+ *    arithmetic, e.g. 1x1 images).
+ *  - known algorithmic differences, checked on the remaining pixels or only reported:
+ *      * h2v1 (4:2:2) rows: stb's stbi__resample_row_h_2 computes the second-to-last output sample from
+ *        3*in[w-2] + in[w-1] (libjpeg: 3*in[w-1] + in[w-2]). That one column is excluded and reported.
+ *      * a component upsampled 2x horizontally whose downsampled width is <= 2: libjpeg-turbo jdsample.c
+ *        uses box upsampling there (downsampled_width > 2 is required for fancy), stb always filters.
+ *        Reported only.
+ *      * mjpeg_no_dht: stb_image has no Motion-JPEG default Huffman tables and decodes the DHT-less stream
+ *        to wrong pixels without an error. Reported only (stb's golden hash still pins its output).
+ *  - corrupt / warning files of the corpus are not given to stb at all: for some of them (over-subscribed
+ *    Huffman table, garbage before SOS) its output depends on uninitialised memory. */
+#define SJ_STB_TOL 3
+#if SJ_HAVE_STB
+static int sj_stb_slots(void) { return (SJ_STB_HAVE_SSE2 && cpu_has(F_SSE2)) ? 2 : 1; }
+static const char *sj_stb_kname(int simd) { return simd ? "stb_sse2" : "stb_c"; }
+/* one RGBA decode by the given stb kernel set: 0 = golden, 1 = wrong pixels, -1 = decode failed */
+static int sj_stb_slot_decode(const uint8_t *d, size_t n, int simd, uint64_t want) {
+    int w, h, nc, oc;
+    uint8_t *p = sj_stb_decode(d, n, simd, 4, &w, &h, &nc, &oc);
+    if (!p) return -1;
+    int r = jd_fnv64(p, (size_t)w * h * 4) == want ? 0 : 1;
+    stbi_image_free(p);
+    return r;
+}
+static const sj_stb_ref *sj_stb_ref_find(const char *name) {
+    for (size_t i = 0; i < T_COUNTOF(sj_stb_ref_list); i++) if (!strcmp(sj_stb_ref_list[i].name, name)) return &sj_stb_ref_list[i];
+    for (size_t i = 0; i < T_COUNTOF(sj_stb_synth_ref_list); i++) if (!strcmp(sj_stb_synth_ref_list[i].name, name)) return &sj_stb_synth_ref_list[i];
+    return NULL;
+}
+static void sj_stb_need(void) { }
+#else
+static int sj_stb_slots(void) { return 0; }
+static int sj_stb_slot_decode(const uint8_t *d, size_t n, int simd, uint64_t want) { (void)d; (void)n; (void)simd; (void)want; return -1; }
+static void sj_stb_need(void) { SKIP("built without stb_image (SJ_NO_STB defined or third_party/stb/stb_image.h absent)"); }
+#endif
+
+TEST(stb_reference_build_info) {
+    sj_stb_need();
+#if SJ_HAVE_STB
+    t_info("decoder", "%s", SJ_STB_VERSION);
+    t_info("sse2_kernels", "%s", SJ_STB_HAVE_SSE2 ? "compiled in" : "not compiled in");
+    t_info("golden", "%u corpus + %u synthetic images", (unsigned)T_COUNTOF(sj_stb_ref_list), (unsigned)T_COUNTOF(sj_stb_synth_ref_list));
+    /* this suite always builds with SSE2 (x64: architectural; x86: -msse2), which is when stb compiles its SSE2 path */
+    CHECKF(SJ_STB_HAVE_SSE2, "stb_image SSE2 path not compiled in although SSE2 code generation is enabled");
+    /* the per-thread kernel switch really selects different code: stb's SSE2 IDCT is a separate function */
+    int w, h, nc, oc;
+    const sj_corpus *c = sj_find("c420_96x72");
+    uint8_t *a = sj_stb_decode(c->data, c->len, 0, 4, &w, &h, &nc, &oc);
+    REQUIREF(a != NULL, "stb_image rejects c420_96x72: %s", stbi_failure_reason());
+    CHECK_EQ(w, 96); CHECK_EQ(h, 72); CHECK_EQ(nc, 3); CHECK_EQ(oc, 4);
+    stbi_image_free(a);
+    CHECK_EQ(sj_stb_assert_count, 0);
+#endif
+}
+
+#if SJ_HAVE_STB
+typedef struct sj_stb_sum { int images, exact_images, tol_images, report_images, worst; double worst_mean; char worst_name[40]; } sj_stb_sum;
+
+/* stb C and SSE2 against the golden hashes and each other; returns the stb C native pixels (stbi_image_free) */
+static uint8_t *sj_stb_check_one(const char *name, const uint8_t *d, size_t n, const sj_stb_ref *ref) {
+    int ns = sj_stb_slots();
+    uint8_t *nat0 = NULL;
+    for (int simd = 0; simd < ns; simd++) {
+        const char *kn = sj_stb_kname(simd);
+        int w, h, nc, oc;
+        long a0 = sj_stb_assert_count;
+        uint8_t *p = sj_stb_decode(d, n, simd, 0, &w, &h, &nc, &oc);
+        if (!p) { CHECKF(0, "%s %s: stb_image failed: %s", name, kn, stbi_failure_reason()); continue; }
+        size_t sz = (size_t)w * h * oc;
+        if (w != ref->w || h != ref->h || oc != ref->nc) {
+            CHECKF(0, "%s %s: %dx%d nc %d, host %dx%d nc %d", name, kn, w, h, oc, ref->w, ref->h, ref->nc);
+            stbi_image_free(p); continue;
+        }
+        uint64_t hn = jd_fnv64(p, sz);
+        CHECKF(hn == ref->h_nat, "%s %s: native pixels differ from the host golden (%016llx want %016llx)", name, kn,
+               (unsigned long long)hn, (unsigned long long)ref->h_nat);
+        int w4, h4, nc4, oc4;
+        uint8_t *q = sj_stb_decode(d, n, simd, 4, &w4, &h4, &nc4, &oc4);
+        if (!q || w4 != w || h4 != h) CHECKF(0, "%s %s: RGBA decode failed or changed size", name, kn);
+        else {
+            uint64_t h4h = jd_fnv64(q, (size_t)w * h * 4);
+            CHECKF(h4h == ref->h_rgba, "%s %s: RGBA pixels differ from the host golden (%016llx want %016llx)", name, kn,
+                   (unsigned long long)h4h, (unsigned long long)ref->h_rgba);
+            long bad = 0;
+            for (size_t i = 0; i < (size_t)w * h; i++) {
+                const uint8_t *x = q + 4 * i, *y = p + oc * i;
+                bad += x[3] != 255;
+                bad += oc == 1 ? (x[0] != y[0] || x[1] != y[0] || x[2] != y[0]) : (x[0] != y[0] || x[1] != y[1] || x[2] != y[2]);
+            }
+            CHECKF(bad == 0, "%s %s: RGBA output disagrees with native output in %ld pixels", name, kn, bad);
+        }
+        if (q) stbi_image_free(q);
+        CHECKF(sj_stb_assert_count == a0, "%s %s: %ld stb_image internal assertions failed", name, kn, sj_stb_assert_count - a0);
+        if (!nat0) nat0 = p;
+        else {
+            if (memcmp(p, nat0, sz)) { t_note("%s: stb SSE2 kernels differ from stb C kernels", name); CHECK_MEM(p, nat0, sz); }
+            stbi_image_free(p);
+        }
+    }
+    return nat0;
+}
+
+/* stb (native components) vs this decoder (islow + fancy, native) */
+static void sj_stb_vs_suite(const char *name, const uint8_t *stb, const jd_image *im, int host_maxdiff, sj_stb_sum *sum) {
+    int w = im->w, h = im->h, ch = im->ch;
+    /* classify (see the section comment) */
+    const char *report = NULL;
+    int excl = -1;   /* output column excluded for the h2v1 edge formula */
+    if (!strcmp(name, "mjpeg_no_dht")) report = "stb_image lacks the Motion-JPEG default Huffman tables";
+    else if (im->colorspace == JD_CS_YCC && im->ncomp == 3) {
+        int hmax = 1, vmax = 1;
+        for (int c = 0; c < 3; c++) { if (im->hs[c] > hmax) hmax = im->hs[c]; if (im->vs[c] > vmax) vmax = im->vs[c]; }
+        for (int c = 0; c < 3; c++) {
+            if (im->hs[c] * 2 != hmax) continue;                  /* only 2x horizontal upsampling is special */
+            int cw = (w * im->hs[c] + hmax - 1) / hmax;           /* downsampled width (libjpeg jdinput.c) */
+            if (cw <= 2) report = "libjpeg box-upsamples a component with downsampled width <= 2, stb filters it";
+            else if (im->vs[c] == vmax) excl = 2 * cw - 2;        /* h2v1: stb's second-to-last sample */
+        }
+    }
+    int maxd = 0, maxd_ex = 0, ex_x = -1, ex_y = -1, ex_c = -1;
+    long ident = 0;
+    double sumd = 0;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const uint8_t *a = stb + ((size_t)y * w + x) * ch, *b = im->pix + (size_t)y * im->stride + (size_t)x * ch;
+            int same = 1;
+            for (int c = 0; c < ch; c++) {
+                int dd = a[c] > b[c] ? a[c] - b[c] : b[c] - a[c];
+                same &= dd == 0;
+                sumd += dd;
+                if (x == excl) { if (dd > maxd_ex) maxd_ex = dd; continue; }
+                if (dd > maxd) { maxd = dd; ex_x = x; ex_y = y; ex_c = c; }
+            }
+            ident += same;
+        }
+    double mean = sumd / ((double)w * h * ch);
+    char v[200];
+    snprintf(v, sizeof v, "max %d mean %.4f identical %ld/%ld px%s%s", maxd, mean, ident, (long)w * h,
+             report ? " [reported only: " : excl >= 0 ? " [h2v1 edge column excluded" : "", report ? report : "");
+    if (excl >= 0 && !report) { size_t l = strlen(v); snprintf(v + l, sizeof v - l, ", its max %d]", maxd_ex); }
+    else if (report) { size_t l = strlen(v); snprintf(v + l, sizeof v - l, "]"); }
+    t_info(name, "%s", v);
+    sum->images++;
+    if (ident == (long)w * h) sum->exact_images++;
+    if (report) { sum->report_images++; return; }
+    sum->tol_images++;
+    if (maxd > sum->worst || !sum->worst_name[0]) { sum->worst = maxd; sum->worst_mean = mean; snprintf(sum->worst_name, sizeof sum->worst_name, "%s", name); }
+    CHECKF(maxd <= SJ_STB_TOL, "%s: stb_image and this decoder differ by %d at x=%d y=%d ch=%d (tolerance %d; host max %d)",
+           name, maxd, ex_x, ex_y, ex_c, SJ_STB_TOL, host_maxdiff);
+}
+static void sj_stb_image_case(const char *name, const uint8_t *d, size_t n, uint32_t max_pixels, sj_stb_sum *sum) {
+    const sj_stb_ref *ref = sj_stb_ref_find(name);
+    if (!ref) { CHECKF(0, "%s: no stb golden entry (regenerate tests/simd_jpeg_stb_ref.h)", name); return; }
+    jd_options o; memset(&o, 0, sizeof o);
+    o.max_pixels = max_pixels;
+    jd_image im;
+    int rc = jd_decode(d, n, &o, &im);
+    if (rc == JD_ERR_NOMEM) SKIP("%s: suite decode out of memory", name);
+    if (rc != JD_OK) { CHECKF(0, "%s: suite decode rc %d (%s)", name, rc, sj_err(rc)); return; }
+    uint8_t *stb = sj_stb_check_one(name, d, n, ref);
+    if (stb) {
+        if (im.w == ref->w && im.h == ref->h && im.ch == ref->nc) sj_stb_vs_suite(name, stb, &im, ref->host_maxdiff, sum);
+        else CHECKF(0, "%s: shape %dx%dx%d vs stb %dx%dx%d", name, im.w, im.h, im.ch, ref->w, ref->h, ref->nc);
+        stbi_image_free(stb);
+    }
+    jd_free(&im);
+}
+static void sj_stb_summary(const sj_stb_sum *s) {
+    t_info("summary", "%d images: %d within tolerance %d (worst %d, %s, mean %.4f), %d reported only, %d pixel-identical",
+           s->images, s->tol_images, SJ_STB_TOL, s->worst, s->worst_name, s->worst_mean, s->report_images, s->exact_images);
+}
+#endif
+
+TEST(stb_corpus_vs_golden_and_suite_decoder) {
+    sj_stb_need();
+#if SJ_HAVE_STB
+    sj_stb_sum sum; memset(&sum, 0, sizeof sum);
+    int skipped = 0;
+    for (size_t i = 0; i < T_COUNTOF(sj_corpus_list); i++) {
+        const sj_corpus *c = &sj_corpus_list[i];
+        if (c->expect != JD_OK || c->djpeg_rc != 0) { skipped++; continue; }   /* corrupt / warning files: see above */
+        sj_stb_image_case(c->name, c->data, c->len, 0, &sum);
+    }
+    t_info("not_given_to_stb", "%d corrupt or warning files", skipped);
+    sj_stb_summary(&sum);
+    CHECK_EQ(sum.images, (int)T_COUNTOF(sj_stb_ref_list));
+#endif
+}
+TEST(stb_synth_vs_golden_and_suite_decoder) {
+    sj_stb_need();
+#if SJ_HAVE_STB
+    sj_stb_sum sum; memset(&sum, 0, sizeof sum);
+    for (size_t i = 0; i < T_COUNTOF(sj_synth_list); i++) {
+        const sj_synth *s = &sj_synth_list[i];
+        if ((uint64_t)s->w * s->h > (16u << 20)) continue;   /* 8K: own case */
+        size_t n;
+        const uint8_t *j = sj_synth_get(s->name, &n, NULL);
+        sj_stb_image_case(s->name, j, n, 0, &sum);
+    }
+    sj_stb_summary(&sum);
+#endif
+}
+/* 8K: about 100 MB of stb output plus this decoder's 100 MB; an allocation failure is a resource limit */
+TEST(stb_synth_8k_vs_golden_and_suite_decoder) {
+    sj_stb_need();
+#if SJ_HAVE_STB
+    const sj_synth *s; size_t n;
+    const uint8_t *j = sj_synth_get("synth_8k_420", &n, &s);
+    const sj_stb_ref *ref = sj_stb_ref_find(s->name);
+    REQUIRE(ref);
+    jd_options o; memset(&o, 0, sizeof o);
+    o.max_pixels = (uint32_t)s->w * (uint32_t)s->h;
+    jd_image im;
+    int rc = jd_decode(j, n, &o, &im);
+    sj_synth_img *g = &g_synth[s - sj_synth_list];
+    if (rc == JD_ERR_NOMEM) { free(g->jpg); g->jpg = NULL; g->state = 0; SKIP("8K suite decode: out of memory"); }
+    REQUIREF(rc == JD_OK, "8K suite decode rc %d (%s)", rc, sj_err(rc));
+    sj_stb_sum sum; memset(&sum, 0, sizeof sum);
+    for (int simd = 0; simd < sj_stb_slots(); simd++) {
+        int w, h, nc, oc;
+        double t0 = t_now_ms();
+        uint8_t *p = sj_stb_decode(j, n, simd, 0, &w, &h, &nc, &oc);
+        if (!p) { t_note("%s: stb_image failed: %s", sj_stb_kname(simd), stbi_failure_reason()); if (simd == 0) { jd_free(&im); free(g->jpg); g->jpg = NULL; g->state = 0; SKIP("8K stb decode failed (%s): resource limit", stbi_failure_reason()); } continue; }
+        char key[40]; snprintf(key, sizeof key, "%s_ms", sj_stb_kname(simd));
+        t_info(key, "%.0f", t_now_ms() - t0);
+        uint64_t hh = (w == ref->w && h == ref->h && oc == ref->nc) ? jd_fnv64(p, (size_t)w * h * oc) : 0;
+        CHECKF(hh == ref->h_nat, "%s: 8K stb output differs from the host golden (%016llx want %016llx)", sj_stb_kname(simd),
+               (unsigned long long)hh, (unsigned long long)ref->h_nat);
+        if (simd == 0 && hh == ref->h_nat) sj_stb_vs_suite(s->name, p, &im, ref->host_maxdiff, &sum);
+        stbi_image_free(p);
+    }
+    jd_free(&im);
+    free(g->jpg); g->jpg = NULL; g->state = 0;
+    CHECK_EQ(sj_stb_assert_count, 0);
+#endif
+}
+
+/* stb decodes (both kernel sets, RGBA so its SSE2 colour conversion runs) mixed with this decoder's
+ * scalar / SSE2 / AVX2 kernels in the multi-threaded harness: every result exact */
+static void sj_stb_mt(const char *img, int nthreads, int iters, int same_cpu) {
+    sj_stb_need();
+#if SJ_HAVE_STB
+    const sj_stb_ref *ref = sj_stb_ref_find(img);
+    REQUIRE(ref);
+    const uint8_t *d; size_t n; uint64_t want_int;
+    const sj_synth *s = sj_find_synth(img);
+    if (s) { d = sj_synth_get(img, &n, NULL); want_int = s->h_int; }
+    else { const sj_corpus *c = sj_find(img); REQUIRE(c); d = c->data; n = c->len; want_int = c->h_int; }
+    int cpu = -1;
+    if (same_cpu) { cpu = sj_nth_process_cpu(0); if (cpu < 0) SKIP("GetProcessAffinityMask failed"); }
+    g_sj_stb_want = ref->h_rgba;
+    sj_mt_case_ex(d, n, want_int, nthreads, iters, cpu);
+    g_sj_stb_want = 0;
+    CHECK_EQ(sj_stb_assert_count, 0);
+#else
+    (void)img; (void)nthreads; (void)iters; (void)same_cpu;
+#endif
+}
+TEST(stb_mt_decode_16_threads_512x384)    { sj_stb_mt("synth_mt_420", 16, 5, 0); }
+TEST(stb_mt_decode_64_threads_256x192)    { sj_stb_mt("c420_256x192", 64, 5, 0); }
+TEST(stb_mt_decode_12_threads_same_cpu)   { sj_stb_mt("synth_mt_420", 12, 5, 1); }
+/* the suspend / GetThreadContext (and Get+Set round-trip) harness with stb decoders among the workers */
+static void sj_stb_suspend(int roundtrip) {
+    sj_stb_need();
+#if SJ_HAVE_STB
+    const sj_stb_ref *ref = sj_stb_ref_find("synth_mt_420");
+    REQUIRE(ref);
+    g_sj_stb_want = ref->h_rgba;
+    sj_suspend_case(roundtrip);
+    g_sj_stb_want = 0;
+    CHECK_EQ(sj_stb_assert_count, 0);
+#else
+    (void)roundtrip;
+#endif
+}
+TEST(stb_mt_decode_while_suspended_getcontext) { sj_stb_suspend(0); }
+TEST(stb_mt_decode_while_context_roundtrip)    { sj_stb_suspend(1); }
+
+/* integer-only decoder: output independent of MXCSR rounding / FTZ and of x87 precision control; MXCSR
+ * control bits and the x87 control word unchanged by a decode */
+TEST(stb_fpenv_independent_and_preserved) {
+    sj_stb_need();
+#if SJ_HAVE_STB
+    const sj_corpus *c = sj_find("c420_96x72");
+    const sj_stb_ref *ref = sj_stb_ref_find(c->name);
+    REQUIRE(ref);
+    unsigned m0 = t_get_mxcsr(), cw0 = t_get_x87_cw();
+    static const unsigned modes[] = { 0x6000 /* RC zero */, 0x2000 /* down */, 0x4000 /* up */, 0x8000 /* FTZ */ };
+    for (int simd = 0; simd < sj_stb_slots(); simd++)
+        for (size_t mi = 0; mi <= T_COUNTOF(modes); mi++) {
+            unsigned m = mi < T_COUNTOF(modes) ? ((m0 & ~0xE040u) | modes[mi]) : m0;
+            unsigned cw = mi == T_COUNTOF(modes) ? ((cw0 & ~0x300u) | 0x000) : cw0;   /* last round: x87 PC = 24 bit */
+            t_set_mxcsr(m); t_set_x87_cw(cw);
+            int r = sj_stb_slot_decode(c->data, c->len, simd, ref->h_rgba);
+            unsigned m1 = t_get_mxcsr(), cw1 = t_get_x87_cw();
+            t_set_mxcsr(m0); t_set_x87_cw(cw0);
+            CHECKF(r == 0, "%s under MXCSR 0x%x / x87 CW 0x%x: %s", sj_stb_kname(simd), m, cw, r < 0 ? "decode failed" : "pixels differ from golden");
+            CHECKF((m1 & ~0x3Fu) == (m & ~0x3Fu), "%s: MXCSR control 0x%x -> 0x%x", sj_stb_kname(simd), m, m1);
+            CHECKF(cw1 == cw, "%s: x87 CW 0x%x -> 0x%x", sj_stb_kname(simd), cw, cw1);
+        }
+#endif
+}
+
+/* PERF: stb_image 4K 4:2:0 decode (RGB), verified against the golden first */
+typedef struct sj_stb_bench { const uint8_t *d; size_t n; int simd, bad; } sj_stb_bench;
+static void sj_stb_bench_fn(void *p) {
+#if SJ_HAVE_STB
+    sj_stb_bench *b = (sj_stb_bench *)p;
+    int w, h, nc, oc;
+    uint8_t *px = sj_stb_decode(b->d, b->n, b->simd, 3, &w, &h, &nc, &oc);
+    if (!px) b->bad++; else { T_SINK(px[w]); stbi_image_free(px); }
+#else
+    (void)p;
+#endif
+}
+static void sj_stb_perf(int simd) {
+    sj_stb_need();
+#if SJ_HAVE_STB
+    if (simd && sj_stb_slots() < 2) SKIP("stb_image SSE2 kernels not available");
+    const sj_synth *s; size_t n;
+    const uint8_t *j = sj_synth_get("synth_4k_420", &n, &s);
+    const sj_stb_ref *ref = sj_stb_ref_find(s->name);
+    REQUIRE(ref);
+    REQUIREF(sj_stb_slot_decode(j, n, simd, ref->h_rgba) == 0, "stb decode result wrong: refusing to report a number");
+    sj_stb_bench b = { j, n, simd, 0 };
+    t_stats st;
+    CHECK(t_bench(sj_stb_bench_fn, &b, 1, 5, 0.0, &st) == 5 && b.bad == 0);
+    char m[64];
+    snprintf(m, sizeof m, "decode_4k_420_%s", sj_stb_kname(simd));
+    t_perf(m, (double)s->w * s->h / 1e6 / st.median, "MPix/s");
+    t_info("median_ms", "%.1f (min %.1f max %.1f)", st.median * 1e3, st.min * 1e3, st.max * 1e3);
+#else
+    (void)simd;
+#endif
+}
+TEST(perf_stb_decode_4k_c)    { sj_stb_perf(0); }
+TEST(perf_stb_decode_4k_sse2) { sj_stb_perf(1); }
