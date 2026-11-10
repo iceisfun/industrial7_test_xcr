@@ -41,6 +41,15 @@
  *  - ntdll!RtlCopyContext: dest flags |= (src flags & requested); copying XSTATE into a destination that
  *    is not XSTATE-initialized -> STATUS_BUFFER_OVERFLOW (0x80000005 -> ERROR_MORE_DATA 234);
  *    destination XSTATE_BV = src XSTATE_BV & enabled & ~3; destination chunk too small -> 0x80000005.
+ *    RtlpCopyLegacyContext* copy only the parts named by (src & requested); RtlpCopyXStateChunk zeroes the
+ *    64-byte destination header and rebuilds XSTATE_BV/XCOMP_BV. i386: copying CONTEXT_EXTENDED_REGISTERS
+ *    into an XSTATE destination (and SetXStateFeaturesMask(mask & 3)) raises Legacy.Length 0xCC -> 0x2CC;
+ *    RtlpCopyExtendedContext rejects dest Legacy.Offset != src or dest Legacy.Length < src (0xC000000D).
+ *  - ntoskrnl!PspGetContextThreadInternal (user caller): captures into a full kernel copy, then
+ *    RtlpWriteExtendedContext -> RtlpCopyXStateChunk (too-small user chunk -> 0x80000005, ERROR_MORE_DATA).
+ *    RtlpReadExtendedContextLayout rejects a CONTEXT_EX whose Legacy.Offset != -sizeof(CONTEXT) etc. with
+ *    0xC000000D before writing; a chunk not 64-byte aligned raises STATUS_DATATYPE_MISALIGNMENT (998).
+ *    The i386 (WOW64) conversion lives in wow64.dll, not in the reference corpus: those results are recorded.
  *  - kernelbase!GetEnabledXStateFeatures = RtlGetEnabledExtendedFeatures(~0), or 3 when that is 0;
  *    RtlGetEnabledExtendedFeatures(m) = (EnabledFeatures | EnabledSupervisorFeatures) & m.
  */
@@ -166,6 +175,18 @@ static void need_avx_api(void) {
 static void need_rtl(void *p, const char *name) {
     xa_resolve();
     if (!p) SKIP("ntdll!%s not exported", name);
+}
+/* Does the OS manage any state with XSAVE at all? kernelbase!GetEnabledXStateFeatures reports 3 both for
+ * "x87+SSE via XSAVE" and for "no XSAVE" (Rtl(~0)==0), so ask ntdll. Without it InitializeContext(2) strips
+ * CONTEXT_XSTATE (0x40) and RtlpValidateContextFlags returns STATUS_NOT_SUPPORTED for XSTATE flags. */
+static int os_xstate(void) {
+    xa_resolve();
+    if (X.RtlGetEnabledExtendedFeatures) return X.RtlGetEnabledExtendedFeatures(~0ull) != 0;
+    return cpu()->osxsave;
+}
+static void need_xstate_ctx(void) {
+    need_core_api();
+    if (!os_xstate()) SKIP("OS enables no XSAVE-managed state (RtlGetEnabledExtendedFeatures(~0)=0): CONTEXT_XSTATE unsupported");
 }
 
 /* Error-code-only cases call this first: on Wine a known gap turns their failures into XFAIL.
@@ -449,6 +470,7 @@ TEST(init_size_query_null_buffer_nonzero_len) {
 }
 
 TEST(init_size_query_xstate) {
+    need_xstate_ctx();
     DWORD64 en = enabled();
     const t_cpu_info *c = cpu();
     DWORD plain = init_len(XA_ALL), xs = init_len(XA_ALL | XA_XSTATE);
@@ -534,8 +556,8 @@ static void init_exact_guarded(DWORD flags) {
     }
 }
 TEST(init_exact_size_guarded_plain) { need_core_api(); init_exact_guarded(XA_ALL); }
-TEST(init_exact_size_guarded_xstate) { need_core_api(); init_exact_guarded(XA_ALL | XA_XSTATE); }
-TEST(init_exact_size_guarded_xstate_only) { need_core_api(); init_exact_guarded(XA_XSTATE); }
+TEST(init_exact_size_guarded_xstate) { need_xstate_ctx(); init_exact_guarded(XA_ALL | XA_XSTATE); }
+TEST(init_exact_size_guarded_xstate_only) { need_xstate_ctx(); init_exact_guarded(XA_XSTATE); }
 
 TEST(init_larger_buffer_len_reported) {
     need_core_api();
@@ -662,8 +684,32 @@ TEST(init_context_all_and_full) {
     }
 }
 
-TEST(init_reinit_clears_xstate_header) {
+/* kernelbase!InitializeContext2: RtlGetEnabledExtendedFeatures(~0)==0 -> flags &= ~0x40 before sizing.
+ * ntdll!RtlpValidateContextFlags: XSTATE flags with XState.EnabledFeatures==0 -> STATUS_NOT_SUPPORTED. */
+TEST(init_xstate_stripped_without_os_xstate) {
     need_core_api();
+    if (os_xstate()) SKIP("OS enables XSAVE-managed state: the CONTEXT_XSTATE stripping path does not apply");
+    CHECK_EQ(X.GetEnabledXStateFeatures(), 3);
+    DWORD plain = init_len(XA_ALL), xs = init_len(XA_ALL | XA_XSTATE);
+    CHECKF(plain && xs == plain, "XSTATE length %lu != plain %lu although XSTATE is unsupported", xs, plain);
+    xctx x; XCTX_REQ(&x, XA_ALL | XA_XSTATE);
+    CHECKF(x.ctx->ContextFlags == XA_ALL, "ContextFlags 0x%lx want 0x%lx (XSTATE bit stripped)", (unsigned long)x.ctx->ContextFlags, (unsigned long)XA_ALL);
+    CHECK_EQ(xex(x.ctx)->XState.Length, 0);
+    CHECK(X.LocateXStateFeature(x.ctx, XSTATE_AVX, NULL) == NULL);
+    if (X.RtlGetExtendedContextLength) {
+        ULONG l = 0x777;
+        CHECK_EQ((ULONG)X.RtlGetExtendedContextLength(XA_ALL | XA_XSTATE, &l), (ULONG)X_STATUS_NOT_SUPPORTED);
+        CHECK_EQ(l, 0x777);
+    }
+    xctx s; XCTX_REQ(&s, XA_ALL);
+    SetLastError(X_ERR_SENTINEL);
+    CHECK(!X.CopyContext(x.ctx, XA_ALL | XA_XSTATE, s.ctx));
+    CHECK_EQ(GetLastError(), ERROR_NOT_SUPPORTED);
+    xctx_free(&s); xctx_free(&x);
+}
+
+TEST(init_reinit_clears_xstate_header) {
+    need_xstate_ctx();
     xctx x;
     XCTX_REQ(&x, XA_XSTATE);
     BYTE *ch = xchunk(x.ctx);
@@ -681,7 +727,7 @@ TEST(init_reinit_clears_xstate_header) {
 }
 
 TEST(init_rtl_length_matches) {
-    need_core_api();
+    need_xstate_ctx();
     need_rtl((void *)X.RtlGetExtendedContextLength, "RtlGetExtendedContextLength");
     DWORD fl[] = { XA_CONTROL, XA_ALL, XA_XSTATE, XA_ALL | XA_XSTATE };
     for (size_t i = 0; i < T_COUNTOF(fl); i++) {
@@ -736,12 +782,13 @@ TEST(ctxex_layout_plain) {
     for (size_t i = 0; i < T_COUNTOF(fl); i++) { xctx x; XCTX_REQ(&x, fl[i]); check_ctxex(&x, fl[i]); xctx_free(&x); }
 }
 TEST(ctxex_layout_xstate) {
-    need_core_api();
+    need_xstate_ctx();
     DWORD fl[] = { XA_XSTATE, XA_ALL | XA_XSTATE, XA_CONTROL | XA_XSTATE };
     for (size_t i = 0; i < T_COUNTOF(fl); i++) { xctx x; XCTX_REQ(&x, fl[i]); check_ctxex(&x, fl[i]); xctx_free(&x); }
 }
 
 TEST(ctxex_xstate_header_initial) {
+    need_xstate_ctx();
     DWORD64 en = enabled();
     xctx x;
     XCTX_REQ(&x, XA_XSTATE);
@@ -762,6 +809,7 @@ TEST(ctxex_xstate_header_initial) {
 }
 
 TEST(ctxex_xstate_length_matches_cpuid) {
+    need_xstate_ctx();
     DWORD64 en = enabled();
     const t_cpu_info *c = cpu();
     if (!c->osxsave) SKIP("OSXSAVE clear");
@@ -770,21 +818,30 @@ TEST(ctxex_xstate_length_matches_cpuid) {
     X_CTX_EX *e = xex(x.ctx);
     uint64_t comp = xs_comp(x.ctx);
     uint32_t want;
+    t_info("xstate_chunk_length", "%lu", e->XState.Length);
     if (comp & X_BIT63) {
+        /* compacted: RtlpGetEntireXStateAreaLength sums the XCOMP_BV components exactly (SDM 13.4.3) */
         want = 576;
         for (int i = 2; i < 63; i++) if (comp >> i & 1) { if (c->comp[i].align64) want = (want + 63) & ~63u; want += c->comp[i].size; }
+        CHECKF(e->XState.Length == want - 512, "XState.Length %lu, want %u - 512 for compacted format", e->XState.Length, want);
     } else {
+        /* standard: ntdll uses XSTATE_CONFIGURATION.Size, which the kernel may take from CPUID.(0Dh,0).EBX
+         * (covers every XCR0 component, e.g. PKRU that the API does not report). Contract: it holds every
+         * enabled component and is no larger than CPUID.(0Dh,0).ECX. */
         want = xsave_std_size(en & ~3ull);
+        CHECKF(e->XState.Length + 512 >= want, "XState.Length %lu cannot hold the enabled components (need %u - 512)", e->XState.Length, want);
+        if (c->xsave_size_max)
+            CHECKF(e->XState.Length + 512 <= c->xsave_size_max, "XState.Length %lu exceeds CPUID.(0Dh,0).ECX %u - 512",
+                   e->XState.Length, c->xsave_size_max);
+        if (e->XState.Length + 512 != want)
+            t_note("standard-format area %lu+512 != end of last enabled component %u (CPUID EBX %u)", e->XState.Length, want, c->xsave_size_enabled);
     }
-    t_info("xstate_chunk_length", "%lu", e->XState.Length);
-    CHECKF(e->XState.Length == want - 512, "XState.Length %lu, want %u - 512 for %s format", e->XState.Length, want,
-           (comp & X_BIT63) ? "compacted" : "standard");
     xctx_free(&x);
 }
 
 #ifdef T_X86
 TEST(ctxex_x86_legacy_length_extended_regs) {
-    need_core_api();
+    need_xstate_ctx();
     xctx a, b;
     XCTX_REQ(&a, XA_CONTROL | XA_XSTATE);
     XCTX_REQ(&b, XA_CONTROL | CONTEXT_EXTENDED_REGISTERS | XA_XSTATE);
@@ -798,7 +855,7 @@ TEST(ctxex_x86_legacy_length_extended_regs) { SKIP("i386 CONTEXT layout: x86 bui
 #endif
 
 TEST(rtl_locate_legacy_context) {
-    need_core_api();
+    need_xstate_ctx();
     need_rtl((void *)X.RtlLocateLegacyContext, "RtlLocateLegacyContext");
     DWORD fl[] = { XA_ALL, XA_ALL | XA_XSTATE };
     for (size_t i = 0; i < T_COUNTOF(fl); i++) {
@@ -813,7 +870,7 @@ TEST(rtl_locate_legacy_context) {
 }
 
 TEST(rtl_initialize_extended_context) {
-    need_core_api();
+    need_xstate_ctx();
     need_rtl((void *)X.RtlInitializeExtendedContext, "RtlInitializeExtendedContext");
     need_rtl((void *)X.RtlLocateLegacyContext, "RtlLocateLegacyContext");
     DWORD fl[] = { XA_ALL, XA_ALL | XA_XSTATE };
@@ -859,7 +916,7 @@ TEST(rtl_initialize_invalid_flags_status) {
 
 /* ======================= E. InitializeContext2 ============================ */
 static void need_init2(void) {
-    need_core_api();
+    need_xstate_ctx();
     if (!X.InitializeContext2) SKIP("kernel32!InitializeContext2 not exported (Windows 10 2004+)");
 }
 
@@ -1280,7 +1337,7 @@ TEST(setmask_avx_roundtrip) {
 }
 
 TEST(setmask_legacy_sets_fp_flag) {
-    need_core_api();
+    need_xstate_ctx();
     xctx x; XCTX_REQ(&x, XA_XSTATE);
     CHECK(X.SetXStateFeaturesMask(x.ctx, 1));
     CHECKF((x.ctx->ContextFlags & XA_FPFLAG) == XA_FPFLAG, "mask bit 0 did not add flag 0x%lx (flags 0x%lx)",
@@ -1296,6 +1353,26 @@ TEST(setmask_legacy_sets_fp_flag) {
     xctx_free(&x);
 }
 
+/* kernelbase!SetXStateFeaturesMask, i386 branch: (mask & 3) sets CONTEXT_EXTENDED_REGISTERS and, for an
+ * XSTATE context, raises CONTEXT_EX.Legacy.Length to 0x2CC (the FXSAVE image is now part of the context). */
+#ifdef T_X86
+TEST(setmask_x86_legacy_length_grows) {
+    need_xstate_ctx();
+    wine_known_gap("SetXStateFeaturesMask does not grow the i386 CONTEXT_EX.Legacy.Length");
+    xctx x; XCTX_REQ(&x, XA_CONTROL | XA_XSTATE);
+    CHECK_EQ(xex(x.ctx)->Legacy.Length, 0xCC);
+    CHECK(X.SetXStateFeaturesMask(x.ctx, 0));
+    CHECKF(xex(x.ctx)->Legacy.Length == 0xCC, "mask 0 changed Legacy.Length to 0x%lx", xex(x.ctx)->Legacy.Length);
+    CHECK(X.SetXStateFeaturesMask(x.ctx, 3));
+    CHECKF((x.ctx->ContextFlags & CONTEXT_EXTENDED_REGISTERS) == CONTEXT_EXTENDED_REGISTERS, "flags 0x%lx", (unsigned long)x.ctx->ContextFlags);
+    CHECKF(xex(x.ctx)->Legacy.Length == 0x2CC, "Legacy.Length 0x%lx want 0x2CC after legacy bits were set", xex(x.ctx)->Legacy.Length);
+    CHECK_EQ(xex(x.ctx)->Legacy.Offset, -0x2CC);
+    xctx_free(&x);
+}
+#else
+TEST(setmask_x86_legacy_length_grows) { SKIP("i386 CONTEXT_EX.Legacy.Length rule: x86 build only"); }
+#endif
+
 TEST(setmask_zero_keeps_fp_flag) {
     need_core_api();
     xctx x; XCTX_REQ(&x, XA_ALL | XA_XSTATE);
@@ -1305,6 +1382,7 @@ TEST(setmask_zero_keeps_fp_flag) {
 }
 
 TEST(setmask_unsupported_bits_dropped) {
+    need_xstate_ctx();
     DWORD64 en = enabled();
     xctx x; XCTX_REQ(&x, XA_XSTATE);
     uint64_t junk = ~en & ~3ull;   /* every bit the OS does not enable, incl. bit 63 */
@@ -1340,7 +1418,7 @@ TEST(setmask_extended_on_plain_context_error_code) {
 }
 
 TEST(setmask_no_arch_flags) {
-    need_core_api();
+    need_xstate_ctx();
     xctx x; XCTX_REQ(&x, XA_ALL | XA_XSTATE);
     x.ctx->ContextFlags = 0;
     uint64_t bv0 = xs_bv(x.ctx);
@@ -1377,6 +1455,7 @@ TEST(setmask_preserves_header_and_data) {
 }
 
 TEST(rtl_get_set_extended_features_mask) {
+    need_xstate_ctx();
     DWORD64 en = enabled();
     need_rtl((void *)X.RtlGetExtendedFeaturesMask, "RtlGetExtendedFeaturesMask");
     need_rtl((void *)X.RtlSetExtendedFeaturesMask, "RtlSetExtendedFeaturesMask");
@@ -1524,7 +1603,7 @@ TEST(copy_xstate_into_plain_dest) {
 }
 
 TEST(copy_plain_src_xstate_flag_ok) {
-    need_core_api();
+    need_xstate_ctx();
     xctx s, d;
     XCTX_REQ(&s, XA_ALL); XCTX_REQ(&d, XA_ALL);
     fill_legacy(s.ctx, 0x41);
@@ -1598,6 +1677,84 @@ TEST(copy_into_smaller_compacted_dest) {
     CHECKF(GetLastError() == ERROR_MORE_DATA, "error %lu want 234", GetLastError());
     xctx_free(&s); xctx_free(&d);
 }
+
+/* CopyContext(XSTATE only): ntdll!RtlpCopyLegacyContext copies only the parts named by (src & requested)
+ * flags, so the legacy CONTEXT (incl. FltSave/XMM lows) is untouched while the XSTATE chunk is copied. */
+TEST(copy_xstate_only_request) {
+    DWORD64 en = enabled();
+    need_avx_api();
+    xctx s, d;
+    XCTX_REQ(&s, XA_ALL | XA_XSTATE); XCTX_REQ(&d, XA_ALL | XA_XSTATE);
+    fill_legacy(s.ctx, 0x61); fill_legacy(d.ctx, 0x19);
+    BYTE *sa = (BYTE *)X.LocateXStateFeature(s.ctx, XSTATE_AVX, NULL), *da = (BYTE *)X.LocateXStateFeature(d.ctx, XSTATE_AVX, NULL);
+    REQUIRE(sa && da);
+    for (int i = 0; i < 256; i++) { sa[i] = (BYTE)(i * 3 + 7); da[i] = 0x33; }
+    REQUIRE(X.SetXStateFeaturesMask(s.ctx, 3 | T_XS_AVX));
+    CONTEXT before; memcpy(&before, d.ctx, sizeof before);
+    SetLastError(X_ERR_SENTINEL);
+    BOOL ok = X.CopyContext(d.ctx, XA_XSTATE, s.ctx);
+    CHECKF(ok, "CopyContext(CONTEXT_XSTATE only) failed (%lu)", GetLastError());
+    CHECKF(d.ctx->ContextFlags == (XA_ALL | XA_XSTATE), "dest flags 0x%lx want 0x%lx", (unsigned long)d.ctx->ContextFlags,
+           (unsigned long)(XA_ALL | XA_XSTATE));
+    before.ContextFlags = d.ctx->ContextFlags;
+    CHECK_MEM(d.ctx, &before, sizeof(CONTEXT));   /* no legacy part requested -> legacy CONTEXT unchanged */
+    CHECK_MEM(da, sa, 256);
+    CHECKF(xs_bv(d.ctx) == (T_XS_AVX & en), "dest XSTATE_BV 0x%llx want 0x%llx", (unsigned long long)xs_bv(d.ctx), (unsigned long long)T_XS_AVX);
+    xctx_free(&s); xctx_free(&d);
+}
+
+/* ntdll!RtlpCopyXStateChunk rebuilds the destination header: 64 bytes zeroed, XSTATE_BV = src & enabled & ~3,
+ * XCOMP_BV = ((enabled|3) & src XCOMP_BV) | bit63 when compacted, else 0. Reserved header bytes left nonzero
+ * would make XRSTOR(S) of the context #GP (SDM 13.8). */
+TEST(copy_xstate_dest_header_rebuilt) {
+    need_avx_api();
+    xctx s, d;
+    XCTX_REQ(&s, XA_ALL | XA_XSTATE); XCTX_REQ(&d, XA_ALL | XA_XSTATE);
+    REQUIRE(X.SetXStateFeaturesMask(s.ctx, 3 | T_XS_AVX));
+    BYTE *dh = xchunk(d.ctx);
+    memset(dh + 16, 0xEE, 48);
+    CHECK(X.CopyContext(d.ctx, XA_ALL | XA_XSTATE, s.ctx));
+    BYTE zero[48] = { 0 };
+    CHECK_MEM(dh + 16, zero, 48);
+    CHECK_EQ(xs_bv(d.ctx), T_XS_AVX);
+    CHECK_EQ(xs_comp(d.ctx), xs_comp(s.ctx));
+    xctx_free(&s); xctx_free(&d);
+}
+
+#ifdef T_X86
+/* ntdll!RtlCopyContext, i386: copying CONTEXT_EXTENDED_REGISTERS into an XSTATE destination that lacked
+ * them raises the destination's CONTEXT_EX.Legacy.Length from 0xCC to 0x2CC. */
+TEST(copy_x86_legacy_length_grows) {
+    need_xstate_ctx();
+    wine_known_gap("CopyContext does not grow the i386 destination CONTEXT_EX.Legacy.Length");
+    xctx s, d;
+    XCTX_REQ(&s, XA_ALL | XA_XSTATE); XCTX_REQ(&d, XA_CONTROL | XA_XSTATE);
+    fill_legacy(s.ctx, 0x72);
+    REQUIRE(xex(d.ctx)->Legacy.Length == 0xCC);
+    CHECK(X.CopyContext(d.ctx, XA_ALL | XA_XSTATE, s.ctx));
+    CHECKF((d.ctx->ContextFlags & CONTEXT_EXTENDED_REGISTERS) == CONTEXT_EXTENDED_REGISTERS, "flags 0x%lx", (unsigned long)d.ctx->ContextFlags);
+    CHECKF(xex(d.ctx)->Legacy.Length == 0x2CC, "dest Legacy.Length 0x%lx want 0x2CC", xex(d.ctx)->Legacy.Length);
+    CHECK_MEM(d.ctx->ExtendedRegisters, s.ctx->ExtendedRegisters, 288);
+    xctx_free(&s); xctx_free(&d);
+}
+/* ntdll!RtlpCopyExtendedContext: dest Legacy.Offset must equal the source's and dest Legacy.Length must be
+ * >= the source's, else STATUS_INVALID_PARAMETER (nothing copied). */
+TEST(rtl_copy_extended_context_legacy_too_small) {
+    need_xstate_ctx();
+    need_rtl((void *)X.RtlCopyExtendedContext, "RtlCopyExtendedContext");
+    wine_known_gap("RtlCopyExtendedContext does not compare the Legacy chunks");
+    xctx s, d;
+    XCTX_REQ(&s, XA_ALL | XA_XSTATE); XCTX_REQ(&d, XA_CONTROL | XA_XSTATE);
+    CHECK_EQ((ULONG)X.RtlCopyExtendedContext(xex(d.ctx), XA_ALL | XA_XSTATE, xex(s.ctx)), (ULONG)X_STATUS_INVALID_PARAMETER);
+    CHECK_EQ(xex(d.ctx)->Legacy.Length, 0xCC);
+    /* the other direction (dest has the larger legacy area) is fine */
+    CHECK_EQ((ULONG)X.RtlCopyExtendedContext(xex(s.ctx), XA_CONTROL | XA_XSTATE, xex(d.ctx)), 0u);
+    xctx_free(&s); xctx_free(&d);
+}
+#else
+TEST(copy_x86_legacy_length_grows) { SKIP("i386 CONTEXT_EX.Legacy.Length rule: x86 build only"); }
+TEST(rtl_copy_extended_context_legacy_too_small) { SKIP("needs differing i386 Legacy.Length: x86 build only"); }
+#endif
 
 TEST(rtl_copy_context_status) {
     need_avx_api();
@@ -1712,9 +1869,9 @@ TEST(thread_get_xstate_avx) {
         CHECKF((m & ~enabled()) == 0, "mask 0x%llx has bits outside enabled 0x%llx", (unsigned long long)m, (unsigned long long)enabled());
         BYTE *lo = (BYTE *)X.LocateXStateFeature(x.ctx, XSTATE_LEGACY_SSE, NULL);
         BYTE *hi = (BYTE *)X.LocateXStateFeature(x.ctx, XSTATE_AVX, NULL);
-        REQUIRE(lo && hi);
+        CHECKF(lo && hi, "LocateXStateFeature: SSE %p AVX %p", (void *)lo, (void *)hi);   /* no REQUIRE: worker suspended */
         char lbl[48];
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; lo && hi && i < n; i++) {
             snprintf(lbl, sizeof lbl, "ctx xmm%d low", i);
             CHECK_REG(lbl, lo + 16 * i, w->in.v[i], 16);
             snprintf(lbl, sizeof lbl, "ctx ymm%d upper", i);
@@ -1736,9 +1893,9 @@ TEST(thread_get_mxcsr_x87cw) {
     DWORD err = 0;
     int r = xw_capture(w, &x, ~0ull, &err);
     CHECKF(r == 1, "GetThreadContext: result %d error %lu", r, err);
-    if (r == 1) {
-        XSAVE_FORMAT *fx = (XSAVE_FORMAT *)X.LocateXStateFeature(x.ctx, 0, NULL);
-        REQUIRE(fx);
+    XSAVE_FORMAT *fx = r == 1 ? (XSAVE_FORMAT *)X.LocateXStateFeature(x.ctx, 0, NULL) : NULL;
+    if (r == 1) CHECK(fx != NULL);   /* no REQUIRE: worker suspended */
+    if (fx) {
         CHECKF(fx->MxCsr == w->mxcsr, "context MXCSR 0x%lx, thread 0x%x", (unsigned long)fx->MxCsr, w->mxcsr);
         CHECKF(fx->ControlWord == w->fcw, "context x87 CW 0x%x, thread 0x%x", fx->ControlWord, w->fcw);
 #ifdef T_X64
@@ -1761,14 +1918,14 @@ TEST(thread_get_mxcsr_x87cw) {
 
 TEST(thread_set_xstate_avx) {
     need_avx_exec();
-    xw *w = xw_start(T_VK_YMM, 0x5103);
-    if (!w) SKIP("CreateThread failed (%lu)", GetLastError());
-    xctx x;
-    if (!xctx_new(&x, XA_FP_ALL | XA_XSTATE)) { xw_finish(w); xw_free(w); REQUIREF(0, "InitializeContext failed"); }
-    DWORD err = 0;
-    int r = xw_capture(w, &x, 3 | T_XS_AVX, &err);
     t_vregs *want = (t_vregs *)_aligned_malloc(sizeof(t_vregs), 64);
     REQUIRE(want);
+    xw *w = xw_start(T_VK_YMM, 0x5103);
+    if (!w) { _aligned_free(want); SKIP("CreateThread failed (%lu)", GetLastError()); }
+    xctx x;
+    if (!xctx_new(&x, XA_FP_ALL | XA_XSTATE)) { xw_finish(w); xw_free(w); _aligned_free(want); REQUIREF(0, "InitializeContext failed"); }
+    DWORD err = 0;
+    int r = xw_capture(w, &x, 3 | T_XS_AVX, &err);
     memcpy(want, &w->in, sizeof *want);
     int n = t_vregs_count(T_VK_YMM);
     CHECKF(r == 1, "GetThreadContext: result %d error %lu", r, err);
@@ -1776,11 +1933,11 @@ TEST(thread_set_xstate_avx) {
         t_vregs alt;
         t_vregs_pattern(&alt, T_VK_YMM, 0x5104);
         BYTE *hi = (BYTE *)X.LocateXStateFeature(x.ctx, XSTATE_AVX, NULL);
-        REQUIRE(hi);
-        for (int i = 0; i < n; i++) { memcpy(hi + 16 * i, alt.v[i] + 16, 16); memcpy(want->v[i] + 16, alt.v[i] + 16, 16); }
+        CHECKF(hi != NULL, "LocateXStateFeature(AVX) = NULL");   /* no REQUIRE: worker suspended */
+        for (int i = 0; hi && i < n; i++) { memcpy(hi + 16 * i, alt.v[i] + 16, 16); memcpy(want->v[i] + 16, alt.v[i] + 16, 16); }
         CHECK(X.SetXStateFeaturesMask(x.ctx, 3 | T_XS_AVX));
         SetLastError(X_ERR_SENTINEL);
-        BOOL ok = SetThreadContext(w->h, x.ctx);
+        BOOL ok = hi && SetThreadContext(w->h, x.ctx);
         CHECKF(ok, "SetThreadContext(XSTATE) failed (%lu)", GetLastError());
         if (!ok) memcpy(want, &w->in, sizeof *want);
     }
@@ -1901,6 +2058,223 @@ TEST(thread_copycontext_from_thread) {
         }
     }
     xctx_free(&x); xctx_free(&d); xw_free(w);
+}
+
+/* A plain CONTEXT (no CONTEXT_EX after it) ending exactly at a PAGE_NOACCESS page: a non-XSTATE request must
+ * never write past sizeof(CONTEXT). Then a CONTEXT_DEBUG_REGISTERS-only request on an XSTATE-initialized
+ * buffer must leave the XSTATE chunk alone (debug requests are separate from FP/vector requests). */
+TEST(thread_get_plain_and_debug_only) {
+    need_core_api();
+    xw *w = xw_start(T_VK_XMM, 0x510A);
+    if (!w) SKIP("CreateThread failed (%lu)", GetLastError());
+    xctx p = { 0 }, y = { 0 };
+    p.buf = (BYTE *)t_guarded_alloc(sizeof(CONTEXT), &p.base);
+    int have_y = os_xstate() && xctx_new(&y, XA_ALL | XA_XSTATE);
+    if (!p.buf) { xw_finish(w); xw_free(w); xctx_free(&y); REQUIREF(0, "guarded alloc failed"); }
+    p.len = sizeof(CONTEXT); p.ctx = (CONTEXT *)p.buf;
+    memset(p.buf, 0, sizeof(CONTEXT));
+    p.ctx->ContextFlags = XA_ALL;
+    DWORD err = 0;
+    int r = xw_capture(w, &p, ~0ull, &err);
+    CHECKF(r == 1, "GetThreadContext(CONTEXT_ALL) into an exact-size CONTEXT: result %d error %lu", r, err);
+    if (r == 1) {
+        CHECK_EQ(p.ctx->ContextFlags, XA_ALL);
+        char lbl[32];
+        for (int i = 0; i < t_vregs_count(T_VK_XMM); i++) {
+            snprintf(lbl, sizeof lbl, "plain ctx xmm%d", i);
+            CHECK_REG(lbl, p.buf + XA_LEG1_OFF + 16 * i, w->in.v[i], 16);
+        }
+        if (have_y) {
+            DWORD tail = y.len - (DWORD)((BYTE *)y.ctx + sizeof(CONTEXT) - y.buf);
+            BYTE *snap = (BYTE *)malloc(tail);
+            if (snap) {
+                BYTE *ch = xchunk(y.ctx);                  /* header stays as initialized (XSTATE_BV 0) */
+                memset(ch + 64, 0x5A, (size_t)(y.buf + y.len - (ch + 64)));
+                memcpy(snap, (BYTE *)y.ctx + sizeof(CONTEXT), tail);
+                BYTE *fp = (BYTE *)y.ctx + XA_LEG0_OFF;
+                memset(fp, 0x6B, 32);
+                y.ctx->ContextFlags = XA_ARCH | 0x10;    /* CONTEXT_DEBUG_REGISTERS only */
+                SetLastError(X_ERR_SENTINEL);
+                BOOL ok = GetThreadContext(w->h, y.ctx);
+                CHECKF(ok, "GetThreadContext(CONTEXT_DEBUG_REGISTERS) failed (%lu)", GetLastError());
+                if (ok) {
+                    CHECK_MEM((BYTE *)y.ctx + sizeof(CONTEXT), snap, tail);   /* CONTEXT_EX + XSTATE chunk untouched */
+                    CHECK_EQ(y.ctx->Dr7, p.ctx->Dr7);
+                    CHECK_EQ(y.ctx->Dr0, p.ctx->Dr0);
+                    BYTE b6[32]; memset(b6, 0x6B, sizeof b6);
+                    if (memcmp(fp, b6, 32))
+                        t_note("debug-only GetThreadContext also wrote the FP area (unrequested part; not a documented contract)");
+                }
+                free(snap);
+            }
+        }
+    }
+    CHECK(xw_finish(w));
+    t_guarded_free(p.base);
+    xctx_free(&y); xw_free(w);
+}
+
+/* InitializeContext2(mask 3|AVX) gives a compacted context sized for x87/SSE/AVX only; the kernel copies the
+ * thread's AVX state into it (ntoskrnl!RtlpWriteExtendedContext -> RtlpCopyXStateChunk). */
+TEST(thread_get_into_init2_compact_context) {
+    need_init2();
+    need_avx_exec();
+    xw *w = xw_start(T_VK_YMM, 0x510B);
+    if (!w) SKIP("CreateThread failed (%lu)", GetLastError());
+    xctx x;
+    if (!xctx_new2(&x, XA_FP_ALL | XA_CONTROL | XA_XSTATE, 3 | T_XS_AVX, 1, 0)) { xw_finish(w); xw_free(w); REQUIREF(0, "InitializeContext2 failed"); }
+    t_info("init2_avx_xcomp_bv", "0x%llx", (unsigned long long)xs_comp(x.ctx));
+    DWORD err = 0;
+    int r = xw_capture(w, &x, 3 | T_XS_AVX, &err);
+    CHECKF(r == 1, "GetThreadContext into InitializeContext2(3|AVX) context: result %d error %lu", r, err);
+    if (r == 1) {
+        BOOL ok; DWORD e2;
+        CHECKF(getmask(x.ctx, &ok, &e2) & T_XS_AVX, "mask lacks AVX although YMM uppers hold a pattern");
+        DWORD l = 0;
+        BYTE *hi = (BYTE *)X.LocateXStateFeature(x.ctx, XSTATE_AVX, &l);
+        CHECKF(hi && l == 256 && in_buf(&x, hi, 256), "AVX area %p len %lu", (void *)hi, l);
+        char lbl[40];
+        for (int i = 0; hi && in_buf(&x, hi, 256) && i < t_vregs_count(T_VK_YMM); i++) {
+            snprintf(lbl, sizeof lbl, "compact ctx ymm%d upper", i);
+            CHECK_REG(lbl, hi + 16 * i, w->in.v[i] + 16, 16);
+        }
+    }
+    CHECK(xw_finish(w));
+    xctx_free(&x); xw_free(w);
+}
+
+/* Compacted InitializeContext2(mask 3) context (64-byte chunk) + request 3|AVX while the thread's YMM uppers
+ * are in use: ntoskrnl!RtlpCopyXStateChunk finds no room -> STATUS_BUFFER_OVERFLOW -> FALSE/ERROR_MORE_DATA.
+ * Hard requirement either way: nothing written past the guarded buffer and no AVX claimed without room. */
+TEST(thread_get_compact_no_room) {
+    need_init2();
+    need_avx_exec();
+    xctx small;
+    REQUIRE(xctx_new2(&small, XA_FP_ALL | XA_CONTROL | XA_XSTATE, 3, 1, 0));
+    if (!(xs_comp(small.ctx) & X_BIT63)) { xctx_free(&small); SKIP("standard XSAVE format: every XSTATE context has full size"); }
+    xw *w = xw_start(T_VK_YMM, 0x510C);
+    if (!w) { xctx_free(&small); SKIP("CreateThread failed (%lu)", GetLastError()); }
+    xctx full;
+    if (!xctx_new(&full, XA_FP_ALL | XA_CONTROL | XA_XSTATE)) { xw_finish(w); xw_free(w); xctx_free(&small); REQUIREF(0, "InitializeContext failed"); }
+    DWORD err = 0;
+    int r = xw_capture(w, &full, 3 | T_XS_AVX, &err);   /* suspends with the YMM pattern loaded */
+    CHECKF(r == 1, "sync capture: result %d error %lu", r, err);
+    if (r == 1) {
+        X_CTX_EX ex0 = *xex(small.ctx);
+        CHECK(X.SetXStateFeaturesMask(small.ctx, 3 | T_XS_AVX));
+        SetLastError(X_ERR_SENTINEL);
+        BOOL ok = GetThreadContext(w->h, small.ctx);
+        DWORD e = GetLastError();
+        t_info("compact_no_room", "ok=%d err=%lu bv=0x%llx", ok, e, (unsigned long long)xs_bv(small.ctx));
+        CHECKF(memcmp(xex(small.ctx), &ex0, sizeof ex0) == 0, "CONTEXT_EX rewritten by GetThreadContext");
+        if (ok) {
+            CHECKF(!(xs_bv(small.ctx) & T_XS_AVX), "GetThreadContext claims AVX (XSTATE_BV 0x%llx) in a chunk of %lu bytes",
+                   (unsigned long long)xs_bv(small.ctx), xex(small.ctx)->XState.Length);
+            t_note("GetThreadContext succeeded without AVX data (Windows 19041 returns ERROR_MORE_DATA)");
+        } else {
+#ifdef T_X64
+            CHECKF(e == ERROR_MORE_DATA, "error %lu want ERROR_MORE_DATA (234, STATUS_BUFFER_OVERFLOW)", e);
+#else
+            t_note("WOW64 GetThreadContext without room for AVX: error %lu", e);
+#endif
+        }
+    }
+    CHECK(xw_finish(w));
+    xctx_free(&full); xctx_free(&small); xw_free(w);
+}
+
+/* Child: XSTATE-flagged Get/SetThreadContext with a bogus CONTEXT_EX. ntoskrnl!RtlpReadExtendedContextLayout
+ * requires Legacy.Offset == -sizeof(CONTEXT), Legacy.Length >= the legacy size and the XState chunk inside All,
+ * else STATUS_INVALID_PARAMETER before anything is written; RtlpReadExtendedContext raises
+ * STATUS_DATATYPE_MISALIGNMENT (ERROR_NOACCESS 998) for a chunk that is not 64-byte aligned. */
+CHILD(bogus_ctxex) {
+    (void)argc; (void)argv;
+    xa_resolve();
+    if (!X.InitializeContext || !os_xstate()) { printf("RESULT=skip\n"); return 0; }
+    xw *w = xw_start(T_VK_XMM, 0x510D);
+    if (!w) { printf("RESULT=nothread\n"); return 0; }
+    const DWORD fl = XA_FP_ALL | XA_CONTROL | XA_XSTATE;
+    xctx s, a, b;
+    if (!xctx_new(&s, fl) || !xctx_new(&a, fl) || !xctx_new(&b, fl)) { printf("RESULT=initfail\n"); xw_finish(w); return 0; }
+    DWORD err = 0;
+    int r = xw_capture(w, &s, ~0ull, &err);
+    printf("GET=%d\n", r);
+    if (r == 1) {
+        memcpy(a.ctx, s.ctx, sizeof(CONTEXT));                 /* valid legacy part: an accepted Set cannot derail the thread */
+        memcpy(b.ctx, s.ctx, sizeof(CONTEXT));
+        memset(xex(a.ctx), 0, sizeof(X_CTX_EX));              /* V1: zeroed CONTEXT_EX */
+        BYTE *snap = (BYTE *)malloc(a.len);
+        if (snap) memcpy(snap, a.buf, a.len);
+        SetLastError(0);
+        BOOL ok = GetThreadContext(w->h, a.ctx);
+        printf("V1_RET=%d\nV1_ERR=%lu\nV1_UNCHANGED=%d\n", ok, GetLastError(), snap ? memcmp(snap, a.buf, a.len) == 0 : -1);
+        free(snap);
+        X_CTX_EX *e = xex(b.ctx);                              /* V2: chunk moved off 64-byte alignment */
+        e->XState.Offset += 8; e->XState.Length -= 8;
+        SetLastError(0);
+        ok = GetThreadContext(w->h, b.ctx);
+        printf("V2_RET=%d\nV2_ERR=%lu\n", ok, GetLastError());
+        a.ctx->ContextFlags = fl;                              /* V3: SetThreadContext with the zeroed CONTEXT_EX */
+        SetLastError(0);
+        ok = SetThreadContext(w->h, a.ctx);
+        printf("V3_RET=%d\nV3_ERR=%lu\n", ok, GetLastError());
+    }
+    fflush(stdout);
+    int fin = xw_finish(w);
+    printf("THREAD_FINISHED=%d\n", fin);
+    printf("REGS_OK=%d\n", fin && t_vregs_check(&w->out, &w->in, T_VK_XMM, 0, -1, "worker after bogus contexts") == 0);
+    printf("RESULT=done\n");
+    return 0;
+}
+
+static t_child_result g_bogus;
+static int g_bogus_ran;
+static void bogus_run(void) {
+    need_xstate_ctx();
+    if (!g_bogus_ran) {
+        REQUIREF(t_child_run("bogus_ctxex", NULL, 15000, &g_bogus), "spawn failed: error %lu", g_bogus.spawn_error);
+        g_bogus_ran = 1;
+    }
+    char v[64];
+    if (t_child_find(&g_bogus, "RESULT=", v, sizeof v) && strcmp(v, "skip") == 0) SKIP("child: XSTATE unavailable");
+}
+/* Robustness half (hard everywhere): the process and the target thread survive and keep their registers. */
+TEST(thread_bogus_context_ex_child) {
+    bogus_run();
+    const t_child_result *r = &g_bogus;
+    CHECKF(!r->timed_out, "child timed out");
+    CHECKF(r->exc_code == 0 && r->exit_code == 0, "child exit 0x%lx exception 0x%lx at 0x%llx; output:\n%s",
+           (unsigned long)r->exit_code, (unsigned long)r->exc_code, r->exc_addr, r->out);
+    char v[64];
+    REQUIREF(t_child_find(r, "GET=", v, sizeof v) && strcmp(v, "1") == 0, "worker never captured; output:\n%s", r->out);
+    CHECKF(t_child_find(r, "THREAD_FINISHED=", v, sizeof v) && strcmp(v, "1") == 0, "target thread did not finish");
+    CHECKF(t_child_find(r, "REGS_OK=", v, sizeof v) && strcmp(v, "1") == 0, "worker registers changed by bogus context calls");
+}
+/* Contract half: the bogus layouts are rejected with the pinned status. */
+TEST(thread_bogus_context_ex_rejected) {
+    bogus_run();
+    const t_child_result *r = &g_bogus;
+    char v[64];
+    REQUIREF(t_child_find(r, "GET=", v, sizeof v) && strcmp(v, "1") == 0, "worker never captured; output:\n%s", r->out);
+#ifdef T_X64   /* pinned from ntoskrnl 19041 (RtlpReadExtendedContextLayout / RtlpReadExtendedContext) */
+    wine_known_gap("Get/SetThreadContext do not validate the CONTEXT_EX layout or XSTATE chunk alignment");
+    CHECKF(t_child_find(r, "V1_RET=", v, sizeof v) && strcmp(v, "0") == 0, "GetThreadContext with zeroed CONTEXT_EX succeeded");
+    CHECKF(t_child_find(r, "V1_UNCHANGED=", v, sizeof v) && strcmp(v, "1") == 0, "rejected GetThreadContext still wrote the buffer");
+    CHECKF(t_child_find(r, "V2_RET=", v, sizeof v) && strcmp(v, "0") == 0, "GetThreadContext with a misaligned XSTATE chunk succeeded");
+    CHECKF(t_child_find(r, "V3_RET=", v, sizeof v) && strcmp(v, "0") == 0, "SetThreadContext with zeroed CONTEXT_EX succeeded");
+    CHECKF(t_child_find(r, "V1_ERR=", v, sizeof v) && strcmp(v, "87") == 0, "zeroed CONTEXT_EX: error %s want 87", v);
+    CHECKF(t_child_find(r, "V2_ERR=", v, sizeof v) && strcmp(v, "998") == 0, "misaligned chunk: error %s want 998 (STATUS_DATATYPE_MISALIGNMENT)", v);
+    CHECKF(t_child_find(r, "V3_ERR=", v, sizeof v) && strcmp(v, "87") == 0, "SetThreadContext zeroed CONTEXT_EX: error %s want 87", v);
+#else
+    /* WOW64 converts i386 contexts in wow64.dll (not in the reference corpus): record, do not pin. */
+    static const char *keys[] = { "V1_RET", "V1_ERR", "V1_UNCHANGED", "V2_RET", "V2_ERR", "V3_RET", "V3_ERR" };
+    char pre[32];
+    for (size_t k = 0; k < T_COUNTOF(keys); k++) {
+        snprintf(pre, sizeof pre, "%s=", keys[k]);
+        if (t_child_find(r, pre, v, sizeof v)) t_info(keys[k], "%s", v);
+    }
+    t_note("i386 (WOW64) bogus CONTEXT_EX results recorded only; the native x64 build pins them");
+#endif
 }
 
 /* Child: SetThreadContext with a corrupted XSAVE header (reserved bytes, unsupported XSTATE_BV bits).
