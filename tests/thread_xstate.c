@@ -464,8 +464,7 @@ static void holders_stop(holder *hs, int k, volatile LONG *stop) {
     *stop = 1;
     for (int i = 0; i < k; i++) {
         DWORD w = WaitForSingleObject(hs[i].h, 10000);
-        CHECKF(w == WAIT_OBJECT_0, "holder %d did not stop", i);
-        if (w != WAIT_OBJECT_0) TerminateThread(hs[i].h, 1);
+        if (w != WAIT_OBJECT_0) t_retire_process("thread_xstate: holder thread did not stop within 10 s (no TerminateThread)");
         CloseHandle(hs[i].h);
         CHECKF(hs[i].bad == 0 && hs[i].bad_env == 0 && hs[i].chunks > 0,
                "holder %d: %llu/%llu spin chunks with corrupted registers, %llu with changed MXCSR/FCW",
@@ -954,10 +953,9 @@ static void run_body(void *p) {
         DWORD el = GetTickCount() - tstart, rem = el < JOIN_MS ? JOIN_MS - el : 0;
         DWORD r = WaitForSingleObject(sc->w[i].h, rem);
         if (r != WAIT_OBJECT_0) {
-            /* a stuck worker would keep running into the next case: kill it */
+            /* a stuck worker would keep running into the next case and still uses sc: retire the process */
             InterlockedIncrement(&sc->hung);
-            TerminateThread(sc->w[i].h, 0xDEAD);
-            WaitForSingleObject(sc->w[i].h, 2000);
+            t_retire_process("thread_xstate: worker thread did not finish within the join budget (no TerminateThread)");
         }
     }
     sc->secs = t_qpc_sec(t0, t_qpc());
@@ -1568,7 +1566,7 @@ static void sapc_case(int emulate) {
     int hung = 0;
     unsigned long long entered = 0;
     for (int i = 0; i < started; i++) {
-        if (WaitForSingleObject(ss[i].h, 10000) != WAIT_OBJECT_0) { hung++; TerminateThread(ss[i].h, 1); WaitForSingleObject(ss[i].h, 2000); }
+        if (WaitForSingleObject(ss[i].h, 10000) != WAIT_OBJECT_0) { hung++; t_retire_process("thread_xstate: APC spinner did not finish within 10 s (no TerminateThread)"); }
         DWORD ec = 0; GetExitCodeThread(ss[i].h, &ec);
         if (emulate) CHECKF(ec != 0xDEADu, "spinner %d: NtContinue of the saved context returned (emulated APC)", i);
         CloseHandle(ss[i].h);
@@ -1858,6 +1856,14 @@ static int wait_done(tpctx *c, LONG want, DWORD ms) {
     return 1;
 }
 /* inside t_vregs_call on the case thread (main pattern live) */
+/* blocking thread-pool waits run through t_run_worker: a hang retires the process instead of wedging the case */
+static void tpw_wait_work(void *p)  { WaitForThreadpoolWorkCallbacks((PTP_WORK)p, FALSE); }
+static void tpw_wait_timer(void *p) { WaitForThreadpoolTimerCallbacks((PTP_TIMER)p, TRUE); }
+static void tpw_wait_wait(void *p)  { WaitForThreadpoolWaitCallbacks((PTP_WAIT)p, TRUE); }
+static void tpw_close_pool(void *p) { CloseThreadpool((PTP_POOL)p); }
+typedef struct tpw_unreg_arg { HANDLE hw; int ok; } tpw_unreg_arg;
+static void tpw_unreg(void *p) { tpw_unreg_arg *a = (tpw_unreg_arg *)p; a->ok = UnregisterWaitEx(a->hw, INVALID_HANDLE_VALUE) ? 1 : 0; }
+static void tpw_run(t_worker_fn fn, void *arg) { t_run_worker(fn, arg, 0, 30000, NULL); }
 static void tp_drive(void *p) {
     tpdrive *dr = (tpdrive *)p; tpctx *c = dr->c;
     switch (dr->mode) {
@@ -1876,10 +1882,10 @@ static void tp_drive(void *p) {
         PTP_WORK w = CreateThreadpoolWork(tp_work_cb, c, pe);
         if (!w) { dr->api_fail++; } else {
             for (int i = 0; i < dr->m; i++) SubmitThreadpoolWork(w);
-            WaitForThreadpoolWorkCallbacks(w, FALSE);
+            tpw_run(tpw_wait_work, w);
             CloseThreadpoolWork(w);
         }
-        if (pool) { DestroyThreadpoolEnvironment(&env); CloseThreadpool(pool); }
+        if (pool) { DestroyThreadpoolEnvironment(&env); tpw_run(tpw_close_pool, pool); }
         break;
     }
     case TPM_SIMPLE:
@@ -1897,10 +1903,10 @@ static void tp_drive(void *p) {
         if (!t) { dr->api_fail++; break; }
         ULARGE_INTEGER due; due.QuadPart = (ULONGLONG)-10000LL;     /* 1 ms relative */
         FILETIME ft; ft.dwLowDateTime = due.LowPart; ft.dwHighDateTime = due.HighPart;
-        SetThreadpoolTimer(t, &ft, 1, 0);
+        SetThreadpoolTimer(t, &ft, 10, 0);
         if (WaitForSingleObject(c->all_done, 20000) != WAIT_OBJECT_0) dr->timed_out++;
         SetThreadpoolTimer(t, NULL, 0, 0);
-        WaitForThreadpoolTimerCallbacks(t, TRUE);
+        tpw_run(tpw_wait_timer, t);
         CloseThreadpoolTimer(t);
         break;
     }
@@ -1911,7 +1917,7 @@ static void tp_drive(void *p) {
         for (int i = 0; i < dr->m; i++) { SetEvent(c->ev); if (!wait_done(c, i + 1, 5000)) { dr->timed_out++; break; } }
         c->stop_rearm = 1;
         SetThreadpoolWait(w, NULL, NULL);
-        WaitForThreadpoolWaitCallbacks(w, TRUE);
+        tpw_run(tpw_wait_wait, w);
         CloseThreadpoolWait(w);
         break;
     }
@@ -1919,7 +1925,7 @@ static void tp_drive(void *p) {
         HANDLE hw = NULL;
         if (!RegisterWaitForSingleObject(&hw, c->ev, rw_cb, c, INFINITE, WT_EXECUTEDEFAULT)) { dr->api_fail++; break; }
         for (int i = 0; i < dr->m; i++) { SetEvent(c->ev); if (!wait_done(c, i + 1, 5000)) { dr->timed_out++; break; } }
-        if (!UnregisterWaitEx(hw, INVALID_HANDLE_VALUE)) dr->api_fail++;
+        { tpw_unreg_arg ua = { hw, 0 }; tpw_run(tpw_unreg, &ua); if (!ua.ok) dr->api_fail++; }
         break;
     }
     }

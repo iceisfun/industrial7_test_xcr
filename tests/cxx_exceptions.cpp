@@ -485,9 +485,20 @@ TEST(throw_8_frames_ymm_uppers_volatile) {
            kept, zero, 10 - kept - zero);
 }
 
+struct CxRunArg { Scn *s; int avx; };
+static CxRunArg g_cx_run_arg;   /* static: a hung worker keeps using it until the process is retired */
+static void cx_run_thunk(void *p) { CxRunArg *a = (CxRunArg *)p; cx_run(a->s, a->avx); }
+/* cx_run on a bounded worker: a dispatch hang costs `ms`, not the whole watchdog (the process is retired) */
+static void cx_run_bounded(Scn *s, int avx, DWORD ms) {
+    g_cx_run_arg.s = s; g_cx_run_arg.avx = avx;
+    DWORD code = 0;
+    int r = t_run_worker(cx_run_thunk, &g_cx_run_arg, 0, ms, &code);
+    REQUIREF(r == 0, "CreateThread for the bounded cx_run worker failed (error %lu)", (unsigned long)GetLastError());
+}
+
 TEST(rethrow_same_object) {
     cx_fill(&g_s, 16, M_RETHROW, 7);
-    cx_run(&g_s, 0);
+    cx_run_bounded(&g_s, 0, 10000);
     cx_check_scn(&g_s, "after catch + throw; through 8 frames");
     CHECKF(g_s.obj_inner && g_s.obj_inner == g_s.obj_outer, "throw; rethrows the same object (%p vs %p)",
            g_s.obj_inner, g_s.obj_outer);
@@ -544,7 +555,8 @@ TEST(threadpool_callback_throw) {
         SKIP("TrySubmitThreadpoolCallback failed (error %lu)", GetLastError());
     }
     DWORD w = WaitForSingleObject(c.done, 5000);
-    REQUIREF(w == WAIT_OBJECT_0, "thread-pool callback finished within 5 s (wait=%lu)", w);
+    /* the pool callback can still use g_s and c: do not return into later cases */
+    if (w != WAIT_OBJECT_0) t_retire_process("cxx_exceptions: thread-pool callback did not finish within 5 s");
     CloseHandle(c.done);
     CHECKF(c.tid != GetCurrentThreadId(), "callback ran on a pool thread");
     cx_check_scn(&g_s, "in a thread-pool callback");

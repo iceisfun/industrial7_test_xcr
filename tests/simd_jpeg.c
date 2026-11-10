@@ -842,6 +842,7 @@ static void sj_fuzz_case(uint64_t seed, int count, int first, int nb) {
     t_info("ms", "%.0f", t_now_ms() - t0);
     CHECKF(a.mismatch == 0, "%d mutations decoded differently by some kernel set", a.mismatch);
     CHECK_EQ(a.n, count);
+    CHECKF(a.ok + a.warn > 0, "all %d mutations were rejected: the fuzz exercised no decode path", a.n);
     /* determinism: the same mutations again give the same results */
     sj_fuzz_run(seed, count < 120 ? count : 120, first, nb, &b);
     sj_fuzz_stats c;
@@ -864,7 +865,7 @@ CHILD(fuzz) {
 }
 TEST(fuzz_child_process_consistent) {
     static t_child_result r1, r2;
-    REQUIREF(t_child_run("fuzz", "77 600", 120000, &r1), "child spawn failed (error %lu)", (unsigned long)r1.spawn_error);
+    REQUIREF(t_child_run("fuzz", "77 600", 60000, &r1), "child spawn failed (error %lu)", (unsigned long)r1.spawn_error);
     CHECKF(!r1.timed_out, "fuzz child timed out");
     CHECKF(r1.exit_code == 0 && r1.exc_code == 0, "fuzz child exit 0x%lx exception 0x%lx at 0x%llx", (unsigned long)r1.exit_code,
            (unsigned long)r1.exc_code, (unsigned long long)r1.exc_addr);
@@ -872,7 +873,7 @@ TEST(fuzz_child_process_consistent) {
     CHECK(t_child_find(&r1, "FUZZ_N=", n, sizeof n) && atoi(n) == 600);
     CHECK(t_child_find(&r1, "FUZZ_MISMATCH=", mis, sizeof mis) && atoi(mis) == 0);
     CHECK(t_child_find(&r1, "FUZZ_HASH=", h1, sizeof h1));
-    REQUIRE(t_child_run("fuzz", "77 600", 120000, &r2));
+    REQUIRE(t_child_run("fuzz", "77 600", 60000, &r2));
     CHECK(r2.exit_code == 0 && t_child_find(&r2, "FUZZ_HASH=", h2, sizeof h2));
     CHECKF(!strcmp(h1, h2), "two processes produced different fuzz results: %s vs %s", h1, h2);
     /* and the same as in this process */

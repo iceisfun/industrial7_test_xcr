@@ -1570,6 +1570,8 @@ static void st_run_cfg(const st_cfg *cfg, const char *name) {
         unfinished = 0;
         for (int i = 0; i < n; i++) if (WaitForSingleObject(S->w[i].h, 3000) != WAIT_OBJECT_0) unfinished++;
     }
+    /* stuck workers still use g_S: the state must not be torn down or reused under them */
+    if (unfinished) t_retire_process("xstate_stress: worker threads did not finish within the stop deadline (shared state still in use)");
     SetThreadPriority(GetCurrentThread(), oldprio);
 
     /* results */
@@ -1935,11 +1937,11 @@ ST(scale_2x_cpus_spin_preempt, .threads = T_2XCPU, .ops = OPS_HOLDS | OPB(OP_COM
  * 2. Controller: suspend / capture oracle / set unchanged / affinity / priority / APC injection
  * ====================================================================================================== */
 ST(ctl_suspend_resume_only, .threads = 16, .ops = OPS_HOLDS | OPB(OP_COMPUTE), .yields = Y_ALL, .kind = K_MIX, .ctl = C_SUSPEND, .ms = 200)
-ST(ctl_getctx_xmm_hold, .threads = 8, .ops = OPB(OP_HOLD), .yields = YB(Y_SLEEP0), .ctl = C_GET, .ms = 200)
-ST(ctl_getctx_x87_hold, .threads = 8, .ops = OPB(OP_X87), .yields = YB(Y_SWITCH), .ctl = C_GET, .ms = 200)
-ST(ctl_getctx_mmx_hold, .threads = 8, .ops = OPB(OP_MMX), .yields = YB(Y_SWITCH), .ctl = C_GET, .ms = 200)
+ST(ctl_getctx_xmm_hold, .threads = 8, .ops = OPB(OP_HOLD), .yields = YB(Y_SLEEP0), .ctl = C_GET, .need_hold = 1, .ms = 200)
+ST(ctl_getctx_x87_hold, .threads = 8, .ops = OPB(OP_X87), .yields = YB(Y_SWITCH), .ctl = C_GET, .need_hold = 1, .ms = 200)
+ST(ctl_getctx_mmx_hold, .threads = 8, .ops = OPB(OP_MMX), .yields = YB(Y_SWITCH), .ctl = C_GET, .need_hold = 1, .ms = 200)
 ST(ctl_getctx_mixed_ops_all_yields, .threads = 16, .ops = OPS_ALL, .yields = Y_ALL, .ctl = C_GET, .ms = 250)
-ST(ctl_getctx_xstate_ymm_hold, .threads = 8, .ops = OPB(OP_HOLD), .yields = YB(Y_SLEEP0), .kind = K_YMM, .ctl = C_GETX, .ms = 200)
+ST(ctl_getctx_xstate_ymm_hold, .threads = 8, .ops = OPB(OP_HOLD), .yields = YB(Y_SLEEP0), .kind = K_YMM, .ctl = C_GETX, .need_hold = 1, .ms = 200)
 ST(ctl_getctx_xstate_xmm_uppers_clean, .threads = 8, .ops = OPS_HOLDS, .yields = YB(Y_SLEEP0) | YB(Y_SYSCALL), .kind = K_XMM, .ctl = C_GETX, .ms = 200)
 ST(ctl_getctx_xstate_mixed_kinds, .threads = 16, .ops = OPS_ALL, .yields = Y_ALL, .kind = K_MIX, .ctl = C_GETX, .ms = 250)
 ST(ctl_setctx_unchanged_xmm, .threads = 8, .ops = OPB(OP_HOLD) | OPB(OP_COMPUTE), .yields = YB(Y_SLEEP0) | YB(Y_SLEEP1), .ctl = C_GET | C_SET, .ms = 200)

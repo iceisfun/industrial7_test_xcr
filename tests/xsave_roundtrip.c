@@ -881,6 +881,10 @@ static int ptrs_unwritten(x87_ptrs a) {
            (a.fop == 0x5A5A && a.fip == (SENT64 & (sizeof(void *) == 8 ? ~0ull : 0xFFFFFFFFull)) &&
             a.fdp == (SENT64 & (sizeof(void *) == 8 ? ~0ull : 0xFFFFFFFFull)));
 }
+static int ptrs_exact(x87_ptrs got) {
+    x87_ptrs want = { PTR_FOP, PTR_FIP, PTR_FDP };
+    return ptrs_eq(got, want);
+}
 static void check_ptrs(x87_ptrs got, const char *lbl) {
     x87_ptrs want = { PTR_FOP, PTR_FIP, PTR_FDP };
     if (ptrs_strict())
@@ -895,11 +899,20 @@ TEST(x87_pointers_fxrstor_fxsave) {
     need_fxsr();
     xs_state p; st_pattern(&p, 0x1B0);
     put_legacy(g_a.b, &p); put_ptrs(g_a.b);
-    memset(g_b.b, SENT, 512);
-    xs_req q; q_init(&q);
-    q_rst(&q, Q_R1, g_a.b, 0, XR_FXRSTOR);
-    q_sav(&q, Q_S1, g_b.b, 0, XO_FXSAVE);
-    xs_run(&q, T_VK_XMM);
+    xs_req q;
+    /* an interrupt/context switch between the load and the save can legitimately rewrite the pointers on some
+     * parts (the pointer fields are not guaranteed across them): retry up to 20 times, one exact round trip suffices */
+    int tries = 0;
+    do {
+        memset(g_b.b, SENT, 512);
+        q_init(&q);
+        q_rst(&q, Q_R1, g_a.b, 0, XR_FXRSTOR);
+        q_sav(&q, Q_S1, g_b.b, 0, XO_FXSAVE);
+        xs_run(&q, T_VK_XMM);
+        tries++;
+    } while (!ptrs_exact(get_ptrs(g_b.b)) && tries < 20);
+    t_info("ptr_attempts", "%d", tries);
+    t_info("cpuid_8000_0008_ebx2_xsaveerptr", "%u", (cpu()->e8.ebx >> 2) & 1);
     check_ptrs(get_ptrs(g_b.b), "FXRSTOR -> FXSAVE");
     xs_cmp(g_b.b, 0, &p, 3 | XW_MX, 0, "FXRSTOR -> FXSAVE (with pointer fields)");
     t_info("strict", "%d (intel %d, XSaveErPtr %u)", ptrs_strict(), is_intel(), (cpu()->e8.ebx >> 2) & 1);
@@ -908,12 +921,19 @@ TEST(x87_pointers_xrstor_xsave) {
     need_xsave();
     xs_state p; st_pattern(&p, 0x1B1);
     xs_make_std(g_a.b, &p, 1); put_ptrs(g_a.b);
-    memset(g_b.b, SENT, std_size()); memset(g_c.b, SENT, 512);
-    xs_req q; q_init(&q);
-    q_rst(&q, Q_R1, g_a.b, 1, XR_XRSTOR);
-    q_sav(&q, Q_S1, g_b.b, 1, XO_XSAVE);
-    q_sav(&q, Q_S2, g_c.b, 0, XO_FXSAVE);
-    xs_run(&q, T_VK_XMM);
+    xs_req q;
+    int tries = 0;      /* retry up to 20 times (see x87_pointers_fxrstor_fxsave): one exact round trip suffices */
+    do {
+        memset(g_b.b, SENT, std_size()); memset(g_c.b, SENT, 512);
+        q_init(&q);
+        q_rst(&q, Q_R1, g_a.b, 1, XR_XRSTOR);
+        q_sav(&q, Q_S1, g_b.b, 1, XO_XSAVE);
+        q_sav(&q, Q_S2, g_c.b, 0, XO_FXSAVE);
+        xs_run(&q, T_VK_XMM);
+        tries++;
+    } while (!(ptrs_exact(get_ptrs(g_b.b)) && ptrs_exact(get_ptrs(g_c.b))) && tries < 20);
+    t_info("ptr_attempts", "%d", tries);
+    t_info("cpuid_8000_0008_ebx2_xsaveerptr", "%u", (cpu()->e8.ebx >> 2) & 1);
     check_ptrs(get_ptrs(g_b.b), "XRSTOR(x87) -> XSAVE(x87)");
     check_ptrs(get_ptrs(g_c.b), "XRSTOR(x87) -> FXSAVE");
     xs_cmp(g_b.b, 0, &p, 1, 0, "XRSTOR(x87) -> XSAVE(x87)");

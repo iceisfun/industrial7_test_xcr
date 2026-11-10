@@ -809,6 +809,7 @@ TEST(fuzz_mutations_all_tiers_agree) {
     sp_fuzz_run(1, 1500, &a);
     t_info("mutations", "%d: %d decoded, %d errors, %.0f ms", a.n, a.ok, a.err, t_now_ms() - t0);
     CHECK_EQ(a.n, 1500);
+    CHECKF(a.ok > 0, "all %d mutations were rejected: the fuzz exercised no decode path", a.n);
     CHECKF(a.mismatch == 0, "%d mutations decoded differently by some kernel set", a.mismatch);
     sp_fuzz_run(1, 1500, &b);
     CHECKF(a.agg == b.agg, "fuzz results not deterministic");
@@ -824,7 +825,7 @@ CHILD(fuzz) {
 }
 TEST(fuzz_child_process_consistent) {
     static t_child_result r1;
-    REQUIREF(t_child_run("fuzz", "77 800", 120000, &r1), "child spawn failed (error %lu)", (unsigned long)r1.spawn_error);
+    REQUIREF(t_child_run("fuzz", "77 800", 60000, &r1), "child spawn failed (error %lu)", (unsigned long)r1.spawn_error);
     CHECKF(!r1.timed_out, "fuzz child timed out");
     CHECKF(r1.exit_code == 0 && r1.exc_code == 0, "fuzz child exit 0x%lx exception 0x%lx at 0x%llx", (unsigned long)r1.exit_code,
            (unsigned long)r1.exc_code, (unsigned long long)r1.exc_addr);

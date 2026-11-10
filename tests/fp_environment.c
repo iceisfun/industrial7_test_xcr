@@ -530,7 +530,10 @@ TEST(mxcsr_mask_from_fxsave) {
     static T_ALIGN(16) uint8_t fx[512];
     unsigned raw = mxcsr_mask_raw(), m = mxcsr_mask();
     CHECKF((m & 0xFFBFu) == 0xFFBFu, "MXCSR_MASK 0x%08x lacks architectural bits (want 0xFFBF set)", m);
-    CHECKF((m & 0xFFFF0000u) == 0, "MXCSR_MASK 0x%08x has reserved bits 16-31 set", m);
+    /* bit 16 (MXCSR.FZ16-like) stays clear everywhere; AMD/Hygon Zen reports bit 17 (MXCSR.MM, misaligned SSE) writable */
+    CHECKF((m & 0x10000u) == 0, "MXCSR_MASK 0x%08x has reserved bit 16 set", m);
+    if (cpu()->is_amd) CHECKF((m & 0xFFFD0000u) == 0, "MXCSR_MASK 0x%08x has reserved bits 18-31 set (AMD: only bit 17 MM allowed)", m);
+    else CHECKF((m & 0xFFFF0000u) == 0, "MXCSR_MASK 0x%08x has reserved bits 16-31 set", m);
     for (int i = 0; i < 4; i++) {
         unsigned v = MX_DEF | MX_RC(i) | (i & 1 ? MX_FTZ : 0) | (unsigned)i;
         t_set_mxcsr(v);

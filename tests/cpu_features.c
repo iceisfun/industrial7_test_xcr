@@ -41,6 +41,12 @@
 #define OPQM(p) __asm__ volatile("" : : "r"(p) : "memory")
 
 static int is_intel(void) { return cpu()->is_intel; }
+/* Hard "invalid sub-leaf returns zeros" checks: genuine Intel hardware only. A hypervisor (CPUID.1:ECX[31]) may return
+ * arbitrary data for them. */
+static int zeros_strict(void) {
+    t_cpuid_regs r; cpuid_ex(1, 0, &r);
+    return cpu()->is_intel && !(r.ecx >> 31 & 1);
+}
 static int is_amd(void) { return cpu()->is_amd; }
 static int bit(uint32_t v, int b) { return (int)((v >> b) & 1u); }
 static t_cpuid_regs cpuidr(uint32_t leaf, uint32_t sub) { t_cpuid_regs r; cpuid_ex(leaf, sub, &r); return r; }
@@ -292,6 +298,13 @@ static T_TARGET("sha,sse4.1") int probe_sha(char *m, size_t cap) {
     if (n[3] != 11 || n[0] != 7 || n[1] != 8 || n[2] != 9) PFAIL("sha1nexte %x %x %x %x", n[0], n[1], n[2], n[3]);
     return 1;
 }
+/* RFBM that avoids components with XFD (AMX TILEDATA): saving them with an armed XFD faults (as xcr0_probe.c xp_safe_rfbm). */
+static uint64_t probe_safe_rfbm(void) {
+    uint64_t m = ~0ull & ~T_XS_AMX_STATE;
+    const t_cpu_info *c = cpu();
+    for (int i = 0; i < 64; i++) if (c->comp[i].xfd) m &= ~(1ull << i);
+    return m & c->xcr0;
+}
 static int probe_xsave(char *m, size_t cap) {
     const t_cpu_info *c = cpu();
     uint64_t x = t_xgetbv(0);
@@ -304,12 +317,13 @@ static int probe_xsave(char *m, size_t cap) {
     uint8_t *a = (uint8_t *)(((uintptr_t)raw + 63) & ~(uintptr_t)63);
     memset(a, 0, sz + 4096);
     memset(a + sz, 0xEE, 4096);
-    t_xsave(a, x);
+    uint64_t rfbm = probe_safe_rfbm();
+    t_xsave(a, rfbm);
     uint64_t bv; memcpy(&bv, a + 512, 8);
     uint32_t mx; memcpy(&mx, a + 24, 4);
     int over = 0; for (int i = 0; i < 4096; i++) if (a[sz + i] != 0xEE) { over = 1; break; }
     int ok = !(bv & ~x) && mx == t_get_mxcsr() && !over;
-    if (ok) t_xrstor(a, x);
+    if (ok) t_xrstor(a, rfbm);
     free(raw);
     if (!ok) PFAIL("xsave: XSTATE_BV=%llx (XCR0 %llx) mxcsr=%x wrote past EBX size=%d", (unsigned long long)bv, (unsigned long long)x, mx, over);
     return 1;
@@ -325,7 +339,7 @@ static int probe_xsaveopt(char *m, size_t cap) {
     if (sz < 576 || sz > sizeof g_xsaveopt_area) PFAIL("(0Dh,0) EBX size %u out of range", sz);
     uint8_t *a = g_xsaveopt_area;
     memset(a, 0, 576);
-    t_xsaveopt(a, c->xcr0);
+    t_xsaveopt(a, probe_safe_rfbm());
     uint64_t bv; memcpy(&bv, a + 512, 8);
     uint32_t mx; memcpy(&mx, a + 24, 4);
     if (bv & ~c->xcr0) PFAIL("xsaveopt XSTATE_BV %llx not subset of XCR0", (unsigned long long)bv);
@@ -339,13 +353,14 @@ static int probe_xsavec(char *m, size_t cap) {
     if (!raw) PFAIL("calloc");
     uint8_t *a = (uint8_t *)(((uintptr_t)raw + 63) & ~(uintptr_t)63);
     memset(a + sz, 0xEE, 4096);
-    t_xsavec(a, c->xcr0);
+    uint64_t rfbm = probe_safe_rfbm();
+    t_xsavec(a, rfbm);
     uint64_t bv, comp; memcpy(&bv, a + 512, 8); memcpy(&comp, a + 520, 8);
     int over = 0; for (int i = 0; i < 4096; i++) if (a[sz + i] != 0xEE) { over = 1; break; }
-    if (comp == ((1ull << 63) | c->xcr0) && !(bv & ~c->xcr0) && !over) t_xrstor(a, c->xcr0);
+    if (comp == ((1ull << 63) | rfbm) && !(bv & ~c->xcr0) && !over) t_xrstor(a, rfbm);
     free(raw);
     /* SDM XSAVEC: XCOMP_BV = 8000_0000_0000_0000H | RFBM (RFBM = XCR0 & EDX:EAX) */
-    if (comp != ((1ull << 63) | c->xcr0)) PFAIL("XCOMP_BV=%llx want %llx", (unsigned long long)comp, (unsigned long long)((1ull << 63) | c->xcr0));
+    if (comp != ((1ull << 63) | rfbm)) PFAIL("XCOMP_BV=%llx want %llx", (unsigned long long)comp, (unsigned long long)((1ull << 63) | rfbm));
     if (bv & ~c->xcr0) PFAIL("XSTATE_BV %llx not subset", (unsigned long long)bv);
     if (over) PFAIL("xsavec wrote past computed compacted size %u", sz);
     return 1;
@@ -1181,7 +1196,7 @@ TEST(leaf7_subleaves) {
     for (uint32_t s = max + 1; s < max + 4; s++) {
         t_cpuid_regs r = cpuidr(7, s);
         int z = !r.eax && !r.ebx && !r.ecx && !r.edx;
-        if (is_intel()) CHECKF(z, "leaf 7 invalid sub-leaf %u returned %08x %08x %08x %08x (SDM: all zero)", s, r.eax, r.ebx, r.ecx, r.edx);
+        if (zeros_strict()) CHECKF(z, "leaf 7 invalid sub-leaf %u returned %08x %08x %08x %08x (SDM: all zero)", s, r.eax, r.ebx, r.ecx, r.edx);
         else if (!z) t_note("leaf 7 invalid sub-leaf %u nonzero on vendor %s", s, c->vendor);
     }
     CHECK_EQ(cpuidr(7, 0).ebx, c->l7_0.ebx);
@@ -1322,7 +1337,7 @@ TEST(leafd_components) {
         int valid = (int)(all >> i & 1);
         if (!valid) {
             int z = !r.eax && !r.ebx && !r.ecx && !r.edx;
-            if (is_intel()) CHECKF(z, "(0Dh,%d) unsupported component returned %08x %08x %08x %08x (SDM: zeros)", i, r.eax, r.ebx, r.ecx, r.edx);
+            if (zeros_strict()) CHECKF(z, "(0Dh,%d) unsupported component returned %08x %08x %08x %08x (SDM: zeros)", i, r.eax, r.ebx, r.ecx, r.edx);
             else if (!z) t_note("(0Dh,%d) unsupported component nonzero: %08x %08x %08x %08x", i, r.eax, r.ebx, r.ecx, r.edx);
             continue;
         }
@@ -1362,9 +1377,9 @@ TEST(leafd_invalid_subleaves_32_63) {
         t_cpuid_regs r = cpuidr(0xD, (uint32_t)i);
         int z = !r.eax && !r.ebx && !r.ecx && !r.edx;
         if (!z) nz++;
-        if (is_intel()) CHECKF(z, "(0Dh,%d) invalid sub-leaf returned %08x %08x %08x %08x", i, r.eax, r.ebx, r.ecx, r.edx);
+        if (zeros_strict()) CHECKF(z, "(0Dh,%d) invalid sub-leaf returned %08x %08x %08x %08x", i, r.eax, r.ebx, r.ecx, r.edx);
     }
-    if (nz && !is_intel()) t_note("%d invalid 0Dh sub-leaves above 31 are nonzero (vendor %s)", nz, c->vendor);
+    if (nz && !zeros_strict()) t_note("%d invalid 0Dh sub-leaves above 31 are nonzero (vendor %s)", nz, c->vendor);
 }
 
 TEST(xcr0_architectural_rules) {
@@ -1696,8 +1711,8 @@ TEST(cpuid_consistent_across_threads) {
     for (int i = 0; i < 16; i++) { h[n] = CreateThread(NULL, 0, snap_worker, NULL, 0, NULL); if (h[n]) n++; }
     if (!n) SKIP("CreateThread failed: %lu", GetLastError());
     DWORD w = WaitForMultipleObjects((DWORD)n, h, TRUE, 20000);
-    CHECKF(w != WAIT_TIMEOUT, "workers did not finish in 20 s");
-    if (w == WAIT_TIMEOUT) for (int i = 0; i < n; i++) TerminateThread(h[i], 1);
+    /* no TerminateThread (t.h policy): a worker that does not finish retires the process */
+    if (w == WAIT_TIMEOUT) t_retire_process("cpuid_consistent_across_threads: workers did not finish in 20 s");
     for (int i = 0; i < n; i++) CloseHandle(h[i]);
     CHECKF(g_thr_bad == 0, "%ld snapshots differed on worker threads", g_thr_bad);
     t_info("threads", "%d", n);
@@ -1948,8 +1963,8 @@ TEST(pf_out_of_range_and_stable) {
 
 TEST(pf_non_x86_constants_zero) {
     if (native_is_arm()) SKIP("x86 code emulated on an ARM host: ARM PF_* constants describe the native processor");
-    /* PPC/Alpha/Itanium: 4, 5, 15; ARM: 18, 19, 24-27, 29-31, 34, 43-59 (V82_DP .. SVE_F64MM), 62 (LSE2), 64+ (SHA3, SME...) */
-    static const int arm[] = { 4, 5, 15, 18, 19, 24, 25, 26, 27, 29, 30, 31, 34, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+    /* PPC/Alpha/Itanium: 4, 5 (15 = PF_COMPARE64_EXCHANGE128 is an x86/ARM64 constant, not listed); ARM: 18, 19, 24-27, 29-31, 34, 43-59 (V82_DP .. SVE_F64MM), 62 (LSE2), 64+ (SHA3, SME...) */
+    static const int arm[] = { 4, 5, 18, 19, 24, 25, 26, 27, 29, 30, 31, 34, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
                                54, 55, 56, 57, 58, 59, 62, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80 };
     for (size_t i = 0; i < T_COUNTOF(arm); i++)
         CHECKF(pf((DWORD)arm[i]) == 0, "PF %d (PowerPC/Alpha/Itanium/ARM-only constant) is set on an x86 processor", arm[i]);
@@ -2001,10 +2016,14 @@ TEST(pf09_pae) {
     pf_vs(9, "PF_PAE_ENABLED", hw, 1, NULL);
 }
 TEST(pf10_xmmi64_sse2)      { pf_vs(10, "PF_XMMI64_INSTRUCTIONS_AVAILABLE", cpu_has(F_SSE2), 0, "sse2"); }
-TEST(pf11_sse_daz)          { pf_vs(11, "PF_SSE_DAZ_MODE_AVAILABLE", cpu_has(F_SSE) && mxcsr_daz_supported(), 0, NULL);
+/* Win10 22H2 19045.2965 oracle (AMD EPYC 7742 under KVM, x64 and x86): PF 11 reads 0 although the processor
+ * supports DAZ (MXCSR_MASK), so the constant is not published there: reverse direction is a NOTE (mode 1), a claim still must hold. */
+TEST(pf11_sse_daz)          { pf_vs(11, "PF_SSE_DAZ_MODE_AVAILABLE", cpu_has(F_SSE) && mxcsr_daz_supported(), 1, NULL);
     if (pf(11)) { unsigned old = t_get_mxcsr(); t_set_mxcsr(old | 0x40); CHECKF(t_get_mxcsr() & 0x40, "DAZ bit did not stick"); t_set_mxcsr(old); } }
 TEST(pf12_nx)               { pf_vs(12, "PF_NX_ENABLED", cpu_hw(F_NX), 1, NULL); }
 TEST(pf13_sse3)             { pf_vs(13, "PF_SSE3_INSTRUCTIONS_AVAILABLE", cpu_has(F_SSE3), 0, "sse3"); }
+/* Equality (mode 0) in an x64 process and in a 32-bit process under WOW64 (x64_proc() is true for both); on a 32-bit OS the
+ * reverse direction is only a NOTE (mode 1). */
 TEST(pf14_cmpxchg16b)       { pf_vs(14, "PF_COMPARE_EXCHANGE128", cpu_hw(F_CX16), x64_proc() ? 0 : 1, "cx16"); }
 TEST(pf17_xsave) {
     const t_cpu_info *c = cpu();

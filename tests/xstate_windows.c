@@ -808,8 +808,14 @@ TEST(ctxex_xstate_header_initial) {
     CHECK_EQ(bv, 0);
     if (comp) {
         CHECKF(comp & X_BIT63, "nonzero XCOMP_BV 0x%llx without bit 63", (unsigned long long)comp);
-        CHECKF((comp & ~X_BIT63 & ~3ull) == (en & ~3ull), "XCOMP_BV 0x%llx does not cover enabled 0x%llx",
+        /* the OS may include XCR0 user components the API does not report (PKRU/CET are never exercised on the oracle):
+         * XCOMP_BV must cover every reported enabled component and stay within enabled | XCR0 user bits */
+        uint64_t xu = cpu()->osxsave ? cpu()->xcr0 : 3, cb = comp & ~X_BIT63 & ~3ull;
+        CHECKF((en & ~3ull & ~cb) == 0, "XCOMP_BV 0x%llx does not cover enabled 0x%llx",
                (unsigned long long)comp, (unsigned long long)en);
+        CHECKF((cb & ~(en | xu)) == 0, "XCOMP_BV 0x%llx has components outside enabled 0x%llx | XCR0 0x%llx",
+               (unsigned long long)comp, (unsigned long long)en, (unsigned long long)xu);
+        if (cb != (en & ~3ull)) t_note("XCOMP_BV 0x%llx differs from the API mask 0x%llx", (unsigned long long)comp, (unsigned long long)en);
         t_note("context uses the compacted XSAVE format (XCOMP_BV=0x%llx)", (unsigned long long)comp);
     } else {
         t_note("context uses the standard XSAVE format");
@@ -2431,6 +2437,8 @@ static uint64_t thread_enabled_oracle(uint64_t *optional) {
     const t_cpu_info *c = cpu();
     uint64_t user = c->osxsave ? c->xcr0 : 3, opt = 0;
     for (int i = 2; i < 64; i++) if (((user >> i) & 1) && c->comp[i].xfd) opt |= 1ull << i;
+    /* AMX TILEDATA (18) is opt-in: TILECFG (17) then goes with it (TILECFG alone is not enabled per thread either) */
+    if (opt & (1ull << 18)) opt |= T_XS_AMX_STATE & user;
     *optional = opt;
     return user & ~opt;
 }

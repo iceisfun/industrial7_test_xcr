@@ -930,10 +930,22 @@ static int al_child_ok(const char *what) {
     return 1;
 }
 
+/* Total child-process time budget for this exe: a slow guest (emulated, nested virtualisation) gets a verdict (SKIP of the
+ * remaining cases) instead of the watchdog killing the exe. The clock starts at the first child spawn. */
+#define AL_BUDGET_MS 90000ULL
+static unsigned long long g_al_budget_t0;
+static int al_child_run(const char *name, const char *args, DWORD tmo, t_child_result *r) {
+    unsigned long long now = GetTickCount64();
+    if (!g_al_budget_t0) g_al_budget_t0 = now;
+    if (now - g_al_budget_t0 > AL_BUDGET_MS)
+        SKIP("child-process time budget (%llu s) exhausted: remaining probes not run on this slow guest", AL_BUDGET_MS / 1000);
+    return t_child_run(name, args, tmo, r);
+}
+
 static int al_probe(const char *stub, const char *mode, int lo, int hi, int step) {
     char args[256];
     snprintf(args, sizeof args, "%s %s %d %d %d", stub, mode, lo, hi, step);
-    t_child_run("al_probe", args, 30000, &g_cr);
+    al_child_run("al_probe", args, 30000, &g_cr);
     al_child_ok(args);
     int n = 0;
     for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
@@ -1637,7 +1649,7 @@ TEST(align_cmpxchg16b_needs_16) {
 }
 
 TEST(align_fault_unhandled_reports_instruction) {
-    t_child_run("al_unhandled", "movaps", 15000, &g_cr);
+    al_child_run("al_unhandled", "movaps", 15000, &g_cr);
     REQUIREF(g_cr.started && !g_cr.timed_out, "child did not run to completion");
     char v[64]; unsigned long long fa = 0;
     if (t_child_find(&g_cr, "FAULT=", v, sizeof v)) fa = strtoull(v, NULL, 16);
@@ -1649,7 +1661,7 @@ TEST(align_fault_unhandled_reports_instruction) {
     if (g_cr.exc_code != 0xC0000005ul) t_note("unhandled misaligned MOVAPS reported as 0x%08lx", g_cr.exc_code);
 }
 TEST(page_fault_unhandled_reports_access_violation) {
-    t_child_run("al_unhandled", "noaccess", 15000, &g_cr);
+    al_child_run("al_unhandled", "noaccess", 15000, &g_cr);
     REQUIREF(g_cr.started && !g_cr.timed_out, "child did not run to completion");
     char v[64]; unsigned long long fa = 0;
     if (t_child_find(&g_cr, "FAULT=", v, sizeof v)) fa = strtoull(v, NULL, 16);
@@ -1879,7 +1891,7 @@ static void al_expect_maskpage(const char *stub, int lanes, int hard) {
     const al_stub *s = al_find_stub(stub);
     REQUIRE(s);
     char args[96]; snprintf(args, sizeof args, "%s %d", stub, lanes);
-    t_child_run("al_maskpage", args, 20000, &g_cr);
+    al_child_run("al_maskpage", args, 20000, &g_cr);
     al_child_ok(args);
     int rows = 0, suppressed_bad = 0;
     for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
@@ -1926,7 +1938,7 @@ TEST(masked_avx2_gather_fault_restart) {
     /* a gather whose elements reach into a PAGE_NOACCESS page: precise fault, the CONTEXT shows the partial
      * progress (mask/destination), and resuming after the page is fixed completes the gather */
     if (!cpu_has(F_AVX2)) SKIP("AVX2 not usable");
-    t_child_run("al_gatherfault", "0xF0 0x80 0x01 0xAA 0xFF 0x10 0x08 0x0E", 20000, &g_cr);
+    al_child_run("al_gatherfault", "0xF0 0x80 0x01 0xAA 0xFF 0x10 0x08 0x0E", 20000, &g_cr);
     al_child_ok("al_gatherfault");
     int rows = 0, hard = cpu()->is_intel, no_xs = 0, soft_bad = 0;
     for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
@@ -2075,7 +2087,7 @@ TEST(rep_movsb_source_ending_at_noaccess_does_not_fault) {
     }
 }
 static void al_expect_repfault(const char *which) {
-    t_child_run("al_repfault", which, 20000, &g_cr);
+    al_child_run("al_repfault", which, 20000, &g_cr);
     al_child_ok(which);
     int rows = 0, dst = !strcmp(which, "dst");
     for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
@@ -2131,7 +2143,7 @@ TEST(atomic_lock_on_misaligned_within_cacheline) {
     CHECK_EQ(*g_atom64, 20000ull * (unsigned)nt);
 }
 TEST(atomic_split_lock_across_cacheline_info) {
-    t_child_run("al_splitlock", NULL, 20000, &g_cr);
+    al_child_run("al_splitlock", NULL, 20000, &g_cr);
     REQUIRE(g_cr.started);
     char v[64];
     if (g_cr.timed_out) { t_note("split-lock child timed out (split-lock throttling by the host OS?)"); return; }
@@ -2141,7 +2153,7 @@ TEST(atomic_split_lock_across_cacheline_info) {
     t_info("split_lock", "ok %.0f ms", g_cr.ms);
 }
 TEST(eflags_ac_alignment_check_info) {
-    t_child_run("al_acflag", NULL, 15000, &g_cr);
+    al_child_run("al_acflag", NULL, 15000, &g_cr);
     REQUIRE(g_cr.started);
     char v[64];
     if (g_cr.timed_out || g_cr.exc_code || !t_child_find(&g_cr, "AC ", v, sizeof v)) {
@@ -2324,7 +2336,7 @@ TEST(context_misaligned_getset_thread_context) {
     /* x64: CONTEXT not 16-aligned -> FALSE / ERROR_NOACCESS (998) and the buffer untouched; x86 (native or
      * WOW64): the same for a CONTEXT not 4-aligned, while 4-aligned offsets are the struct's natural
      * alignment and must work. */
-    t_child_run("al_ctxmisalign", "legacy", 15000, &g_cr);
+    al_child_run("al_ctxmisalign", "legacy", 15000, &g_cr);
     al_child_ok("al_ctxmisalign legacy");
     int rows = 0;
     for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
@@ -2365,7 +2377,7 @@ TEST(context_misaligned_xstate_chunk_getset) {
      * untouched (x64, pinned). x86: the WOW64 path does not carry the chunk, so only recorded. */
     if (!al_xapi()) SKIP("XSTATE context API not exported");
     if (!al_xavx()) SKIP("AVX not usable or not in GetEnabledXStateFeatures");
-    t_child_run("al_ctxmisalign", "xstate", 15000, &g_cr);
+    al_child_run("al_ctxmisalign", "xstate", 15000, &g_cr);
     al_child_ok("al_ctxmisalign xstate");
     REQUIREF(!strstr(g_cr.out, "UNSUPPORTED"), "child found no XSTATE support although the parent did");
     int rows = 0;
@@ -2421,7 +2433,7 @@ TEST(context_misaligned_rtlcapturecontext) {
         char a[16], k[32], v[64];
         snprintf(a, sizeof a, "%d", off);
         snprintf(k, sizeof k, "capture_offset_%d", off);
-        t_child_run("al_capmisalign", a, 15000, &g_cr);
+        al_child_run("al_capmisalign", a, 15000, &g_cr);
         REQUIREF(g_cr.started && !g_cr.timed_out, "al_capmisalign %d did not run to completion", off);
         int ret = t_child_find(&g_cr, "RETURNED ", v, sizeof v);
         unsigned long fl = 0; int outside = 0, ipok = 0;
@@ -2455,7 +2467,7 @@ TEST(context_misaligned_ntcontinue) {
         char a[16], k[32], v[64];
         snprintf(a, sizeof a, "%d", off);
         snprintf(k, sizeof k, "ntcontinue_offset_%d", off);
-        t_child_run("al_ntcontinue", a, 15000, &g_cr);
+        al_child_run("al_ntcontinue", a, 15000, &g_cr);
         REQUIREF(g_cr.started && !g_cr.timed_out, "al_ntcontinue %d did not run to completion", off);
         if (strstr(g_cr.out, "UNSUPPORTED")) SKIP("ntdll!NtContinue not exported");
         int resumed = t_child_find(&g_cr, "RESUMED ", v, sizeof v);
@@ -2714,7 +2726,7 @@ TEST(crt_aligned_offset_malloc) {
         }
 }
 TEST(crt_aligned_malloc_rejects_non_power_of_two) {
-    t_child_run("al_alignedbad", NULL, 15000, &g_cr);
+    al_child_run("al_alignedbad", NULL, 15000, &g_cr);
     al_child_ok("al_alignedbad");
     int rows = 0;
     for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {

@@ -3556,7 +3556,13 @@ static void cx_blk_set_case(int mode, int kind) {
         /* Through kernelbase an XMM register its code saved before the Set is restored to the pre-Set value on
          * return: either value honours the ABI. MXCSR / x87 CW are never saved and restored by those paths. */
         uint64_t g[16]; for (int i = 0; i < 16; i++) g[i] = direct ? ng[i] : s->a->gin[i];
-        cx_blk_check_after(s, g, NULL, nv, direct ? NULL : s->a->vin, nmx, ncw, nf, "after Set while blocked");
+        /* 32-bit code under WOW64: the nonvolatile GPRs after the Set come from the WOW64 saved slot (a real Windows 10 22H2
+         * returns the pre-Set value for ebx etc.), so either the Set or the pre-Set (loaded) value is accepted. */
+        int wow = 0;
+#ifdef T_X86
+        wow = t_env_get()->wow64;
+#endif
+        cx_blk_check_after(s, g, wow ? s->a->gin : NULL, nv, direct ? NULL : s->a->vin, nmx, ncw, nf, "after Set while blocked");
     }
     cx_blk_free(s, done);
 }
@@ -3566,11 +3572,18 @@ static void cx_blk_redirect_case(int mode) {
     char why[128];
     cx_blkst *s = cx_blk_new(mode, T_VK_XMM, 0xDE00 + (uint32_t)mode, why, sizeof why);
     if (!s) SKIP("%s", why);
-    int set_ok = 0;
+    int set_ok = 0, have_pre = 0;
+    uint64_t pre_g[16] = { 0 };
     int started = cx_blk_start(s);
     CHECKF(started, "worker did not reach the blocking call");
     if (started) {
         CONTEXT *c = cx_plain(CONTEXT_CONTROL);
+        CONTEXT *pc = cx_plain(CONTEXT_INTEGER);       /* GPRs of the blocked thread before the redirect (WOW64 alt value) */
+        if (pc && !GetThreadContext(s->h, pc)) { cx_free(pc); pc = NULL; }
+        if (pc) for (int i = 0; i < 16; i++) pre_g[i] = 0;
+        if (pc) for (size_t j = 0; j < T_COUNTOF(cxb_nvg); j++) pre_g[cxb_nvg[j]] = cx_gpr(pc, cxb_nvg[j]);
+        have_pre = pc != NULL;
+        cx_free(pc);
         if (c && GetThreadContext(s->h, c)) {
             cx_set_ip(c, (uintptr_t)cx_blk_landlab(T_VK_XMM));
 #ifdef T_X64
@@ -3595,7 +3608,11 @@ static void cx_blk_redirect_case(int mode) {
         if (s->k.landed && cxb_modes[mode].direct) {
             /* nothing ran between the load and the stub: the ABI-nonvolatile state arrives at the landing intact */
             uint64_t g[16]; for (int i = 0; i < 16; i++) g[i] = s->a->gin[i];
-            cx_blk_check_after(s, g, NULL, s->a->vin, NULL, s->a->mxcsr_in, s->a->fcw_in, NULL, "at the redirect landing");
+            int wow = 0;
+#ifdef T_X86
+            wow = t_env_get()->wow64;      /* WOW64: the saved slot may hold the pre-redirect value instead */
+#endif
+            cx_blk_check_after(s, g, wow && have_pre ? pre_g : NULL, s->a->vin, NULL, s->a->mxcsr_in, s->a->fcw_in, NULL, "at the redirect landing");
         }
         if (mode == CXB_READ_NT || mode == CXB_READ_K32) CHECK_MEM(s->buf, s->data, 16);   /* the read itself completed */
     }

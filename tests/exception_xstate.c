@@ -739,6 +739,7 @@ typedef struct xexp {
     DWORD code;              /* 0 = no exception expected */
     DWORD alt[3];            /* also accepted (NOTE) */
     int nparams;             /* -1 = not checked */
+    int params_soft;         /* NumberParameters / info[] pinned only from the 19041 decompilation: mismatch is a NOTE, the code stays hard */
     int ninfo; ULONG_PTR info[3];
     const void *addr; int addr_soft;   /* ExceptionAddress (NULL = the 'at' label) */
     const void *pc; int pc_soft;       /* context PC (NULL = the 'at' label) */
@@ -877,7 +878,10 @@ static void xh_verify(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who)
     CHECKF(rec->ExceptionRecord == NULL, "%s: nested ExceptionRecord pointer %p for a first exception", who, (void *)rec->ExceptionRecord);
     CHECKF((rec->ExceptionFlags & X_EXC_NONCONTINUABLE) == 0, "%s: hardware exception marked non-continuable (flags 0x%lx)",
            who, (unsigned long)rec->ExceptionFlags);
-    if (e->nparams >= 0)
+    if (e->nparams >= 0 && e->params_soft) {
+        if ((int)rec->NumberParameters != e->nparams && !s->quiet)
+            t_note("%s: NumberParameters %lu (decompilation-derived expectation %d)", who, (unsigned long)rec->NumberParameters, e->nparams);
+    } else if (e->nparams >= 0)
         CHECKF((int)rec->NumberParameters == e->nparams, "%s: NumberParameters %lu want %d", who,
                (unsigned long)rec->NumberParameters, e->nparams);
     else if (!s->quiet)
@@ -885,6 +889,12 @@ static void xh_verify(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who)
                (unsigned long long)(rec->NumberParameters > 0 ? rec->ExceptionInformation[0] : 0),
                (unsigned long long)(rec->NumberParameters > 1 ? rec->ExceptionInformation[1] : 0));
     for (int i = 0; i < e->ninfo; i++)
+        if (e->params_soft) {
+            if (!(rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i]) && !s->quiet)
+                t_note("%s: ExceptionInformation[%d] = 0x%llx (decompilation-derived expectation 0x%llx)", who, i,
+                       (unsigned long long)(rec->NumberParameters > (DWORD)i ? rec->ExceptionInformation[i] : 0),
+                       (unsigned long long)e->info[i]);
+        } else
         CHECKF(rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i],
                "%s: ExceptionInformation[%d] = 0x%llx want 0x%llx", who, i,
                (unsigned long long)(rec->NumberParameters > (DWORD)i ? rec->ExceptionInformation[i] : 0),
@@ -1209,7 +1219,7 @@ static void xk_prepare(const xk *k, xf *f, xexp *e) {
     } else if (!strcmp(n, "int3")) {
         e->code = XS_BREAKPOINT;
 #ifdef T_X64
-        e->nparams = 1; e->ninfo = 1; e->info[0] = 0;
+        e->nparams = 1; e->ninfo = 1; e->info[0] = 0; e->params_soft = 1;
 #endif
     } else if (!strcmp(n, "int3cd")) {
         e->code = XS_BREAKPOINT; e->addr_soft = 1; e->pc_soft = 1;
@@ -1290,7 +1300,7 @@ static const xk *sse_setup(fpe_t which, xf *f, xexp *e, int unmasked, uint32_t *
 #ifdef T_X64
         e->code = code64;
         if (which == FPE_DE) e->alt[0] = XS_FLT_DENORMAL;
-        e->nparams = 2; e->ninfo = 1; e->info[0] = 0;
+        e->nparams = 2; e->ninfo = 1; e->info[0] = 0; e->params_soft = 1;
 #else
         e->code = code32; e->alt[0] = code64; e->alt[1] = which == FPE_DE ? XS_FLT_DENORMAL : 0;
 #endif
@@ -1313,7 +1323,7 @@ static const xk *x87_setup(int ovf, xf *f, xexp *e, int unmasked) {
     if (unmasked) {
         e->code = ovf ? XS_FLT_STACK_CHECK : XS_FLT_DIVIDE_BY_ZERO;
 #ifdef T_X64
-        e->nparams = 1; e->ninfo = 1; e->info[0] = 0;
+        e->nparams = 1; e->ninfo = 1; e->info[0] = 0; e->params_soft = 1;
 #else
         e->alt[0] = XS_FLT_MULTIPLE_TRAPS; e->alt[1] = XS_FLT_MULTIPLE_FAULTS;
         if (ovf) e->alt[2] = XS_FLT_INVALID;
@@ -2384,7 +2394,7 @@ static DWORD WINAPI worker_exc(void *p) {
 }
 static void worker_case(int vk, int nthreads, int iters) {
     xs_init();
-    wk w[64]; HANDLE h[64]; int n = 0;
+    static wk w[64]; static HANDLE h[64]; int n = 0;   /* static: a timed-out worker may still write them */
     if (nthreads > 64) nthreads = 64;
     for (int i = 0; i < nthreads; i++) {
         memset(&w[i], 0, sizeof w[i]); w[i].idx = i + 1; w[i].vk = vk; w[i].iters = iters;
@@ -2394,7 +2404,7 @@ static void worker_case(int vk, int nthreads, int iters) {
     }
     if (n == 0) SKIP("CreateThread failed");
     DWORD wr = WaitForMultipleObjects((DWORD)n, h, TRUE, 30000);
-    CHECKF(wr != WAIT_TIMEOUT, "workers did not finish within 30 s");
+    if (wr == WAIT_TIMEOUT) t_retire_process("exception_xstate: isolated-exception workers did not finish within 30 s");
     long total = 0;
     for (int i = 0; i < n; i++) { CHECKF(w[i].done, "worker %d did not complete", i + 1); total += w[i].exc; CloseHandle(h[i]); }
     t_info("threads", "%d", n);
@@ -2436,7 +2446,7 @@ static DWORD WINAPI worker_fp(void *p) {
 TEST(thr_worker_fp_exceptions) {
     if (t_is_wine()) t_note("Wine: iterations with a known exception-code gap (see fp_sse_*_unmasked) replaced by ZE/IE");
     xs_init();
-    wk w[8]; HANDLE h[8]; int n = 0;
+    static wk w[8]; static HANDLE h[8]; int n = 0;   /* static: a timed-out worker may still write them */
     for (int i = 0; i < 8; i++) {
         memset(&w[i], 0, sizeof w[i]); w[i].idx = i + 1; w[i].vk = cpu_has(F_AVX) ? 32 : 16; w[i].iters = 36;
         h[n] = CreateThread(NULL, 256 * 1024, worker_fp, &w[i], 0, NULL);
@@ -2444,7 +2454,7 @@ TEST(thr_worker_fp_exceptions) {
         n++;
     }
     if (!n) SKIP("CreateThread failed");
-    CHECK(WaitForMultipleObjects((DWORD)n, h, TRUE, 30000) != WAIT_TIMEOUT);
+    if (WaitForMultipleObjects((DWORD)n, h, TRUE, 30000) == WAIT_TIMEOUT) t_retire_process("exception_xstate: fp workers did not finish within 30 s");
     for (int i = 0; i < n; i++) { CHECK(w[i].done); CloseHandle(h[i]); }
 }
 
@@ -2496,7 +2506,7 @@ TEST(child_privileged_misc) {
     }
     t_info("codes", "%s", codes);
 }
-TEST(child_xsetbv_privileged) {
+TEST(child_xsetbv_privilege_fault) {
     if (!cpu_has(F_OSXSAVE)) SKIP("OSXSAVE not set: XSETBV would be #UD, not a privilege fault");
     if (t_sde_model())   /* emulator artifact, README "Emulated validation" */
         t_expect_fail("Intel SDE (%s) emulates XSETBV without the CPL0 check: no #GP at CPL3", t_sde_model());
@@ -3058,7 +3068,7 @@ static const xk *x87_setup_fpe(fpe_t which, xf *f, xexp *e) {
     if (e->x87_st0 == 2) memcpy(f->x87exp[0], e->x87_st0_val, 10);
     e->code = code;
 #ifdef T_X64
-    e->nparams = 1; e->ninfo = 1; e->info[0] = 0;
+    e->nparams = 1; e->ninfo = 1; e->info[0] = 0; e->params_soft = 1;
 #else
     e->alt[1] = XS_FLT_MULTIPLE_TRAPS; e->alt[2] = XS_FLT_MULTIPLE_FAULTS;
     e->addr_soft = 1;
@@ -3129,7 +3139,7 @@ static void fp_avx_case(int invalid) {
     f->mxexp = 0x1F80u | bit;
 #ifdef T_X64
     e->code = invalid ? XS_FLT_INVALID : XS_FLT_DIVIDE_BY_ZERO;
-    e->nparams = 2; e->ninfo = 1; e->info[0] = 0;
+    e->nparams = 2; e->ninfo = 1; e->info[0] = 0; e->params_soft = 1;
 #else
     e->code = XS_FLT_MULTIPLE_TRAPS; e->alt[0] = invalid ? XS_FLT_INVALID : XS_FLT_DIVIDE_BY_ZERO;
 #endif
@@ -3322,7 +3332,9 @@ TEST(veh_hw_breakpoint_dr0_rf) {
     }
     if (!ok) {
         DWORD err = GetLastError();
-        TerminateThread(t, 0); CloseHandle(t);
+        ResumeThread(t);   /* let the suspended worker run out (h is on this stack) */
+        if (WaitForSingleObject(t, 15000) != WAIT_OBJECT_0) t_retire_process("exception_xstate: DR0 breakpoint worker did not finish within 15 s (no TerminateThread)");
+        CloseHandle(t);
         CHECKF(0, "Get/SetThreadContext(CONTEXT_DEBUG_REGISTERS) on a suspended thread failed (error %lu)", (unsigned long)err);
         return;
     }
@@ -3332,8 +3344,7 @@ TEST(veh_hw_breakpoint_dr0_rf) {
     }
     ResumeThread(t);
     DWORD w = WaitForSingleObject(t, 15000);
-    CHECKF(w == WAIT_OBJECT_0, "breakpoint worker did not finish (wait 0x%lx)", (unsigned long)w);
-    if (w != WAIT_OBJECT_0) TerminateThread(t, 0);
+    if (w != WAIT_OBJECT_0) t_retire_process("exception_xstate: DR0 breakpoint worker did not finish within 15 s (no TerminateThread)");
     CloseHandle(t);
     CHECKF(h.calls[0] == 1, "run 0: DR0 execute breakpoint raised %d exceptions, want 1", h.calls[0]);
     CHECKF(h.calls[1] == 1, "run 1: DR0 still armed after an RF resume: %d exceptions, want 1", h.calls[1]);

@@ -123,7 +123,7 @@ static int arch_size(int i) {
     switch (i) {
     case 2: return 256;    /* YMM_Hi128: 16 x 16 bytes */
     case 3: return 64;     /* BNDREGS: 4 x 16 */
-    case 4: return 16;     /* BNDCFGU + BNDSTATUS */
+    case 4: return 64;     /* BNDCSR: BNDCFGU + BNDSTATUS (component size 64) */
     case 5: return 64;     /* k0-k7 x 8 */
     case 6: return 512;    /* ZMM_Hi256: 16 x 32 */
     case 7: return 1024;   /* Hi16_ZMM: 16 x 64 */
@@ -1455,13 +1455,27 @@ static int run_other_exe(const char *path, const char *args, DWORD tmo, t_child_
     memset(&si, 0, sizeof si); si.cb = sizeof si;
     si.dwFlags = STARTF_USESTDHANDLES; si.hStdOutput = f; si.hStdError = f; si.hStdInput = NULL;
     memset(&pi, 0, sizeof pi);
-    BOOL ok = CreateProcessA(NULL, cmd, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+    /* kill-on-close job (as t_run_self does): grandchildren die with the sibling exe */
+    HANDLE job = CreateJobObjectA(NULL, NULL);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION li; memset(&li, 0, sizeof li);
+        li.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
+        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &li, sizeof li)) { CloseHandle(job); job = NULL; }
+    }
+    BOOL ok = CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, NULL, &si, &pi);
     CloseHandle(f);
-    if (!ok) { r->spawn_error = GetLastError(); DeleteFileA(tmp); return 0; }
+    if (!ok) { r->spawn_error = GetLastError(); DeleteFileA(tmp); if (job) CloseHandle(job); return 0; }
+    if (job && !AssignProcessToJobObject(job, pi.hProcess)) { CloseHandle(job); job = NULL; }
+    ResumeThread(pi.hThread);
     r->started = 1;
-    if (WaitForSingleObject(pi.hProcess, tmo) != WAIT_OBJECT_0) { r->timed_out = 1; TerminateProcess(pi.hProcess, 1); WaitForSingleObject(pi.hProcess, 2000); }
+    if (WaitForSingleObject(pi.hProcess, tmo) != WAIT_OBJECT_0) {
+        r->timed_out = 1;
+        if (job) TerminateJobObject(job, 1); else TerminateProcess(pi.hProcess, 1);
+        WaitForSingleObject(pi.hProcess, 2000);
+    }
     GetExitCodeProcess(pi.hProcess, &r->exit_code);
     CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+    if (job) CloseHandle(job);
     FILE *fp = fopen(tmp, "rb");
     if (fp) { r->out_len = fread(r->out, 1, sizeof r->out - 1, fp); r->out[r->out_len] = 0; fclose(fp); }
     DeleteFileA(tmp);
@@ -1510,9 +1524,10 @@ TEST(xcr0_same_in_other_architecture_process) {
         /* x87/SSE/AVX/AVX-512 (bits 0-7, the XSTATE_* features every Windows defines) must agree: both
          * processes run on the same XCR0. Optional (XFD/on-demand, e.g. AMX) components may legitimately be
          * reported differently to a WOW64 process: recorded only. */
-        CHECK_EQ(api & x.sup & 0xFF, gef() & x.sup & 0xFF);
-        if ((api ^ gef()) & x.sup & ~0xFFull)
-            t_note("optional user components reported differently: 0x%llx", (unsigned long long)((api ^ gef()) & x.sup & ~0xFFull));
+        CHECK_EQ(api & x.sup & 0x7F, gef() & x.sup & 0x7F);
+        /* bit 7 (Hi16_ZMM) and above are recorded only: a WOW64 process may be reported without them */
+        if ((api ^ gef()) & x.sup & ~0x7Full)
+            t_note("components reported differently (bit 7+): 0x%llx", (unsigned long long)((api ^ gef()) & x.sup & ~0x7Full));
         /* every reported user (XCR0) component is enabled in the other process's XCR0 as well */
         CHECKF((api & x.sup & ~v) == 0, "%s process reports XSTATE features 0x%llx outside its XCR0 0x%llx", arch,
                (unsigned long long)(api & x.sup), (unsigned long long)v);

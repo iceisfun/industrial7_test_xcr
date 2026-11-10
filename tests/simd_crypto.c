@@ -2101,6 +2101,7 @@ TEST(vaes_vpclmul_evex256_upper_registers_x64) {
 /* ---------------------------------------------------------------- faults (child processes) */
 CHILD(aes_misaligned_m128) {
     static T_ALIGN(16) uint8_t buf[64];
+    printf("MXCSR=0x%x\n", t_get_mxcsr()); fflush(stdout);   /* the child's own MXCSR (MM state) before the faulting op */
     __asm__ volatile("pxor %%xmm1, %%xmm1\n\taesenc 1(%0), %%xmm1" : : "r"(buf) : "xmm1", "memory");
     printf("NOFAULT=1\n");
     return 0;
@@ -2111,8 +2112,17 @@ CHILD(aes_aligned_m128) {
     printf("NOFAULT=1\n");
     return 0;
 }
+/* Control: a misaligned legacy-SSE movdqa is an unconditional #GP unless MXCSR.MM (AMD) is set in the child. */
+CHILD(legacy_misaligned_control) {
+    static T_ALIGN(16) uint8_t buf[64];
+    printf("MXCSR=0x%x\n", t_get_mxcsr()); fflush(stdout);
+    __asm__ volatile("movdqa 1(%0), %%xmm0" : : "r"(buf) : "xmm0", "memory");
+    printf("NOFAULT=1\n");
+    return 0;
+}
 CHILD(sha_misaligned_m128) {
     static T_ALIGN(16) uint8_t buf[64];
+    printf("MXCSR=0x%x\n", t_get_mxcsr()); fflush(stdout);   /* the child's own MXCSR (MM state) before the faulting op */
     __asm__ volatile("pxor %%xmm1, %%xmm1\n\tsha256msg1 4(%0), %%xmm1" : : "r"(buf) : "xmm1", "memory");
     printf("NOFAULT=1\n");
     return 0;
@@ -2122,7 +2132,13 @@ static t_child_result g_cr;
 #define XP_STATUS_DATATYPE_MISALIGNMENT 0x80000002u
 static void misaligned_case(const char *child, t_feature f) {
     NEED(f);
-    if (t_get_mxcsr() & (1u << 17)) SKIP("MXCSR.MM (AMD misaligned SSE mode) is set: misaligned legacy m128 operands are allowed");
+    /* the control runs in a child (the fault is in the child, so its MXCSR.MM state is what matters) */
+    REQUIREF(t_child_run("legacy_misaligned_control", "", 5000, &g_cr), "child did not start (error %lu)", g_cr.spawn_error);
+    CHECKF(!g_cr.timed_out, "control child hung");
+    if (g_cr.exc_code == 0) {
+        char mx[32] = ""; t_child_find(&g_cr, "MXCSR=", mx, sizeof mx);
+        SKIP("environment: a plain misaligned legacy movdqa does not #GP in the child (MXCSR=%s, MXCSR.MM or an emulator)", mx);
+    }
     if (cpu_has(F_AES)) {
         REQUIREF(t_child_run("aes_aligned_m128", "", 5000, &g_cr), "child did not start (error %lu)", g_cr.spawn_error);
         CHECKF(g_cr.exc_code == 0 && g_cr.exit_code == 0, "aligned control child failed: exit 0x%lx exc 0x%lx", g_cr.exit_code, g_cr.exc_code);
@@ -2131,7 +2147,7 @@ static void misaligned_case(const char *child, t_feature f) {
     CHECKF(!g_cr.timed_out, "child hung");
     if (t_sde_model() && g_cr.exc_code == 0)   /* emulator artifact (seen for SHA), README "Emulated validation" */
         t_expect_fail("Intel SDE (%s) emulates %s without the legacy-SSE alignment #GP", t_sde_model(), child);
-    CHECKF(g_cr.exc_code != 0, "misaligned legacy-SSE m128 operand did not fault (exit 0x%lx, output: %.80s)", g_cr.exit_code, g_cr.out);
+    CHECKF(g_cr.exc_code != 0, "misaligned legacy-SSE m128 operand did not fault although the movdqa control did (exit 0x%lx, output: %.80s)", g_cr.exit_code, g_cr.out);
     if (g_cr.exc_code) {
         t_info("exception_code", "0x%08lx", g_cr.exc_code);
         CHECKF(g_cr.exc_code == XP_STATUS_ACCESS_VIOLATION || g_cr.exc_code == XP_STATUS_DATATYPE_MISALIGNMENT,

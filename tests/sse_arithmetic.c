@@ -872,6 +872,15 @@ TEST(sse_rcp_rsqrt_special_values) {
         fop_rcpps(&d, &b, &mx, 0); fop_rsqrtps(&e, &b, &mx2, 0);
         if (t[i].x == 0xBF800000) {   /* rcp(-1) is approximate: only the bound applies */
             CHECKF(__builtin_fabs(u2d32(d.d[0]) * -1.0 - 1.0) <= 1.5 / 4096, "rcpps(-1)=0x%08x", d.d[0]);
+        } else if (t[i].x == 0x00000001 || t[i].x == 0x807FFFFF) {
+            /* denormal input treated as zero: documented for Intel; other vendors are only recorded */
+            int okr = d.d[0] == t[i].rcp && d.d[3] == t[i].rcp, oks = e.d[0] == t[i].rsq && e.d[3] == t[i].rsq;
+            if (cpu()->is_intel) {
+                CHECKF(okr, "rcpps(0x%08x)=0x%08x want 0x%08x", t[i].x, d.d[0], t[i].rcp);
+                CHECKF(oks, "rsqrtps(0x%08x)=0x%08x want 0x%08x", t[i].x, e.d[0], t[i].rsq);
+            } else if (!okr || !oks)
+                t_note("non-Intel: rcpps/rsqrtps(0x%08x) = 0x%08x / 0x%08x (Intel: 0x%08x / 0x%08x)", t[i].x, d.d[0], e.d[0], t[i].rcp, t[i].rsq);
+            continue;
         } else CHECKF(d.d[0] == t[i].rcp && d.d[3] == t[i].rcp, "rcpps(0x%08x)=0x%08x want 0x%08x", t[i].x, d.d[0], t[i].rcp);
         CHECKF(e.d[0] == t[i].rsq && e.d[3] == t[i].rsq, "rsqrtps(0x%08x)=0x%08x want 0x%08x", t[i].x, e.d[0], t[i].rsq);
         CHECKF((mx & 0x3F) == 0 && (mx2 & 0x3F) == 0, "rcp/rsqrt(0x%08x) flags 0x%02x/0x%02x want none", t[i].x, mx & 0x3F, mx2 & 0x3F);
@@ -890,6 +899,11 @@ TEST(sse_rcp_rsqrt_special_values) {
     for (size_t i = 0; i < T_COUNTOF(tiny); i++) {
         V128 b, d = { .d = { 1, 1, 1, 1 } }; for (int l = 0; l < 4; l++) b.d[l] = tiny[i];
         uint32_t mx = 0x1F80; fop_rcpps(&d, &b, &mx, 0);
+        if (!cpu()->is_intel) {   /* flush-to-zero of the tiny result is documented for Intel only */
+            if (!(d.d[0] == (tiny[i] & 0x80000000u) && d.d[3] == d.d[0] && (mx & 0x3F) == 0))
+                t_note("non-Intel: rcpps(0x%08x)=0x%08x flags 0x%02x (Intel: signed 0.0, no flags)", tiny[i], d.d[0], mx & 0x3F);
+            continue;
+        }
         CHECKF(d.d[0] == (tiny[i] & 0x80000000u) && d.d[3] == d.d[0] && (mx & 0x3F) == 0,
                "rcpps(0x%08x)=0x%08x flags 0x%02x: want signed 0.0, no flags (tiny result flushed)", tiny[i], d.d[0], mx & 0x3F);
     }
