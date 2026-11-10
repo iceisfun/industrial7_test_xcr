@@ -1366,12 +1366,12 @@ static void st_run_cfg(const st_cfg *cfg, const char *name) {
     if (!c.yields) c.yields = YB(Y_SLEEP0);
     if (!c.kind) c.kind = K_XMM;
     if (!c.spin) c.spin = 2000;
-    /* Emulator artifacts (README "Emulated validation"), never on real hardware: under Intel SDE, Pin hangs
-     * the whole process when the controller suspends/captures threads that also receive cross-thread user
-     * APCs (not run), and a suspending controller can stay blocked in Pin past its stop timeout. */
-    if (t_sde_model() && (c.ctl & C_APC))
-        XFAIL("Intel SDE (%s): Pin deadlocks when suspended threads also get cross-thread APCs (process hangs)",
-              t_sde_model());
+    /* Emulator artifact (README "Emulated validation"), never on real hardware: under Intel SDE a controller
+     * that keeps suspending/capturing threads which run emulated code deadlocks Pin at random (seen in
+     * ctl_suspend_resume_only and ctl_apc_injection: the whole process hangs until the run timeout; the
+     * x86 runs show "controller did not stop"). Not run there; tools/wine_run.sh covers these cases. */
+    if (t_sde_model() && c.ctl)
+        XFAIL("Intel SDE (%s): a thread-suspending controller can deadlock Pin (process hangs); not run", t_sde_model());
     st_daz();
     int avx = cpu_has(F_AVX);
     if (c.kind == K_YMM && !avx) SKIP("AVX not usable (CPUID/XCR0): YMM patterns need it");
@@ -1547,10 +1547,7 @@ static void st_run_cfg(const st_cfg *cfg, const char *name) {
 
     /* stop order: controller, timers, restore scheduling, workers */
     S->ctl_stop = 1;
-    if (hctl) { DWORD wr = WaitForSingleObject(hctl, 10000);
-        if (wr != WAIT_OBJECT_0 && t_sde_model())
-            t_expect_fail("Intel SDE (%s): the suspending controller stayed blocked inside Pin", t_sde_model());
-        CHECKF(wr == WAIT_OBJECT_0, "controller did not stop"); CloseHandle(hctl); }
+    if (hctl) { DWORD wr = WaitForSingleObject(hctl, 10000); CHECKF(wr == WAIT_OBJECT_0, "controller did not stop"); CloseHandle(hctl); }
     S->tmr_on = 0;
     if (htq) CHECKF(DeleteTimerQueueTimer(NULL, htq, INVALID_HANDLE_VALUE), "DeleteTimerQueueTimer GLE=%lu", (unsigned long)GetLastError());
     if (mmid) { tke(mmid); if (tep) tep(1); }
