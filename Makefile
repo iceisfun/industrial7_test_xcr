@@ -35,6 +35,7 @@ EXE32   := $(addprefix build/x86/,$(addsuffix .exe,$(TESTS) $(BENCHES)))
 # Version stamp (env JSON "version"): build/version.h is rewritten only when `git describe` output
 # changes, and t.o (the only user of T_VERSION) depends on it, so a new HEAD or a dirty tree re-stamps
 # every exe instead of keeping the version of the first build.
+.DEFAULT_GOAL := all   # the version.h rule below comes first; plain `make` must still build everything
 VERSION_H := build/version.h
 $(VERSION_H): FORCE
 	@mkdir -p $(@D); v='#define T_VERSION "$(VERSION)"'; \
