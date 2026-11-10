@@ -10,11 +10,14 @@
  *       scalar arithmetic and CVTSI2SS/SD, CVTSS2SD, CVTSD2SS preserve the destination's upper bits;
  *       legacy-SSE writes leave YMM[255:128] unchanged, VEX.128 writes zero it; VZEROUPPER keeps 127:0.
  *       MOVAPS/MOVDQA on a non-16-byte-aligned address raise #GP (Windows: STATUS_ACCESS_VIOLATION).
+ *       Every memory form accesses exactly its operand width (checked against a PAGE_NOACCESS page);
+ *       MASKMOVDQU stores only bytes whose mask byte has bit 7 set; PEXTRB/PEXTRD/PEXTRQ and EXTRACTPS zero-extend.
  *       FXSAVE/XSAVE store XMMi at byte 160+16*i; XSAVE sets XSTATE_BV[1] when SSE state is not in its
  *       initial configuration; XRSTOR with RFBM[1]=1, XSTATE_BV[1]=0 initialises XMM to zero (SDM 13.8).
  *   - OS contract (both architectures): the complete XMM register file and MXCSR of a thread survive
- *     preemption, other threads using XMM, demand-zero page faults, VM-exiting instructions, Suspend/Resume
- *     and Get/SetThreadContext; an exception continued from a handler resumes with the CONTEXT's XMM state
+ *     preemption, other threads using XMM, demand-zero page faults (also split 16-byte accesses), migration
+ *     between CPUs (SetThreadAffinityMask), VM-exiting instructions, Suspend/Resume and Get/SetThreadContext;
+ *     an exception continued from a handler resumes with the CONTEXT's XMM state, MXCSR and x87 CW
  *     (unchanged CONTEXT -> unchanged registers; modified CONTEXT -> modified registers).
  *     GetThreadContext (kernelbase) is a thin wrapper of NtGetContextThread (checked in the Win10 19041
  *     reference decompilation), so the XMM values reported for a suspended thread are the kernel's.
@@ -575,17 +578,18 @@ TEST(xmm_scalar_single_ops_preserve_upper) {
         char lbl[80]; snprintf(lbl, sizeof lbl, "%s (bits 127:32 of destination preserved)", c[k].n);
         v3_run(&t, c[k].f, lbl);
     }
-    /* approximations: low lane in a tolerance (SDM: |rel err| <= 1.5*2^-12), upper exact */
+    /* approximations: low lane in a tolerance, upper exact. Intel SDM bounds |rel err| <= 1.5*2^-12; the
+     * check uses 2^-11 so a vendor-specific approximation table cannot turn this lane-merge test into a FAIL. */
     set32(t.b, 0, fbits(2.0f));
     op_rcpss(t.a, t.b, t.o);
     CHECK_MEM(t.o + 4, t.a + 4, 12);
     float r; memcpy(&r, t.o, 4);
-    CHECKF(r > 0.5f * (1 - 1.5f / 4096) && r < 0.5f * (1 + 1.5f / 4096), "rcpss(2) = %.9g", r);
+    CHECKF(r > 0.5f * (1 - 1.0f / 2048) && r < 0.5f * (1 + 1.0f / 2048), "rcpss(2) = %.9g", r);
     set32(t.b, 0, fbits(4.0f));
     op_rsqrtss(t.a, t.b, t.o);
     CHECK_MEM(t.o + 4, t.a + 4, 12);
     memcpy(&r, t.o, 4);
-    CHECKF(r > 0.5f * (1 - 1.5f / 4096) && r < 0.5f * (1 + 1.5f / 4096), "rsqrtss(4) = %.9g", r);
+    CHECKF(r > 0.5f * (1 - 1.0f / 2048) && r < 0.5f * (1 + 1.0f / 2048), "rsqrtss(4) = %.9g", r);
 }
 
 TEST(xmm_scalar_double_ops_preserve_upper) {
@@ -839,6 +843,223 @@ TEST(xmm_movq2dq_movdq2q) {
                      : "=m"(q) : "r"(t.b) : "xmm2", "mm1", "memory");
     CHECK_EQ(q, get64(t.b, 0));
     CHECK_EQ(t_get_x87_tw(), 0xFFFF);
+}
+
+TEST(xmm_gpr_extract_forms) {
+    /* MOVD r32,xmm / MOVQ r64,xmm take bits 31:0 / 63:0; PEXTRB/PEXTRD/PEXTRQ/EXTRACTPS pick one lane and
+     * zero-extend into the GPR (SDM Vol.2). The source register must be unchanged afterwards. */
+    v3 t; v3_init(&t, __LINE__);
+    unsigned d32 = 0;
+    __asm__ volatile("movdqu (%2), %%xmm2\n\tmovd %%xmm2, %0\n\tmovdqu %%xmm2, (%1)"
+                     : "=&r"(d32) : "r"(t.o), "r"(t.b) : "xmm2", "memory");
+    CHECK_EQ(d32, get32(t.b, 0));
+    CHECK_REG("movd r32,xmm leaves the source register intact", t.o, t.b, 16);
+#ifdef T_X64
+    uint64_t q64 = 0;
+    __asm__ volatile("movdqu (%1), %%xmm2\n\tmovq %%xmm2, %0" : "=r"(q64) : "r"(t.b) : "xmm2");
+    CHECK_EQ(q64, get64(t.b, 0));
+#endif
+    if (!cpu_has(F_SSE41)) { t_note("SSE4.1 extract forms skipped: no SSE4.1"); return; }
+    for (int k = 0; k < 4; k++) {
+        unsigned b = 0xFFFFFFFFu, ps = 0;
+        switch (k) {
+#define PB(K, L) case K: __asm__ volatile("movdqu (%2), %%xmm2\n\tpextrb $" #L ", %%xmm2, %0\n\textractps $" #K ", %%xmm2, %1" \
+                                          : "=&r"(b), "=&r"(ps) : "r"(t.b) : "xmm2"); \
+                         CHECKF(b == t.b[L], "pextrb lane %d: 0x%x want 0x%x (zero-extended)", L, b, t.b[L]); break;
+        PB(0, 0) PB(1, 7) PB(2, 9) PB(3, 15)
+#undef PB
+        }
+        CHECKF(ps == get32(t.b, k), "extractps lane %d: 0x%x want 0x%x", k, ps, get32(t.b, k));
+    }
+#ifdef T_X64
+    uint64_t q1 = 0;
+    __asm__ volatile("movdqu (%1), %%xmm2\n\tpextrq $1, %%xmm2, %0" : "=r"(q1) : "r"(t.b) : "xmm2");
+    CHECK_EQ(q1, get64(t.b, 1));
+#endif
+}
+
+static T_NOINLINE void maskmov(const void *data, const void *mask, void *dst) {
+    /* Intel syntax MASKMOVDQU xmm1(data), xmm2(mask); destination implicit DS:[E/RDI] */
+    __asm__ volatile("movdqu (%0), %%xmm1\n\tmovdqu (%1), %%xmm2\n\tmaskmovdqu %%xmm2, %%xmm1\n\tsfence"
+                     :: "r"(data), "r"(mask), "D"(dst) : "xmm1", "xmm2", "memory");
+}
+TEST(xmm_maskmovdqu_byte_select) {
+    /* SDM: byte i is stored iff bit 7 of mask byte i is set; unselected bytes are not written. */
+    __attribute__((aligned(16))) uint8_t data[16], mask[16], buf[48], want[48];
+    t_pattern_reg(data, 16, __LINE__, 1);
+    static const char *names[] = { "all selected", "none selected", "alternating", "only bit7 counts", "single byte 15" };
+    for (int m = 0; m < 5; m++) {
+        for (int i = 0; i < 16; i++) {
+            switch (m) {
+            case 0: mask[i] = 0x80; break;
+            case 1: mask[i] = 0x00; break;
+            case 2: mask[i] = (i & 1) ? 0xFF : 0x00; break;
+            case 3: mask[i] = (i % 3 == 0) ? 0x80 : 0x7F; break;
+            default: mask[i] = i == 15 ? 0x80 : 0x7F; break;
+            }
+        }
+        memset(buf, 0xCC, sizeof buf);
+        memcpy(want, buf, sizeof want);
+        for (int i = 0; i < 16; i++) if (mask[i] & 0x80) want[16 + i] = data[i];
+        maskmov(data, mask, buf + 16);
+        if (!CHECK_MEM(buf, want, sizeof buf)) t_note("maskmovdqu mask: %s", names[m]);
+    }
+    /* unaligned destination */
+    for (int i = 0; i < 16; i++) mask[i] = (i * 5 % 7 < 3) ? 0x80 : 0;
+    memset(buf, 0xCC, sizeof buf); memcpy(want, buf, sizeof want);
+    for (int i = 0; i < 16; i++) if (mask[i] & 0x80) want[19 + i] = data[i];
+    maskmov(data, mask, buf + 19);
+    CHECK_MEM(buf, want, sizeof buf);
+}
+
+/* --- page edges: every memory form touches exactly its operand width ---------------------------------
+ * A form that reads or writes even one byte more than its architectural width faults on the PAGE_NOACCESS
+ * page that follows the buffer (t_guarded_alloc). No fault is expected, so these run in-process: an
+ * unexpected fault becomes a CRASH result. LDDQU is deliberately absent: the SDM allows it to fetch an
+ * aligned 32-byte block. */
+#define XR_EDGE_LD(fname, insn) \
+    static T_NOINLINE void fname(const void *pre, const void *m, void *o) { \
+        __asm__ volatile("movdqu (%0), %%xmm1\n\t" insn "\n\tmovdqu %%xmm1, (%2)\n\t" \
+                         :: "r"(pre), "r"(m), "r"(o) : "xmm1", "memory"); }
+XR_EDGE_LD(edge_movd,   "movd (%1), %%xmm1")
+XR_EDGE_LD(edge_movss,  "movss (%1), %%xmm1")
+XR_EDGE_LD(edge_movq,   "movq (%1), %%xmm1")
+XR_EDGE_LD(edge_movsd,  "movsd (%1), %%xmm1")
+XR_EDGE_LD(edge_movhps, "movhps (%1), %%xmm1")
+XR_EDGE_LD(edge_movlps, "movlps (%1), %%xmm1")
+XR_EDGE_LD(edge_movhpd, "movhpd (%1), %%xmm1")
+XR_EDGE_LD(edge_movlpd, "movlpd (%1), %%xmm1")
+XR_EDGE_LD(edge_movdqu, "movdqu (%1), %%xmm1")
+XR_EDGE_LD(edge_movups, "movups (%1), %%xmm1")
+XR_EDGE_LD(edge_pinsrw, "pinsrw $5, (%1), %%xmm1")
+XR_EDGE_LD(edge_addss,  "addss (%1), %%xmm1")
+XR_EDGE_LD(edge_addsd,  "addsd (%1), %%xmm1")
+XR_EDGE_LD(edge_movddup, "movddup (%1), %%xmm1")
+XR_EDGE_LD(edge_pinsrb, "pinsrb $15, (%1), %%xmm1")
+XR_EDGE_LD(edge_insertps, "insertps $0x20, (%1), %%xmm1")
+XR_EDGE_LD(edge_pmovzxbw, "pmovzxbw (%1), %%xmm1")
+#define XR_EDGE_ST(fname, insn) \
+    static T_NOINLINE void fname(const void *src, void *m) { \
+        __asm__ volatile("movdqu (%0), %%xmm1\n\t" insn "\n\t" :: "r"(src), "r"(m) : "xmm1", "memory"); }
+XR_EDGE_ST(edst_movd,   "movd %%xmm1, (%1)")
+XR_EDGE_ST(edst_movss,  "movss %%xmm1, (%1)")
+XR_EDGE_ST(edst_movq,   "movq %%xmm1, (%1)")
+XR_EDGE_ST(edst_movsd,  "movsd %%xmm1, (%1)")
+XR_EDGE_ST(edst_movlps, "movlps %%xmm1, (%1)")
+XR_EDGE_ST(edst_movhps, "movhps %%xmm1, (%1)")
+XR_EDGE_ST(edst_movlpd, "movlpd %%xmm1, (%1)")
+XR_EDGE_ST(edst_movhpd, "movhpd %%xmm1, (%1)")
+XR_EDGE_ST(edst_movdqu, "movdqu %%xmm1, (%1)")
+XR_EDGE_ST(edst_movups, "movups %%xmm1, (%1)")
+XR_EDGE_ST(edst_pextrw, "pextrw $3, %%xmm1, (%1)")
+XR_EDGE_ST(edst_pextrb, "pextrb $9, %%xmm1, (%1)")
+XR_EDGE_ST(edst_extractps, "extractps $2, %%xmm1, (%1)")
+
+TEST(xmm_page_edge_exact_width_access) {
+    void *base = NULL;
+    uint8_t *p = (uint8_t *)t_guarded_alloc(8192, &base);
+    if (!p) SKIP("guarded allocation failed: %lu", GetLastError());
+    uint8_t *end = p + 8192;
+    __attribute__((aligned(16))) uint8_t pre[16], o[16], e[16];
+    t_pattern_reg(pre, 16, __LINE__, 1);
+    set32(pre, 0, fbits(1.5f));
+    for (int i = 0; i < 8192; i++) p[i] = (uint8_t)(i * 13 + 7);
+    set32(end - 4, 0, fbits(2.25f));     /* scalar single operand at the very end */
+    static const struct { const char *n; void (*f)(const void *, const void *, void *); int w, kind, feat; } ld[] = {
+        /* kind: 0 zero-extend into low w bytes, 1 replace high 8, 2 replace low 8, 3 full 16,
+         *       4 pinsrw word 5, 5 addss, 6 addsd, 7 movddup, 8 pinsrb byte 15, 9 insertps lane 2, 10 pmovzxbw */
+        { "movd m32", edge_movd, 4, 0, 0 }, { "movss m32", edge_movss, 4, 0, 0 },
+        { "movq m64", edge_movq, 8, 0, 0 }, { "movsd m64", edge_movsd, 8, 0, 0 },
+        { "movhps m64", edge_movhps, 8, 1, 0 }, { "movhpd m64", edge_movhpd, 8, 1, 0 },
+        { "movlps m64", edge_movlps, 8, 2, 0 }, { "movlpd m64", edge_movlpd, 8, 2, 0 },
+        { "movdqu m128", edge_movdqu, 16, 3, 0 }, { "movups m128", edge_movups, 16, 3, 0 },
+        { "pinsrw m16", edge_pinsrw, 2, 4, 0 }, { "addss m32", edge_addss, 4, 5, 0 }, { "addsd m64", edge_addsd, 8, 6, 0 },
+        { "movddup m64", edge_movddup, 8, 7, F_SSE3 }, { "pinsrb m8", edge_pinsrb, 1, 8, F_SSE41 },
+        { "insertps m32", edge_insertps, 4, 9, F_SSE41 }, { "pmovzxbw m64", edge_pmovzxbw, 8, 10, F_SSE41 },
+    };
+    for (size_t k = 0; k < T_COUNTOF(ld); k++) {
+        if (ld[k].feat && !cpu_has((t_feature)ld[k].feat)) { t_note("%s skipped: feature absent", ld[k].n); continue; }
+        const uint8_t *m = end - ld[k].w;
+        if (ld[k].kind == 6) set64((uint8_t *)end - 8, 0, dbits(2.25));
+        memcpy(e, pre, 16);
+        switch (ld[k].kind) {
+        case 0: memset(e, 0, 16); memcpy(e, m, (size_t)ld[k].w); break;
+        case 1: memcpy(e + 8, m, 8); break;
+        case 2: memcpy(e, m, 8); break;
+        case 3: memcpy(e, m, 16); break;
+        case 4: memcpy(e + 10, m, 2); break;
+        case 5: set32(e, 0, fbits(1.5f + 2.25f)); break;
+        case 6: { __attribute__((aligned(16))) uint8_t pd[16]; memcpy(pd, pre, 16); set64(pd, 0, dbits(1.25));
+                  memcpy(e, pd, 16); set64(e, 0, dbits(1.25 + 2.25));
+                  memset(o, 0xCC, 16); ld[k].f(pd, m, o);
+                  char lbl[80]; snprintf(lbl, sizeof lbl, "%s ending at a guard page", ld[k].n);
+                  CHECK_REG(lbl, o, e, 16);
+                  set32(end - 4, 0, fbits(2.25f));
+                  continue; }
+        case 7: memcpy(e, m, 8); memcpy(e + 8, m, 8); break;
+        case 8: e[15] = m[0]; break;
+        case 9: memcpy(e + 8, m, 4); break;
+        default: for (int i = 0; i < 8; i++) { e[2 * i] = m[i]; e[2 * i + 1] = 0; } break;
+        }
+        memset(o, 0xCC, 16);
+        ld[k].f(pre, m, o);
+        char lbl[80]; snprintf(lbl, sizeof lbl, "%s ending at a guard page", ld[k].n);
+        CHECK_REG(lbl, o, e, 16);
+    }
+    static const struct { const char *n; void (*f)(const void *, void *); int w, src_off, feat; } st[] = {
+        { "movd m32", edst_movd, 4, 0, 0 }, { "movss m32", edst_movss, 4, 0, 0 },
+        { "movq m64", edst_movq, 8, 0, 0 }, { "movsd m64", edst_movsd, 8, 0, 0 },
+        { "movlps m64", edst_movlps, 8, 0, 0 }, { "movhps m64", edst_movhps, 8, 8, 0 },
+        { "movlpd m64", edst_movlpd, 8, 0, 0 }, { "movhpd m64", edst_movhpd, 8, 8, 0 },
+        { "movdqu m128", edst_movdqu, 16, 0, 0 }, { "movups m128", edst_movups, 16, 0, 0 },
+        { "pextrw m16", edst_pextrw, 2, 6, F_SSE41 }, { "pextrb m8", edst_pextrb, 1, 9, F_SSE41 },
+        { "extractps m32", edst_extractps, 4, 8, F_SSE41 },
+    };
+    __attribute__((aligned(16))) uint8_t src[16], before[32];
+    t_pattern_reg(src, 16, __LINE__, 2);
+    for (size_t k = 0; k < T_COUNTOF(st); k++) {
+        if (st[k].feat && !cpu_has((t_feature)st[k].feat)) { t_note("%s skipped: feature absent", st[k].n); continue; }
+        memset(end - 32, 0xA5, 32);
+        memcpy(before, end - 32, 32);
+        memcpy(before + 32 - st[k].w, src + st[k].src_off, (size_t)st[k].w);
+        st[k].f(src, end - st[k].w);
+        char lbl[80]; snprintf(lbl, sizeof lbl, "%s store ending at a guard page (and nothing below it)", st[k].n);
+        CHECK_REG(lbl, end - 32, before, 32);
+    }
+    t_guarded_free(base);
+}
+
+TEST(xmm_split_page_access_fresh_pages) {
+    /* 16-byte unaligned accesses straddling the boundary of two committed pages, the first touch of each
+     * page being the split access itself (demand-zero faults restarted in the middle of an XMM access). */
+    __attribute__((aligned(16))) uint8_t src[16], o[16], z[16];
+    memset(z, 0, 16);
+    int bad = 0;
+    for (int off = 1; off < 16; off++) {
+        uint8_t *mem = (uint8_t *)VirtualAlloc(NULL, 8192, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (!mem) SKIP("VirtualAlloc failed: %lu", GetLastError());
+        uint8_t *a = mem + 4096 - off;
+        /* load first (both pages untouched: reads must see zeros), then store, then reload */
+        memset(o, 0xCC, 16);
+        __asm__ volatile("pcmpeqd %%xmm3, %%xmm3\n\tmovdqu (%1), %%xmm3\n\tmovdqu %%xmm3, (%0)" :: "r"(o), "r"(a) : "xmm3", "memory");
+        bad += memcmp(o, z, 16) != 0;
+        t_pattern_reg(src, 16, (uint32_t)(__LINE__ + off), 3);
+        __asm__ volatile("movdqu (%0), %%xmm4\n\tmovups %%xmm4, (%1)" :: "r"(src), "r"(a) : "xmm4", "memory");
+        memset(o, 0xCC, 16);
+        __asm__ volatile("movups (%1), %%xmm5\n\tmovdqu %%xmm5, (%0)" :: "r"(o), "r"(a) : "xmm5", "memory");
+        if (memcmp(o, src, 16)) { bad++; CHECK_MEM(o, src, 16); }
+        bad += mem[4096 - off - 1] != 0 || mem[4096 - off + 16] != 0;
+        VirtualFree(mem, 0, MEM_RELEASE);
+        /* store first onto fresh pages */
+        mem = (uint8_t *)VirtualAlloc(NULL, 8192, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (!mem) SKIP("VirtualAlloc failed: %lu", GetLastError());
+        a = mem + 4096 - off;
+        __asm__ volatile("movdqu (%0), %%xmm6\n\tmovdqu %%xmm6, (%1)" :: "r"(src), "r"(a) : "xmm6", "memory");
+        if (memcmp(a, src, 16)) { bad++; CHECK_MEM(a, src, 16); }
+        bad += mem[4096 - off - 1] != 0 || mem[4096 - off + 16] != 0;
+        VirtualFree(mem, 0, MEM_RELEASE);
+    }
+    CHECKF(bad == 0, "%d split-page XMM access mismatches", bad);
 }
 
 /* ======================================================================================
@@ -1121,8 +1342,10 @@ static int spinners_start(spinner *s, int n, volatile long *stop, int pin, uint3
 static int spinners_join(spinner *s, int n, volatile long *stop, const char *label) {
     InterlockedExchange((volatile LONG *)stop, 1);
     int hung = 0;
+    DWORD t0 = GetTickCount();   /* one 10 s budget for all threads, not 10 s each */
     for (int i = 0; i < n; i++) {
-        if (WaitForSingleObject(s[i].h, 10000) != WAIT_OBJECT_0) hung++;
+        DWORD el = GetTickCount() - t0, left = el < 10000 ? 10000 - el : 0;
+        if (WaitForSingleObject(s[i].h, left) != WAIT_OBJECT_0) hung++;
         CloseHandle(s[i].h);
     }
     CHECKF(hung == 0, "%d spinner threads did not finish", hung);
@@ -1168,6 +1391,42 @@ TEST(xmm_preempt_16_threads_one_cpu) {
 
 TEST(xmm_preempt_64_threads_unpinned) {
     spin_group_case(64, 0, 400, 400, "after 64 threads oversubscribed");
+}
+
+TEST(xmm_preempt_256_threads_unpinned) {
+    spin_group_case(256, 0, 300, 1200, "after 256 threads oversubscribed");
+}
+
+/* Migration: the spinner's affinity is moved across every CPU of the process while it holds XMM state
+ * (no call in between). The kernel must carry the register file and MXCSR to the new processor. */
+static int process_cpus(int *cpus, int cap) {
+    DWORD_PTR pm = 0, sm = 0;
+    int n = 0;
+    if (!GetProcessAffinityMask(GetCurrentProcess(), &pm, &sm)) return 0;
+    for (int i = 0; i < (int)(sizeof pm * 8) && n < cap; i++) if (pm >> i & 1) cpus[n++] = i;
+    return n;
+}
+TEST(xmm_migration_across_cpus_spinner) {
+    int cpus[64];
+    int n = process_cpus(cpus, 64);
+    if (n < 2) SKIP("fewer than 2 CPUs in the process affinity mask (%d)", n);
+    spinner *s = spinners_alloc(2);
+    REQUIRE(s != NULL);
+    volatile long stop = 0;
+    int started = spinners_start(s, 2, &stop, -1, 1300);
+    if (started < 1) { VirtualFree(s, 0, MEM_RELEASE); SKIP("could not create threads"); }
+    int hops = 0, refused = 0;
+    for (int i = 0; i < 64; i++) {
+        for (int k = 0; k < started; k++) {
+            DWORD_PTR m = (DWORD_PTR)1 << cpus[(i + k) % n];   /* the two spinners chase each other */
+            if (SetThreadAffinityMask(s[k].h, m)) hops++; else refused++;
+        }
+        Sleep(2);
+    }
+    spinners_join(s, started, &stop, "after hopping across all CPUs of the process");
+    CHECKF(hops > 0, "SetThreadAffinityMask refused every hop (%d refused, last error %lu)", refused, GetLastError());
+    t_info("migration", "%d affinity hops over %d CPUs (%d refused)", hops, n, refused);
+    VirtualFree(s, 0, MEM_RELEASE);
 }
 
 TEST(xmm_preempt_spin_while_main_yields) {
@@ -1358,6 +1617,11 @@ static int g_exc_modify;
 static volatile LONG g_exc_hits;
 static DWORD g_exc_code, g_exc_flags;
 static int g_exc_ctxbad = -1;
+static unsigned g_exc_ctxmx = 0xFFFFFFFFu, g_exc_ctxcw = 0xFFFFFFFFu;
+/* non-default FP environment held across the fault: MXCSR RC=toward zero + FTZ, all exceptions masked;
+ * x87 CW RC=truncate, PC=53 bit, all masked. Both must come back unchanged after the handler continues. */
+#define XR_EXC_MXCSR 0xFF80u
+#define XR_EXC_X87CW 0x0E7Fu
 static t_vregs g_exc_in, g_exc_mod;
 
 static void ctx_set_pc(CONTEXT *c, uintptr_t pc) {
@@ -1385,6 +1649,12 @@ static LONG CALLBACK exc_veh(EXCEPTION_POINTERS *ep) {
         g_exc_code = code;
         g_exc_flags = c->ContextFlags;
         if (ctx_has_xmm(c)) {
+            g_exc_ctxmx = ctx_mxcsr(c);
+#ifdef T_X64
+            g_exc_ctxcw = c->FltSave.ControlWord;
+#else
+            { uint16_t fcw; memcpy(&fcw, c->ExtendedRegisters, 2); g_exc_ctxcw = fcw; }   /* FXSAVE image FCW */
+#endif
             g_exc_ctxbad = 0;
             for (int i = 0; i < NX; i++) g_exc_ctxbad += memcmp(ctx_xmm(c, i), g_exc_in.v[i], 16) != 0;
         }
@@ -1404,7 +1674,12 @@ CHILD(xmm_exc) {
     PVOID h = AddVectoredExceptionHandler(1, exc_veh);
     if (!h) return 4;
     t_vregs out;
+    t_set_x87_cw(XR_EXC_X87CW);
+    t_set_mxcsr(XR_EXC_MXCSR);
     t_vregs_call(T_VK_XMM, &g_exc_in, &out, g_ek->stub, NULL);
+    unsigned mx_after = t_get_mxcsr(), cw_after = t_get_x87_cw();
+    t_set_mxcsr(0x1F80);
+    t_set_x87_cw(0x027F);
     RemoveVectoredExceptionHandler(h);
     const t_vregs *want = g_exc_modify ? &g_exc_mod : &g_exc_in;
     int bad = 0;
@@ -1414,8 +1689,9 @@ CHILD(xmm_exc) {
         char a[80], b[80];
         printf("BAD xmm%d got %s want %s\n", i, t_hex_lanes(a, sizeof a, out.v[i], 16, 8), t_hex_lanes(b, sizeof b, want->v[i], 16, 8));
     }
-    printf("XR_RESULT hits=%ld code=0x%08lx ctxflags=0x%08lx ctxbad=%d outbad=%d\n",
-           (long)g_exc_hits, (unsigned long)g_exc_code, (unsigned long)g_exc_flags, g_exc_ctxbad, bad);
+    printf("XR_RESULT hits=%ld code=0x%08lx ctxflags=0x%08lx ctxbad=%d outbad=%d mx=0x%x cw=0x%x ctxmx=0x%x ctxcw=0x%x\n",
+           (long)g_exc_hits, (unsigned long)g_exc_code, (unsigned long)g_exc_flags, g_exc_ctxbad, bad,
+           mx_after, cw_after, g_exc_ctxmx, g_exc_ctxcw);
     fflush(stdout);
     return 0;
 }
@@ -1434,7 +1710,9 @@ static void exc_case(const char *kind, int modify) {
         return;
     }
     long hits = 0; unsigned long code = 0, flags = 0; int ctxbad = -1, outbad = -1;
-    REQUIRE(sscanf(line, "hits=%ld code=0x%lx ctxflags=0x%lx ctxbad=%d outbad=%d", &hits, &code, &flags, &ctxbad, &outbad) == 5);
+    unsigned mx = 0, cw = 0, ctxmx = 0, ctxcw = 0;
+    REQUIRE(sscanf(line, "hits=%ld code=0x%lx ctxflags=0x%lx ctxbad=%d outbad=%d mx=0x%x cw=0x%x ctxmx=0x%x ctxcw=0x%x",
+                   &hits, &code, &flags, &ctxbad, &outbad, &mx, &cw, &ctxmx, &ctxcw) == 9);
     CHECK_EQ(r.exit_code, 0);
     CHECK_EQ(hits, 1);
     CHECKF(code == ek->code, "exception code 0x%08lx want 0x%08lx", code, (unsigned long)ek->code);
@@ -1444,7 +1722,12 @@ static void exc_case(const char *kind, int modify) {
         t_note("exception CONTEXT has no XMM state (ContextFlags 0x%lx): context comparison not possible", flags);
     } else {
         CHECKF(ctxbad == 0, "%d XMM registers in the exception CONTEXT differ from the live values", ctxbad);
+        CHECKF((ctxmx & ~0x3Fu) == XR_EXC_MXCSR, "exception CONTEXT MXCSR 0x%x want 0x%x (status flags ignored)", ctxmx, XR_EXC_MXCSR);
+        CHECKF((ctxcw & 0x1F3F) == (XR_EXC_X87CW & 0x1F3F), "exception CONTEXT x87 CW 0x%x want 0x%x", ctxcw, XR_EXC_X87CW);
     }
+    /* the thread's FP environment is part of the CONTEXT that NtContinue restores */
+    CHECKF((mx & ~0x3Fu) == XR_EXC_MXCSR, "MXCSR after continuing 0x%x want 0x%x (status flags ignored)", mx, XR_EXC_MXCSR);
+    CHECKF((cw & 0x1F3F) == (XR_EXC_X87CW & 0x1F3F), "x87 control word after continuing 0x%x want 0x%x", cw, XR_EXC_X87CW);
     CHECKF(outbad == 0, "%d XMM registers wrong after continuing (%s)\n%s", outbad,
            modify ? "want the values the handler wrote into the CONTEXT" : "want the values at the fault", r.out);
 }
@@ -1707,6 +1990,33 @@ TEST(xmm_abi_user_apc_from_other_thread) {
     GetExitCodeThread(t, &ec);
     CHECK_EQ(ec, 0);
     CloseHandle(t); CloseHandle(c.self); CloseHandle(c.ready);
+}
+
+/* the calling thread moves itself across CPUs inside the call */
+typedef struct { int n, hops, cur_ok, cur_bad; int cpus[64]; } mig_ctx;
+static void fn_self_migrate(void *a) {
+    mig_ctx *m = (mig_ctx *)a;
+    DWORD_PTR prev = 0;
+    for (int i = 0; i < 4 * m->n && i < 256; i++) {
+        int cpu = m->cpus[i % m->n];
+        DWORD_PTR old = SetThreadAffinityMask(GetCurrentThread(), (DWORD_PTR)1 << cpu);
+        if (!old) continue;
+        if (!prev) prev = old;
+        m->hops++;
+        /* documented: a thread whose affinity excludes its current CPU is moved before it runs again */
+        if (GetCurrentProcessorNumber() == (DWORD)cpu) m->cur_ok++; else m->cur_bad++;
+        clobber_xmm((uint32_t)i);
+    }
+    if (prev) SetThreadAffinityMask(GetCurrentThread(), prev);
+}
+TEST(xmm_abi_self_migration_across_cpus) {
+    static mig_ctx m;
+    memset(&m, 0, sizeof m);
+    m.n = process_cpus(m.cpus, 64);
+    if (m.n < 2) SKIP("fewer than 2 CPUs in the process affinity mask (%d)", m.n);
+    run_abi(fn_self_migrate, &m, __LINE__, "after the thread migrated itself across all CPUs");
+    CHECK(m.hops > 0);
+    t_info("self_migration", "%d hops, on the requested CPU afterwards %d, elsewhere %d", m.hops, m.cur_ok, m.cur_bad);
 }
 
 /* thread pool */
