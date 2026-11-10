@@ -8,7 +8,7 @@ RUN   avx_feature_report
   INFO ymm_state_enabled = 1
 PASS  avx_feature_report (0.3 ms)
 RUN   avx_fp_packed_vs_scalar_sse
-PASS  avx_fp_packed_vs_scalar_sse (27.8 ms)
+PASS  avx_fp_packed_vs_scalar_sse (28.4 ms)
 RUN   avx_mxcsr_rounding_known_answers
 PASS  avx_mxcsr_rounding_known_answers (0.0 ms)
 RUN   avx_mxcsr_exception_flags_daz_ftz
@@ -16,11 +16,11 @@ PASS  avx_mxcsr_exception_flags_daz_ftz (0.0 ms)
 RUN   avx_nan_propagation_rules
 PASS  avx_nan_propagation_rules (0.0 ms)
 RUN   avx_addsub_hadd_hsub_in_lane
-PASS  avx_addsub_hadd_hsub_in_lane (1.0 ms)
+PASS  avx_addsub_hadd_hsub_in_lane (0.9 ms)
 RUN   avx_dpps_dppd_all_imm
 PASS  avx_dpps_dppd_all_imm (0.4 ms)
 RUN   avx_vround_all_imm_modes
-PASS  avx_vround_all_imm_modes (1.3 ms)
+PASS  avx_vround_all_imm_modes (1.4 ms)
 RUN   avx_rcp_rsqrt_error_bound
   INFO rcpps_worst_rel_err_x2^12 = 1.2244
   INFO rsqrtps_worst_rel_err_x2^12 = 1.2889
@@ -28,7 +28,7 @@ PASS  avx_rcp_rsqrt_error_bound (0.7 ms)
 RUN   avx_conversions_all_rounding_modes
 PASS  avx_conversions_all_rounding_modes (2.5 ms)
 RUN   avx_cmp_32_predicates_and_invalid_flag
-PASS  avx_cmp_32_predicates_and_invalid_flag (0.0 ms)
+PASS  avx_cmp_32_predicates_and_invalid_flag (0.1 ms)
 RUN   avx_comis_ucomis_flags
 PASS  avx_comis_ucomis_flags (0.0 ms)
 RUN   avx_fp_logic_bitwise
@@ -50,13 +50,13 @@ PASS  avx_insert_extract_f128 (0.0 ms)
 RUN   avx2_insert_extract_i128
 PASS  avx2_insert_extract_i128 (0.0 ms)
 RUN   avx_vperm2f128_vpermil_imm_all
-PASS  avx_vperm2f128_vpermil_imm_all (2.0 ms)
+PASS  avx_vperm2f128_vpermil_imm_all (2.1 ms)
 RUN   avx_vshufps_vshufpd_vblend_imm_all
-PASS  avx_vshufps_vshufpd_vblend_imm_all (2.2 ms)
+PASS  avx_vshufps_vshufpd_vblend_imm_all (2.3 ms)
 RUN   avx2_vpermq_vperm2i128_imm_all
 PASS  avx2_vpermq_vperm2i128_imm_all (2.9 ms)
 RUN   avx2_pshuf_blend_imm_all
-PASS  avx2_pshuf_blend_imm_all (5.4 ms)
+PASS  avx2_pshuf_blend_imm_all (5.5 ms)
 RUN   avx2_vpalignr_vpslldq_lane_semantics
 PASS  avx2_vpalignr_vpslldq_lane_semantics (1.2 ms)
 RUN   avx2_vmpsadbw_all_imm
@@ -78,59 +78,59 @@ PASS  avx_vtest_vptest_flags_and_movmsk (0.1 ms)
 RUN   avx_maskmov_semantics
 PASS  avx_maskmov_semantics (0.2 ms)
 RUN   avx2_gather_semantics_mask_cleared
-PASS  avx2_gather_semantics_mask_cleared (0.4 ms)
+PASS  avx2_gather_semantics_mask_cleared (0.3 ms)
 RUN   avx_masked_lanes_never_fault
-PASS  avx_masked_lanes_never_fault (67.2 ms)
+PASS  avx_masked_lanes_never_fault (56.8 ms)
 RUN   avx_fault_on_active_element_restarts
   INFO gather_mask_at_fault = 00000000,00000000,ffffffff,ffffffff
-PASS  avx_fault_on_active_element_restarts (31.3 ms)
+PASS  avx_fault_on_active_element_restarts (25.7 ms)
 RUN   avx2_gather_nondistinct_registers_ud
-PASS  avx2_gather_nondistinct_registers_ud (8.0 ms)
+PASS  avx2_gather_nondistinct_registers_ud (7.5 ms)
 RUN   avx_unmasked_simd_exception_invalid
   INFO simd_exception_code_inv = 0xc0000090
-PASS  avx_unmasked_simd_exception_invalid (9.9 ms)
+PASS  avx_unmasked_simd_exception_invalid (10.3 ms)
 RUN   avx_unmasked_simd_exception_divzero
   INFO simd_exception_code_div = 0xc000008e
-PASS  avx_unmasked_simd_exception_divzero (9.9 ms)
+PASS  avx_unmasked_simd_exception_divzero (11.7 ms)
 RUN   avx_unmasked_simd_exception_overflow_upper_lane
   INFO simd_exception_code_ovf = 0xc0000091
-PASS  avx_unmasked_simd_exception_overflow_upper_lane (10.4 ms)
+PASS  avx_unmasked_simd_exception_overflow_upper_lane (11.3 ms)
 RUN   avx_unmasked_simd_exception_underflow_upper_lane
   INFO simd_exception_code_unf = 0xc0000093
-PASS  avx_unmasked_simd_exception_underflow_upper_lane (10.0 ms)
+PASS  avx_unmasked_simd_exception_underflow_upper_lane (7.6 ms)
 RUN   avx_unmasked_simd_exception_precision_upper_lane
   INFO simd_exception_code_pe = 0xc000008f
-PASS  avx_unmasked_simd_exception_precision_upper_lane (12.7 ms)
+PASS  avx_unmasked_simd_exception_precision_upper_lane (11.1 ms)
 RUN   avx_unmasked_simd_exception_denormal_upper_lane
   INFO simd_exception_code_den = 0xc0000093
-PASS  avx_unmasked_simd_exception_denormal_upper_lane (11.2 ms)
+PASS  avx_unmasked_simd_exception_denormal_upper_lane (11.5 ms)
 RUN   fma_unmasked_simd_exception_invalid
   INFO simd_exception_code_fma = 0xc0000090
-PASS  fma_unmasked_simd_exception_invalid (10.9 ms)
+PASS  fma_unmasked_simd_exception_invalid (9.2 ms)
 RUN   avx2_int_add_sub_saturating
-PASS  avx2_int_add_sub_saturating (7.2 ms)
+PASS  avx2_int_add_sub_saturating (12.5 ms)
 RUN   avx2_int_multiply
-PASS  avx2_int_multiply (2.8 ms)
+PASS  avx2_int_multiply (4.6 ms)
 RUN   avx2_int_minmax_avg_abs_sign
-PASS  avx2_int_minmax_avg_abs_sign (8.9 ms)
+PASS  avx2_int_minmax_avg_abs_sign (9.3 ms)
 RUN   avx2_int_compare_logic
-PASS  avx2_int_compare_logic (4.8 ms)
+PASS  avx2_int_compare_logic (5.0 ms)
 RUN   avx2_pmadd_psadbw
-PASS  avx2_pmadd_psadbw (2.4 ms)
+PASS  avx2_pmadd_psadbw (2.6 ms)
 RUN   avx2_pack_saturate_in_lane
-PASS  avx2_pack_saturate_in_lane (2.2 ms)
+PASS  avx2_pack_saturate_in_lane (2.3 ms)
 RUN   avx2_phadd_phsub_in_lane
-PASS  avx2_phadd_phsub_in_lane (3.3 ms)
+PASS  avx2_phadd_phsub_in_lane (3.5 ms)
 RUN   avx2_pmovsx_pmovzx
-PASS  avx2_pmovsx_pmovzx (5.5 ms)
+PASS  avx2_pmovsx_pmovzx (5.8 ms)
 RUN   avx2_variable_shifts_vpsllv_vpsrlv_vpsrav
-PASS  avx2_variable_shifts_vpsllv_vpsrlv_vpsrav (3.4 ms)
+PASS  avx2_variable_shifts_vpsllv_vpsrlv_vpsrav (3.5 ms)
 RUN   avx2_shift_by_xmm_count
-PASS  avx2_shift_by_xmm_count (3.2 ms)
+PASS  avx2_shift_by_xmm_count (3.3 ms)
 RUN   fma_all_forms_vs_exact_model
-PASS  fma_all_forms_vs_exact_model (10.5 ms)
+PASS  fma_all_forms_vs_exact_model (10.7 ms)
 RUN   fma_rounding_modes_and_ftz_daz
-PASS  fma_rounding_modes_and_ftz_daz (4.7 ms)
+PASS  fma_rounding_modes_and_ftz_daz (4.8 ms)
 RUN   fma_single_rounding_and_special_operands
   INFO fma_nan_choice = 231(x=1,y=2,z=3)->7fc00001 132(r0=3,r2=2,r1=1)->7fc00003
   INFO fma_0xinf_plus_qnan = result 7fc00003 mxcsr.IE=0 (IEEE 754-2008: implementation defined)
@@ -141,9 +141,9 @@ RUN   fma_crt_reference_quality_info
   NOTE CRT fma/fmaf disagree with VFMADD on 3935/20000 double and 2668/20000 float inputs: the CRT is not a correctly-rounded reference (exact integer model used instead)
 PASS  fma_crt_reference_quality_info (9.9 ms)
 RUN   f16c_vcvtph2ps_exhaustive
-PASS  f16c_vcvtph2ps_exhaustive (0.6 ms)
+PASS  f16c_vcvtph2ps_exhaustive (0.7 ms)
 RUN   f16c_vcvtps2ph_all_rounding_imm
-PASS  f16c_vcvtps2ph_all_rounding_imm (6.8 ms)
+PASS  f16c_vcvtps2ph_all_rounding_imm (7.0 ms)
 RUN   avx_legacy_sse_transition_preserves_upper
 PASS  avx_legacy_sse_transition_preserves_upper (0.2 ms)
 RUN   bmi1_andn_bextr_blsi_blsmsk_blsr_tzcnt
@@ -160,11 +160,36 @@ RUN   f16c_denormal_daz_ftz_treatment
 PASS  f16c_denormal_daz_ftz_treatment (0.0 ms)
 RUN   avx_vex_memory_operands_unaligned_and_page_split
   INFO vex_unaligned_compared = 360
-PASS  avx_vex_memory_operands_unaligned_and_page_split (11.1 ms)
+PASS  avx_vex_memory_operands_unaligned_and_page_split (7.6 ms)
 RUN   avx_vldmxcsr_vstmxcsr
-PASS  avx_vldmxcsr_vstmxcsr (8.7 ms)
+PASS  avx_vldmxcsr_vstmxcsr (10.4 ms)
 RUN   avx_pextr_pinsr_insertps_all_imm
 PASS  avx_pextr_pinsr_insertps_all_imm (0.1 ms)
 RUN   avx_scalar_merge_forms
 PASS  avx_scalar_merge_forms (0.4 ms)
-SUMMARY exe=avx_arithmetic arch=x64 total=73 pass=73 fail=0 crash=0 skip=0 xfail=0 perf=0 checks=747 checks_failed=0 exit=0
+RUN   avx_new_ext_feature_report
+  INFO new_ext_hw_usable = avx_vnni=1/1 avx_ifma=0/0 avx_vnni_int8=0/0 avx_vnni_int16=0/0 avx_ne_convert=0/0 cmpccxadd=0/0 gfni=1/1 avx512vnni=0/0 avx512ifma=0/0 avx512bf16=0/0
+PASS  avx_new_ext_feature_report (0.3 ms)
+RUN   avxvnni_vex_dot_products_vs_model
+PASS  avxvnni_vex_dot_products_vs_model (8.9 ms)
+RUN   avxifma_vex_madd52_vs_model
+  SKIP AVX_IFMA not usable (CPUID bit 0, OS state enabled)
+SKIP  avxifma_vex_madd52_vs_model (0.1 ms): AVX_IFMA not usable (CPUID bit 0, OS state enabled)
+RUN   avxvnniint8_signedness_and_saturation_vs_model
+  SKIP AVX_VNNI_INT8 not usable (CPUID bit 0, OS state enabled)
+SKIP  avxvnniint8_signedness_and_saturation_vs_model (0.1 ms): AVX_VNNI_INT8 not usable (CPUID bit 0, OS state enabled)
+RUN   avxneconvert_bf16_fp16_loads_to_ps_vs_model
+  SKIP AVX_NE_CONVERT not usable (CPUID bit 0, OS state enabled)
+SKIP  avxneconvert_bf16_fp16_loads_to_ps_vs_model (0.1 ms): AVX_NE_CONVERT not usable (CPUID bit 0, OS state enabled)
+RUN   avxneconvert_vcvtneps2bf16_rne_daz_mxcsr_independent
+  SKIP AVX_NE_CONVERT not usable (CPUID bit 0, OS state enabled)
+SKIP  avxneconvert_vcvtneps2bf16_rne_daz_mxcsr_independent (0.1 ms): AVX_NE_CONVERT not usable (CPUID bit 0, OS state enabled)
+RUN   cmpccxadd_all_conditions_vs_model
+  SKIP CMPccXADD not advertised (CPUID.(7,1):EAX[7]=0)
+SKIP  cmpccxadd_all_conditions_vs_model (0.1 ms): CMPccXADD not advertised (CPUID.(7,1):EAX[7]=0)
+RUN   cmpccxadd_locked_bounded_counter_threads
+  SKIP CMPccXADD not advertised (CPUID.(7,1):EAX[7]=0)
+SKIP  cmpccxadd_locked_bounded_counter_threads (0.1 ms): CMPccXADD not advertised (CPUID.(7,1):EAX[7]=0)
+RUN   gfni_vex256_vex128_vs_model
+PASS  gfni_vex256_vex128_vs_model (6.4 ms)
+SUMMARY exe=avx_arithmetic arch=x64 total=82 pass=76 fail=0 crash=0 skip=6 xfail=0 perf=0 checks=764 checks_failed=0 exit=0

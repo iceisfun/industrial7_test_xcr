@@ -8,20 +8,20 @@ PASS  cpuid_eflags_id (0.0 ms)
 RUN   leaf0_vendor_and_max
   INFO vendor = GenuineIntel
   INFO max_basic = 0x20
-PASS  leaf0_vendor_and_max (0.2 ms)
+PASS  leaf0_vendor_and_max (0.1 ms)
 RUN   leaf_beyond_max_basic_info
   INFO beyond_max = 00000000 00000001 00000000 00000000
   INFO leaf_3fffffff = 00000000 00000001 00000000 00000000
-PASS  leaf_beyond_max_basic_info (0.5 ms)
+PASS  leaf_beyond_max_basic_info (0.3 ms)
 RUN   leaf1_signature_decode
   INFO signature = 0x000b0671 family=0x6 model=0xb7 stepping=1 type=0
-PASS  leaf1_signature_decode (0.1 ms)
+PASS  leaf1_signature_decode (0.2 ms)
 RUN   leaf1_ebx_fields
   INFO clflush_line = 64
   INFO max_logical_ids = 128 (HTT=1)
-  INFO initial_apic_id = 57
+  INFO initial_apic_id = 32
   INFO brand_index = 0
-PASS  leaf1_ebx_fields (0.2 ms)
+PASS  leaf1_ebx_fields (0.3 ms)
 RUN   leaf1_mandatory_baseline
 PASS  leaf1_mandatory_baseline (0.0 ms)
 RUN   feature_implications_architectural
@@ -33,7 +33,7 @@ RUN   feature_table_and_gates
   INFO features_hw = fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand fsgsbase bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha umip pku ospke waitpkg cet_ss gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid cet_ibt avx_vnni hreset xsaveopt xsavec xgetbv1 xsaves lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp lm invariant_tsc
   INFO features_usable = fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
   INFO counts = hw=70 usable=60
-PASS  feature_table_and_gates (1.9 ms)
+PASS  feature_table_and_gates (2.2 ms)
 RUN   leaf2_descriptors
   INFO descriptors = ff fe f0 
 PASS  leaf2_descriptors (0.1 ms)
@@ -43,7 +43,7 @@ RUN   leaf4_cache_parameters
   INFO unified = L2 2048 KB line 64 ways 16 sets 2048 shared_by<=8
   INFO unified = L3 33792 KB line 64 ways 11 sets 49152 shared_by<=128
   INFO source = leaf4
-PASS  leaf4_cache_parameters (0.6 ms)
+PASS  leaf4_cache_parameters (0.7 ms)
 RUN   cache_line_consistency
   INFO l2_line_80000006 = 64
   INFO l1d_line = 64
@@ -52,25 +52,25 @@ RUN   logical_processor_counts
   INFO topology = packages=1 cores=20 logical=28 smt=0 max_per_package=28
 PASS  logical_processor_counts (0.2 ms)
 RUN   leaf6_thermal_power_info
-  INFO leaf6 = eax=00dfcff7 ebx=00000002 ecx=00000401 edx=00070003
+  INFO leaf6 = eax=00dfcff7 ebx=00000002 ecx=00000401 edx=00040003
   INFO turbo = 1
   INFO arat = 1
   INFO hwp = 1
   INFO hw_feedback = 1
   INFO thread_director = 1
-PASS  leaf6_thermal_power_info (0.3 ms)
+PASS  leaf6_thermal_power_info (0.4 ms)
 RUN   leaf7_subleaves
   INFO max_subleaf = 2
   INFO sub0 = 00000002 239c27eb 98c007bc fc18c410
   INFO sub1 = 00400810 00000000 00000000 00040000
   INFO sub2 = 00000000 00000000 00000000 0000009f
-PASS  leaf7_subleaves (0.3 ms)
+PASS  leaf7_subleaves (0.4 ms)
 RUN   leaf0b_1f_topology
   INFO leafb_level0 = type=1 shift=1 logical=2
   INFO leafb_level1 = type=2 shift=7 logical=28
   INFO leaf1f_level0 = type=1 shift=1 logical=2
   INFO leaf1f_level1 = type=2 shift=7 logical=28
-PASS  leaf0b_1f_topology (0.5 ms)
+PASS  leaf0b_1f_topology (0.4 ms)
 RUN   leaf14_15_16_1a_info
   INFO pt_leaf14 = 00000001 0000005f 00000007 00000000
   INFO tsc_ratio = den=2 num=178 crystal_hz=38400000
@@ -106,14 +106,14 @@ RUN   xcr0_architectural_rules
 PASS  xcr0_architectural_rules (0.3 ms)
 RUN   osxsave_xgetbv_usable
   INFO xinuse = 0x203
-PASS  osxsave_xgetbv_usable (11.7 ms)
+PASS  osxsave_xgetbv_usable (17.9 ms)
 RUN   xgetbv_invalid_index_faults
   INFO exception = XGETBV(ECX=0x7fffffff) exc=0xc0000005 exit=0xc0000005
-PASS  xgetbv_invalid_index_faults (14.4 ms)
+PASS  xgetbv_invalid_index_faults (14.9 ms)
 RUN   xsetbv_cpl3_faults
   INFO exception = 0xc0000005
   NOTE XSETBV #GP reported as STATUS_ACCESS_VIOLATION (Windows reports STATUS_PRIVILEGED_INSTRUCTION for privileged opcodes)
-PASS  xsetbv_cpl3_faults (15.3 ms)
+PASS  xsetbv_cpl3_faults (15.1 ms)
 RUN   avx_state_gating
   INFO ymm = enabled
 PASS  avx_state_gating (0.1 ms)
@@ -123,32 +123,32 @@ PASS  ext_max_leaf (0.1 ms)
 RUN   ext_80000001_features
   INFO e1 = eax=00000000 ebx=00000000 ecx=00000121 edx=2c100000
   INFO syscall_bit = 0 (Intel reports it only when CPUID executes in 64-bit mode)
-PASS  ext_80000001_features (0.6 ms)
+PASS  ext_80000001_features (0.3 ms)
 RUN   ext_brand_string
   INFO brand = Intel(R) Core(TM) i7-14700KF
   INFO reg_name = Intel(R) Core(TM) i7-14700KF
   INFO reg_vendor = GenuineIntel
   INFO reg_identifier = Intel64 Family 6 Model 183 Stepping 1
   INFO reg_mhz = 3417
-PASS  ext_brand_string (1.0 ms)
+PASS  ext_brand_string (0.5 ms)
 RUN   ext_80000008_address_sizes
   INFO address_bits = physical=39 linear=48 guest_phys=0
-PASS  ext_80000008_address_sizes (0.2 ms)
+PASS  ext_80000008_address_sizes (0.1 ms)
 RUN   ext_cache_tsc_leaves_info
   INFO e5 = 00000000 00000000 00000000 00000000
-  INFO l2 = 4096 KB line 64
+  INFO l2 = 2048 KB line 64
   INFO invariant_tsc = 1
-PASS  ext_cache_tsc_leaves_info (0.4 ms)
+PASS  ext_cache_tsc_leaves_info (0.2 ms)
 RUN   hypervisor_leaves_info
   INFO hypervisor_bit = 0
   INFO leaf40000000_without_hv = 00000000 00000001 00000000 00000000
-PASS  hypervisor_leaves_info (0.4 ms)
+PASS  hypervisor_leaves_info (0.2 ms)
 RUN   cpuid_stable_repeated
   INFO entries = 75
 PASS  cpuid_stable_repeated (4.6 ms)
 RUN   cpuid_consistent_across_threads
   INFO threads = 16
-PASS  cpuid_consistent_across_threads (2.8 ms)
+PASS  cpuid_consistent_across_threads (2.5 ms)
 RUN   cpuid_consistent_across_cpus
   INFO tsc_aux_cpu0 = 0x0
   INFO tsc_aux_cpu1 = 0x1
@@ -156,13 +156,13 @@ RUN   cpuid_consistent_across_cpus
   INFO tsc_aux_cpu3 = 0x3
   INFO cpus_checked = 28
   INFO core_types = 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 20 20 20 20 20 20 20 20 20 20 20 20 
-PASS  cpuid_consistent_across_cpus (20.4 ms)
+PASS  cpuid_consistent_across_cpus (9.2 ms)
 RUN   exec_probes_on_every_cpu
   INFO runs = 1232 probes on 28 CPUs
-PASS  exec_probes_on_every_cpu (12.1 ms)
+PASS  exec_probes_on_every_cpu (5.4 ms)
 RUN   cpuid_same_in_child_process
   INFO snapshot = l1c.l1d.l7b.l7c.l7d.l71a.ld0a.ld0b.ld0c.ld1a.e1c.e1d.xcr0.pf = 7ffafbbf.bfebfbff.239c27eb.98c007bc.fc18c410.00400810.00000207.00000a88.00000a88.0000000f.00000121.2c100000.0000000000000207.300005f310e27f4c
-PASS  cpuid_same_in_child_process (22.3 ms)
+PASS  cpuid_same_in_child_process (18.8 ms)
 RUN   cpuid_flat_leaves_ignore_ecx
 PASS  cpuid_flat_leaves_ignore_ecx (0.2 ms)
 RUN   leaf1d_1e_amx_tile_info
@@ -237,13 +237,13 @@ RUN   pf23_fastfail
 PASS  pf23_fastfail (14.5 ms)
 RUN   pf28_rdrand
   INFO PF_RDRAND_INSTRUCTION_AVAILABLE = pf=1 cpu=1
-PASS  pf28_rdrand (0.1 ms)
+PASS  pf28_rdrand (0.2 ms)
 RUN   pf32_rdtscp
   INFO PF_RDTSCP_INSTRUCTION_AVAILABLE = pf=1 cpu=1
-PASS  pf32_rdtscp (0.1 ms)
+PASS  pf32_rdtscp (0.2 ms)
 RUN   pf33_rdpid
   INFO PF_RDPID_INSTRUCTION_AVAILABLE = pf=1 cpu=1
-PASS  pf33_rdpid (0.1 ms)
+PASS  pf33_rdpid (0.3 ms)
 RUN   pf35_monitorx
   INFO PF_MONITORX_INSTRUCTION_AVAILABLE = pf=0 cpu=0
 PASS  pf35_monitorx (0.1 ms)
@@ -467,5 +467,5 @@ RUN   unadvertised_probe_survey
   INFO unadvertised_avx_ifma = #UD
   INFO unadvertised_avx_vnni_int8 = #UD
   INFO survey = 21 probes: 21 #UD, 0 executed
-PASS  unadvertised_probe_survey (291.9 ms)
+PASS  unadvertised_probe_survey (287.2 ms)
 SUMMARY exe=cpu_features arch=x86 total=147 pass=120 fail=0 crash=0 skip=27 xfail=0 perf=0 checks=2377 checks_failed=0 exit=0

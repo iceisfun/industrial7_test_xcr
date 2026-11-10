@@ -2,16 +2,16 @@
  "runner": "run_all.sh (wine)",
  "arch": "x64",
  "timeout_s": 600,
- "finished": "2026-11-10T02:37:18Z",
+ "finished": "2026-11-10T15:13:21Z",
  "env": {
   "type": "env",
   "exe": "alignment",
-  "version": "04dd202",
+  "version": "3e3abed",
   "compiler": "gcc 13-win32",
   "arch": "x64",
   "wow64": false,
   "native_machine": 34404,
-  "timestamp": "2026-11-10T02:34:39Z",
+  "timestamp": "2026-11-10T15:10:24Z",
   "os": {
    "major": 10,
    "minor": 0,
@@ -83,8 +83,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 6.947,
-   "sha256": "9fbbf7487e9e5a6c168f36f950b53245df4769515474714849a0ce06303fadc9",
+   "duration_s": 4.421,
+   "sha256": "46acfeb988af0842ff5167279d8afb727b4a3339c27999b57666ae175c05a1ff",
    "summary": {
     "type": "summary",
     "exe": "alignment",
@@ -98,7 +98,31 @@
     "perf": 0,
     "checks": 26473,
     "checks_failed": 22,
-    "ms": 5460.4,
+    "ms": 3199.3,
+    "exit_code": 0
+   }
+  },
+  {
+   "name": "amx_xstate",
+   "arch": "x64",
+   "exit_code": 0,
+   "status": "OK",
+   "duration_s": 1.227,
+   "sha256": "c2c1d95a42e44a7707855afd9f61f155008bb951ce329ad48a8c97ad303f6a13",
+   "summary": {
+    "type": "summary",
+    "exe": "amx_xstate",
+    "arch": "x64",
+    "total": 24,
+    "pass": 0,
+    "fail": 0,
+    "crash": 0,
+    "skip": 24,
+    "xfail": 0,
+    "perf": 0,
+    "checks": 0,
+    "checks_failed": 0,
+    "ms": 11.8,
     "exit_code": 0
    }
   },
@@ -107,8 +131,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.289,
-   "sha256": "7b5f87570302bf32d79f5f78cd01c22d1c4d97c7d62e6fc043293fb284506ad7",
+   "duration_s": 1.167,
+   "sha256": "554a56b41e251b85a83f71d1d74440d6ae30008719ca5f39a2c67c197ba4b29e",
    "summary": {
     "type": "summary",
     "exe": "apx_xstate",
@@ -122,7 +146,7 @@
     "perf": 0,
     "checks": 4,
     "checks_failed": 0,
-    "ms": 31.9,
+    "ms": 25.9,
     "exit_code": 0
    }
   },
@@ -131,22 +155,46 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.524,
-   "sha256": "e6aee3935511673dba3e2bb607f36136f16c12a4b592afcf2e7c1a4eebace673",
+   "duration_s": 1.555,
+   "sha256": "db66019d53b99fbd3449fe4eacce634031390c98991abf5851a4cb5e05db01fa",
    "summary": {
     "type": "summary",
     "exe": "avx_arithmetic",
     "arch": "x64",
-    "total": 73,
-    "pass": 73,
+    "total": 82,
+    "pass": 76,
     "fail": 0,
     "crash": 0,
-    "skip": 0,
+    "skip": 6,
     "xfail": 0,
     "perf": 0,
-    "checks": 747,
+    "checks": 764,
     "checks_failed": 0,
-    "ms": 350.6,
+    "ms": 360.0,
+    "exit_code": 0
+   }
+  },
+  {
+   "name": "cet_xstate",
+   "arch": "x64",
+   "exit_code": 0,
+   "status": "OK",
+   "duration_s": 1.163,
+   "sha256": "d4d9200c98b5640a09797f5b89adfdaad5beaf0e15651c66ee03d9f546d8b51b",
+   "summary": {
+    "type": "summary",
+    "exe": "cet_xstate",
+    "arch": "x64",
+    "total": 13,
+    "pass": 1,
+    "fail": 0,
+    "crash": 0,
+    "skip": 11,
+    "xfail": 1,
+    "perf": 0,
+    "checks": 5,
+    "checks_failed": 1,
+    "ms": 12.0,
     "exit_code": 0
    }
   },
@@ -155,8 +203,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.521,
-   "sha256": "e3bddb1c8b94ad78bf9fcb772574c0463cc4193ba040a5eaee1c2b3d8600066f",
+   "duration_s": 1.458,
+   "sha256": "7480753ce0ee3afb9d5b1f5473b7df9a3294bcbb003011e148496b448e7ba19f",
    "summary": {
     "type": "summary",
     "exe": "context_bench",
@@ -170,7 +218,7 @@
     "perf": 10,
     "checks": 88,
     "checks_failed": 4,
-    "ms": 286.0,
+    "ms": 290.5,
     "exit_code": 0
    }
   },
@@ -179,22 +227,22 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.442,
-   "sha256": "2256252d83a2c0d51da9e508a0158fc4baa1402ccde92218520aa8ad2fed8bb3",
+   "duration_s": 7.192,
+   "sha256": "7ff3f8e95accf93414db126e0c9b6557e2ee72c0728f8e04dbdce01842705fbd",
    "summary": {
     "type": "summary",
     "exe": "context_xstate",
     "arch": "x64",
-    "total": 78,
-    "pass": 60,
+    "total": 101,
+    "pass": 83,
     "fail": 0,
     "crash": 0,
-    "skip": 4,
-    "xfail": 11,
+    "skip": 3,
+    "xfail": 12,
     "perf": 3,
-    "checks": 2315,
-    "checks_failed": 15,
-    "ms": 377.9,
+    "checks": 3310,
+    "checks_failed": 18,
+    "ms": 6003.9,
     "exit_code": 0
    }
   },
@@ -203,8 +251,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.653,
-   "sha256": "d7cade7e16f40d9e305d3df1b697e2464d037c5861e57af1c1b38db19b7bac70",
+   "duration_s": 1.451,
+   "sha256": "9b89588e64372e7f4b63723cee3d59966f92b3b011c47397900968bec21e020e",
    "summary": {
     "type": "summary",
     "exe": "cpu_features",
@@ -218,7 +266,7 @@
     "perf": 0,
     "checks": 2445,
     "checks_failed": 0,
-    "ms": 388.4,
+    "ms": 342.4,
     "exit_code": 0
    }
   },
@@ -227,8 +275,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.221,
-   "sha256": "29fb523689afa9dca3fa3b345103b426dc015ca5ede25580fa4d86eb5247a134",
+   "duration_s": 1.177,
+   "sha256": "3655a2acaedeace37ba572536d93a3ed4705e4adce2014caa6df93ff81a93e5d",
    "summary": {
     "type": "summary",
     "exe": "cxx_exceptions",
@@ -242,7 +290,7 @@
     "perf": 0,
     "checks": 419,
     "checks_failed": 0,
-    "ms": 31.8,
+    "ms": 28.0,
     "exit_code": 0
    }
   },
@@ -251,8 +299,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.52,
-   "sha256": "27b3183ac39358fbf170f9c5d2ac844ddab6d230f3a103f45ba7d1cf8ffe4e99",
+   "duration_s": 1.487,
+   "sha256": "8625c5c44554feb4ee24ea70a4b67f3b08571745cfa49b7ead99b3ff4dee7ff5",
    "summary": {
     "type": "summary",
     "exe": "exception_xstate",
@@ -266,7 +314,7 @@
     "perf": 1,
     "checks": 172514,
     "checks_failed": 18,
-    "ms": 321.3,
+    "ms": 303.8,
     "exit_code": 0
    }
   },
@@ -275,8 +323,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 3.261,
-   "sha256": "fb2c54293cebaa782bca0cbeb242c42449e36237e7d561af3ecc9c4cbad645d9",
+   "duration_s": 3.224,
+   "sha256": "537efaccc05454de037363580bc4272df3b1774215c07a8961ceb5f52c8529ab",
    "summary": {
     "type": "summary",
     "exe": "feature_faults",
@@ -290,7 +338,7 @@
     "perf": 0,
     "checks": 1897,
     "checks_failed": 16,
-    "ms": 2313.1,
+    "ms": 2039.5,
     "exit_code": 0
    }
   },
@@ -299,8 +347,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.576,
-   "sha256": "82535c89809ee2506bec058ba0e0c70c339e06c302b8c5b270283fbb63d99576",
+   "duration_s": 1.575,
+   "sha256": "e794dc2e2d2077eaf8a6548b45d5d5d628facc87a4bbd10abc6d878dbfe88323",
    "summary": {
     "type": "summary",
     "exe": "fiber_xstate",
@@ -314,7 +362,7 @@
     "perf": 1,
     "checks": 1311,
     "checks_failed": 240,
-    "ms": 350.9,
+    "ms": 388.1,
     "exit_code": 0
    }
   },
@@ -323,8 +371,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 2.148,
-   "sha256": "57a665a19db9ef4251f611d1fd4b78fed937fc028e02830f19cbb89fc52df644",
+   "duration_s": 2.074,
+   "sha256": "fc97efda3e1e63585ccefa1062d4ca370ada52396d3bffd367ffbf91316a446b",
    "summary": {
     "type": "summary",
     "exe": "fp_environment",
@@ -338,7 +386,31 @@
     "perf": 0,
     "checks": 2844,
     "checks_failed": 0,
-    "ms": 952.4,
+    "ms": 891.0,
+    "exit_code": 0
+   }
+  },
+  {
+   "name": "jpeg_bench",
+   "arch": "x64",
+   "exit_code": 0,
+   "status": "OK",
+   "duration_s": 10.049,
+   "sha256": "46696ad80eff1d2efab3146d1b5f00431f678fc505a27474611a5381f4c6f733",
+   "summary": {
+    "type": "summary",
+    "exe": "jpeg_bench",
+    "arch": "x64",
+    "total": 5,
+    "pass": 1,
+    "fail": 0,
+    "crash": 0,
+    "skip": 0,
+    "xfail": 0,
+    "perf": 4,
+    "checks": 66,
+    "checks_failed": 0,
+    "ms": 8853.2,
     "exit_code": 0
    }
   },
@@ -347,8 +419,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 9.735,
-   "sha256": "d561cd6a01780a7edefee25058b85b5cfa74a4a319d7f409e6786db3d68067d4",
+   "duration_s": 11.209,
+   "sha256": "6e99219d2834dd9bb7ab4ba02350d85abdb80ebcb023dafa5b514579de703bb0",
    "summary": {
     "type": "summary",
     "exe": "memory_bench",
@@ -360,9 +432,9 @@
     "skip": 2,
     "xfail": 0,
     "perf": 12,
-    "checks": 410,
+    "checks": 434,
     "checks_failed": 0,
-    "ms": 8537.3,
+    "ms": 9992.4,
     "exit_code": 0
    }
   },
@@ -371,22 +443,22 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 5.389,
-   "sha256": "0cb139f96ed459142d8c141cef1df032e2252a4c3abb581f89c2b8cc8267628c",
+   "duration_s": 5.292,
+   "sha256": "eef3675d4cb67c1fd66315956c854d13502fb8582a074f4b1db15e11cb9ce735",
    "summary": {
     "type": "summary",
     "exe": "simd_bench",
     "arch": "x64",
-    "total": 154,
+    "total": 155,
     "pass": 14,
     "fail": 0,
     "crash": 0,
     "skip": 17,
     "xfail": 0,
-    "perf": 123,
-    "checks": 961,
+    "perf": 124,
+    "checks": 966,
     "checks_failed": 0,
-    "ms": 4163.2,
+    "ms": 4120.7,
     "exit_code": 0
    }
   },
@@ -395,8 +467,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.823,
-   "sha256": "be827abc910cc80412f25a908aa57141d8bda57438bfac3cb4ab3afacaff77ee",
+   "duration_s": 1.756,
+   "sha256": "18893b12e17097490dc0f7974bf271ba07f384c4665017b9e49ef56d6ed5b17b",
    "summary": {
     "type": "summary",
     "exe": "simd_crypto",
@@ -410,7 +482,7 @@
     "perf": 3,
     "checks": 562,
     "checks_failed": 0,
-    "ms": 647.3,
+    "ms": 586.2,
     "exit_code": 0
    }
   },
@@ -419,8 +491,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 2.289,
-   "sha256": "318cec1ad145628ce1f8a41baef5f4fab1fe039a9cda091a48d5c8033704c6ba",
+   "duration_s": 2.359,
+   "sha256": "b9138d6dc6d70ba2c91d57402a9176361ca69af7cf202ace7d936684951a5365",
    "summary": {
     "type": "summary",
     "exe": "simd_dispatch",
@@ -434,7 +506,7 @@
     "perf": 1,
     "checks": 7541,
     "checks_failed": 0,
-    "ms": 1234.5,
+    "ms": 1165.8,
     "exit_code": 0
    }
   },
@@ -443,8 +515,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 23.526,
-   "sha256": "972817e36a4b36a0c6d63a84067ee510ea8d2b09508d125cb3b1b8abeec2041c",
+   "duration_s": 21.521,
+   "sha256": "c2edaed43cadefc0c6ca7706f088275acc88fd15b4aae43a4e7dd463144e4863",
    "summary": {
     "type": "summary",
     "exe": "simd_jpeg",
@@ -458,7 +530,7 @@
     "perf": 13,
     "checks": 8131,
     "checks_failed": 0,
-    "ms": 22323.7,
+    "ms": 20396.6,
     "exit_code": 0
    }
   },
@@ -467,8 +539,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 2.187,
-   "sha256": "8480f315d2844565d54f02c8e1a47553b7df138955fa5c29ce047b9ccdb51c28",
+   "duration_s": 1.782,
+   "sha256": "16d08f89dbcfad0f6b3742178ada5413d1653a78e94e9998a75b3c1e47b98009",
    "summary": {
     "type": "summary",
     "exe": "simd_memory",
@@ -482,7 +554,31 @@
     "perf": 1,
     "checks": 5460,
     "checks_failed": 0,
-    "ms": 1019.0,
+    "ms": 707.9,
+    "exit_code": 0
+   }
+  },
+  {
+   "name": "simd_png",
+   "arch": "x64",
+   "exit_code": 0,
+   "status": "OK",
+   "duration_s": 7.029,
+   "sha256": "8f264a8e5b4ab3a86d48502153ac744fb2f883de03b88b723c2daaa8f67e40b8",
+   "summary": {
+    "type": "summary",
+    "exe": "simd_png",
+    "arch": "x64",
+    "total": 71,
+    "pass": 50,
+    "fail": 0,
+    "crash": 0,
+    "skip": 0,
+    "xfail": 0,
+    "perf": 21,
+    "checks": 479,
+    "checks_failed": 0,
+    "ms": 5956.9,
     "exit_code": 0
    }
   },
@@ -491,8 +587,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 3.966,
-   "sha256": "c9cf08a006935ab3e15afba3ed7b9e91330d1d4c7a1b9c76db56a36ed84c2f75",
+   "duration_s": 3.93,
+   "sha256": "1339ecc70593dd8b7ccb5b7bc8565eb035ffe1f8ed7230be3ca213afd385c1ee",
    "summary": {
     "type": "summary",
     "exe": "smoke_selftest",
@@ -506,7 +602,7 @@
     "perf": 0,
     "checks": 430,
     "checks_failed": 0,
-    "ms": 2791.9,
+    "ms": 2765.0,
     "exit_code": 0
    }
   },
@@ -515,8 +611,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 2.113,
-   "sha256": "d8f66eccab499b16c67ee05fcedd90a7e850e1ae096ce93b84b6c3b5b9dbd2ae",
+   "duration_s": 2.04,
+   "sha256": "382eb044b317f14b8493a602cd24cd2f85547f07201f0b9d30a1092ff94d6bcd",
    "summary": {
     "type": "summary",
     "exe": "sse_arithmetic",
@@ -530,7 +626,7 @@
     "perf": 0,
     "checks": 850,
     "checks_failed": 0,
-    "ms": 898.0,
+    "ms": 875.1,
     "exit_code": 0
    }
   },
@@ -539,8 +635,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 40.424,
-   "sha256": "5de4fa0264bb4aeb8d981e14c82989f70636ab11c5c7c6c3123141c1e5a231ad",
+   "duration_s": 39.829,
+   "sha256": "8543d7018f93751a5ad2d0fa9b9896bbf52fcc1b3f6596e5a0f4f345d43c5cf8",
    "summary": {
     "type": "summary",
     "exe": "thread_xstate",
@@ -554,7 +650,7 @@
     "perf": 95,
     "checks": 29990,
     "checks_failed": 0,
-    "ms": 39213.9,
+    "ms": 38614.5,
     "exit_code": 0
    }
   },
@@ -563,8 +659,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.406,
-   "sha256": "31b7825ca5709a26360354e85eab170e2c04cc157dc11e7032542c873a3d1e9e",
+   "duration_s": 1.453,
+   "sha256": "4c7a152bb116997d6c1f547f5c6f8cc1dec543737d2954fa1bff49b9b1c0fdf7",
    "summary": {
     "type": "summary",
     "exe": "xcr0_probe",
@@ -576,9 +672,9 @@
     "skip": 11,
     "xfail": 0,
     "perf": 0,
-    "checks": 885,
+    "checks": 1032,
     "checks_failed": 0,
-    "ms": 279.9,
+    "ms": 270.1,
     "exit_code": 0
    }
   },
@@ -587,8 +683,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 5.258,
-   "sha256": "75ba145f103d4d3d87e3470125aff81a0061f24a1e87adfa700972ff8a34d7c5",
+   "duration_s": 5.139,
+   "sha256": "9c4cd2779cd089ac66d995621ca8490dd2196b7eeebc8a55cf46c33c17335f20",
    "summary": {
     "type": "summary",
     "exe": "xmm_registers",
@@ -602,7 +698,7 @@
     "perf": 0,
     "checks": 8147,
     "checks_failed": 0,
-    "ms": 4052.1,
+    "ms": 3974.2,
     "exit_code": 0
    }
   },
@@ -611,8 +707,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 2.407,
-   "sha256": "9a78df7446b34c04bd314ae40b30e32dfd740c10db175aaf9e5be2fdcb025981",
+   "duration_s": 2.133,
+   "sha256": "5aaae1cfde05db12f43b385461a4ba6b302855d9a6c4c941ffadf36d2623aca2",
    "summary": {
     "type": "summary",
     "exe": "xsave_roundtrip",
@@ -626,7 +722,7 @@
     "perf": 0,
     "checks": 4682,
     "checks_failed": 0,
-    "ms": 1102.9,
+    "ms": 1061.8,
     "exit_code": 0
    }
   },
@@ -635,8 +731,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 19.096,
-   "sha256": "e3926c7a968af384f59b6c9dfbd5e93b339137fa62b3b6f02513f9d7066cfb35",
+   "duration_s": 18.934,
+   "sha256": "327ba6f60b4b72452c6c0e4399b69c129490c19a8513636137f7e1f13baf5570",
    "summary": {
     "type": "summary",
     "exe": "xstate_stress",
@@ -648,9 +744,9 @@
     "skip": 0,
     "xfail": 1,
     "perf": 2,
-    "checks": 172993,
+    "checks": 204120,
     "checks_failed": 0,
-    "ms": 17835.5,
+    "ms": 17821.8,
     "exit_code": 0
    }
   },
@@ -659,8 +755,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 2.185,
-   "sha256": "2c876eb1e5da8213577e651047bcc68b79538e742c2b9fa2aaca39261937f041",
+   "duration_s": 1.523,
+   "sha256": "7f0cc9c3c771889e115da709ad05b14980df03a4a237239f056da080fd5c9803",
    "summary": {
     "type": "summary",
     "exe": "xstate_windows",
@@ -674,7 +770,7 @@
     "perf": 0,
     "checks": 2604,
     "checks_failed": 16,
-    "ms": 426.6,
+    "ms": 335.1,
     "exit_code": 0
    }
   },
@@ -683,8 +779,8 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 12.832,
-   "sha256": "5cb33c8163881e8daf3e78c73b89270bb67473adcbefc6c32cb203cbec8fc88a",
+   "duration_s": 11.344,
+   "sha256": "9c347a60ec2add41eb07903349a0ea33cef921d332ddaf959603f891bed79bd8",
    "summary": {
     "type": "summary",
     "exe": "ymm_registers",
@@ -698,7 +794,7 @@
     "perf": 2,
     "checks": 16908,
     "checks_failed": 1,
-    "ms": 10538.5,
+    "ms": 10136.3,
     "exit_code": 0
    }
   },
@@ -707,22 +803,22 @@
    "arch": "x64",
    "exit_code": 0,
    "status": "OK",
-   "duration_s": 1.419,
-   "sha256": "f2f3634dfa8601664ffb39c0c4266cef7b43bb28e710c7268915d3c494601200",
+   "duration_s": 1.271,
+   "sha256": "12562053c9478624b7665d0751a92bc2b1cb5f84a8c076afecd9c890e116ae0d",
    "summary": {
     "type": "summary",
     "exe": "zmm_registers",
     "arch": "x64",
-    "total": 130,
+    "total": 139,
     "pass": 17,
     "fail": 0,
     "crash": 0,
-    "skip": 111,
+    "skip": 120,
     "xfail": 2,
     "perf": 0,
     "checks": 97,
     "checks_failed": 2,
-    "ms": 111.9,
+    "ms": 106.0,
     "exit_code": 0
    }
   }

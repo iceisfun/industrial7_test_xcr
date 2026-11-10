@@ -32,16 +32,16 @@ RUN   detect_matches_suite_feature_detection
   INFO usable = sse,sse2,ssse3,sse4.1,sse4.2,popcnt,avx,avx2
 PASS  detect_matches_suite_feature_detection (0.2 ms)
 RUN   detect_repeatable
-PASS  detect_repeatable (1.8 ms)
+PASS  detect_repeatable (1.7 ms)
 RUN   detect_identical_on_every_cpu
   INFO cpus = 28 visited of 28 (pin failures 0, not-on-pinned-cpu 0)
   NOTE hybrid processor: decisions must be identical on every core type
-PASS  detect_identical_on_every_cpu (25.7 ms)
+PASS  detect_identical_on_every_cpu (6.4 ms)
 RUN   detect_identical_on_many_threads
   INFO threads = 32
-PASS  detect_identical_on_many_threads (32.3 ms)
+PASS  detect_identical_on_many_threads (21.5 ms)
 RUN   detect_identical_in_child_process
-PASS  detect_identical_in_child_process (15.5 ms)
+PASS  detect_identical_in_child_process (13.8 ms)
 RUN   detect_vs_IsProcessorFeaturePresent
   INFO PF_XMMI (sse) = pf=1 usable=1
   INFO PF_XMMI64 (sse2) = pf=1 usable=1
@@ -95,7 +95,7 @@ RUN   synth_partial_feature_sets
 PASS  synth_partial_feature_sets (0.0 ms)
 RUN   synth_exhaustive_selection_invariants
   INFO combinations = 368640
-PASS  synth_exhaustive_selection_invariants (7.5 ms)
+PASS  synth_exhaustive_selection_invariants (7.3 ms)
 RUN   synth_xcr0_high_and_unrelated_bits_ignored
 PASS  synth_xcr0_high_and_unrelated_bits_ignored (0.0 ms)
 RUN   synth_gate_bug_variants_demonstrated
@@ -116,78 +116,78 @@ RUN   dispatch_unselected_tiers_never_execute
 PASS  dispatch_unselected_tiers_never_execute (1.1 ms)
 RUN   dispatch_lazy_init_race
   INFO threads = 64
-PASS  dispatch_lazy_init_race (22.6 ms)
+PASS  dispatch_lazy_init_race (22.1 ms)
 RUN   dispatch_concurrent_use
   INFO threads = 32
-PASS  dispatch_concurrent_use (4.1 ms)
+PASS  dispatch_concurrent_use (3.5 ms)
 RUN   dispatch_from_threadpool_callbacks
-PASS  dispatch_from_threadpool_callbacks (2.2 ms)
+PASS  dispatch_from_threadpool_callbacks (1.9 ms)
 RUN   force_cli_scalar
-PASS  force_cli_scalar (23.2 ms)
+PASS  force_cli_scalar (21.9 ms)
 RUN   force_cli_sse2
-PASS  force_cli_sse2 (33.3 ms)
+PASS  force_cli_sse2 (23.7 ms)
 RUN   force_cli_sse4
-PASS  force_cli_sse4 (21.0 ms)
+PASS  force_cli_sse4 (26.0 ms)
 RUN   force_cli_avx2
-PASS  force_cli_avx2 (34.1 ms)
+PASS  force_cli_avx2 (21.7 ms)
 RUN   force_cli_avx512
   SKIP tier avx512 is not usable here: verified the forced request fell back safely
-SKIP  force_cli_avx512 (23.1 ms): tier avx512 is not usable here: verified the forced request fell back safely
+SKIP  force_cli_avx512 (21.7 ms): tier avx512 is not usable here: verified the forced request fell back safely
 RUN   force_cli_invalid_falls_back_to_auto
   NOTE invalid force value ignored: automatic selection used
-PASS  force_cli_invalid_falls_back_to_auto (24.4 ms)
+PASS  force_cli_invalid_falls_back_to_auto (30.9 ms)
 RUN   force_env_variable
-PASS  force_env_variable (25.4 ms)
+PASS  force_env_variable (19.8 ms)
 RUN   force_cli_overrides_env
-PASS  force_cli_overrides_env (24.6 ms)
+PASS  force_cli_overrides_env (21.4 ms)
 RUN   force_env_global_dispatcher
-PASS  force_env_global_dispatcher (89.6 ms)
+PASS  force_env_global_dispatcher (79.3 ms)
 RUN   force_env_whole_run
-PASS  force_env_whole_run (45.7 ms)
+PASS  force_env_whole_run (51.0 ms)
 RUN   force_parse_names
 PASS  force_parse_names (0.0 ms)
 RUN   misdetect_avx2_without_xcr0_check
   SKIP XCR0=0x207 enables YMM state: CPUID-only detection happens to be right here (bug not observable)
-SKIP  misdetect_avx2_without_xcr0_check (0.2 ms): XCR0=0x207 enables YMM state: CPUID-only detection happens to be right here (bug not observable)
+SKIP  misdetect_avx2_without_xcr0_check (0.4 ms): XCR0=0x207 enables YMM state: CPUID-only detection happens to be right here (bug not observable)
 RUN   misdetect_avx512_without_zmm_state_check
   SKIP CPU does not advertise AVX-512F
-SKIP  misdetect_avx512_without_zmm_state_check (0.1 ms): CPU does not advertise AVX-512F
+SKIP  misdetect_avx512_without_zmm_state_check (0.2 ms): CPU does not advertise AVX-512F
 RUN   misdetect_control_correct_gate_survives
-PASS  misdetect_control_correct_gate_survives (18.0 ms)
+PASS  misdetect_control_correct_gate_survives (16.4 ms)
 RUN   impl_add_u32_scalar
   INFO combinations = 96320
   INFO requires = none
-PASS  impl_add_u32_scalar (16.4 ms)
+PASS  impl_add_u32_scalar (17.6 ms)
 RUN   impl_add_u32_sse2
   INFO combinations = 96320
   INFO requires = sse2
-PASS  impl_add_u32_sse2 (18.7 ms)
+PASS  impl_add_u32_sse2 (14.5 ms)
 RUN   impl_add_u32_avx2
   INFO combinations = 96320
   INFO requires = avx,avx2
-PASS  impl_add_u32_avx2 (14.1 ms)
+PASS  impl_add_u32_avx2 (13.9 ms)
 RUN   impl_add_u32_avx512
   SKIP add_u32_avx512 needs avx512f, not present on this CPU
 SKIP  impl_add_u32_avx512 (0.1 ms): add_u32_avx512 needs avx512f, not present on this CPU
 RUN   impl_add_f32_scalar
   INFO combinations = 96320
   INFO requires = sse
-PASS  impl_add_f32_scalar (17.4 ms)
+PASS  impl_add_f32_scalar (16.6 ms)
 RUN   impl_add_f32_sse
   INFO combinations = 96320
   INFO requires = sse
-PASS  impl_add_f32_sse (14.7 ms)
+PASS  impl_add_f32_sse (14.5 ms)
 RUN   impl_add_f32_avx
   INFO combinations = 96320
   INFO requires = avx
-PASS  impl_add_f32_avx (14.6 ms)
+PASS  impl_add_f32_avx (14.0 ms)
 RUN   impl_add_f32_avx512
   SKIP add_f32_avx512 needs avx512f, not present on this CPU
 SKIP  impl_add_f32_avx512 (0.1 ms): add_f32_avx512 needs avx512f, not present on this CPU
 RUN   impl_memcpy_scalar
   INFO combinations = 96320
   INFO requires = none
-PASS  impl_memcpy_scalar (11.8 ms)
+PASS  impl_memcpy_scalar (11.4 ms)
 RUN   impl_memcpy_sse2
   INFO combinations = 96320
   INFO requires = sse2
@@ -195,53 +195,53 @@ PASS  impl_memcpy_sse2 (9.1 ms)
 RUN   impl_memcpy_avx
   INFO combinations = 96320
   INFO requires = avx
-PASS  impl_memcpy_avx (9.0 ms)
+PASS  impl_memcpy_avx (8.8 ms)
 RUN   impl_memcpy_avx512bw
   SKIP memcpy_avx512bw needs avx512f,avx512bw, not present on this CPU
 SKIP  impl_memcpy_avx512bw (0.1 ms): memcpy_avx512bw needs avx512f,avx512bw, not present on this CPU
 RUN   impl_crc32c_scalar
   INFO combinations = 96320
   INFO requires = none
-PASS  impl_crc32c_scalar (115.8 ms)
+PASS  impl_crc32c_scalar (111.5 ms)
 RUN   impl_crc32c_sse42
   INFO combinations = 96320
   INFO requires = sse4.2
-PASS  impl_crc32c_sse42 (96.8 ms)
+PASS  impl_crc32c_sse42 (94.0 ms)
 RUN   impl_adler32_scalar
   INFO combinations = 96320
   INFO requires = none
-PASS  impl_adler32_scalar (40.3 ms)
+PASS  impl_adler32_scalar (38.8 ms)
 RUN   impl_adler32_sse2
   INFO combinations = 96320
   INFO requires = sse2
-PASS  impl_adler32_sse2 (37.6 ms)
+PASS  impl_adler32_sse2 (36.9 ms)
 RUN   impl_adler32_ssse3
   INFO combinations = 96320
   INFO requires = sse2,ssse3
-PASS  impl_adler32_ssse3 (37.4 ms)
+PASS  impl_adler32_ssse3 (36.8 ms)
 RUN   impl_adler32_avx2
   INFO combinations = 96320
   INFO requires = avx,avx2
-PASS  impl_adler32_avx2 (38.0 ms)
+PASS  impl_adler32_avx2 (36.5 ms)
 RUN   impl_adler32_avx512bw
   SKIP adler32_avx512bw needs avx512f,avx512bw, not present on this CPU
 SKIP  impl_adler32_avx512bw (0.1 ms): adler32_avx512bw needs avx512f,avx512bw, not present on this CPU
 RUN   impl_count8_scalar
   INFO combinations = 96320
   INFO requires = none
-PASS  impl_count8_scalar (14.0 ms)
+PASS  impl_count8_scalar (13.5 ms)
 RUN   impl_count8_sse2
   INFO combinations = 96320
   INFO requires = sse2
-PASS  impl_count8_sse2 (10.7 ms)
+PASS  impl_count8_sse2 (10.2 ms)
 RUN   impl_count8_popcnt
   INFO combinations = 96320
   INFO requires = sse2,popcnt
-PASS  impl_count8_popcnt (10.8 ms)
+PASS  impl_count8_popcnt (10.2 ms)
 RUN   impl_count8_avx2
   INFO combinations = 96320
   INFO requires = popcnt,avx,avx2
-PASS  impl_count8_avx2 (10.7 ms)
+PASS  impl_count8_avx2 (10.2 ms)
 RUN   impl_count8_avx512bw
   SKIP count8_avx512bw needs avx512f,avx512bw, not present on this CPU
 SKIP  impl_count8_avx512bw (0.1 ms): count8_avx512bw needs avx512f,avx512bw, not present on this CPU
@@ -257,7 +257,7 @@ RUN   chain_adler32_across_implementations
   INFO impls = 4
 PASS  chain_adler32_across_implementations (0.6 ms)
 RUN   large_random_buffers_all_impls
-PASS  large_random_buffers_all_impls (48.8 ms)
+PASS  large_random_buffers_all_impls (47.5 ms)
 RUN   adler32_saturated_input_modulo
 PASS  adler32_saturated_input_modulo (7.7 ms)
 RUN   count8_all_byte_values
@@ -278,23 +278,23 @@ RUN   impls_preserve_nonvolatile_xmm
 SKIP  impls_preserve_nonvolatile_xmm (0.1 ms): x86 ABI: every XMM register is volatile across calls
 RUN   guard_page_tail_handling
   NOTE AVX-512 masked-tail fault suppression not exercised (no usable AVX-512BW)
-PASS  guard_page_tail_handling (38.8 ms)
+PASS  guard_page_tail_handling (32.2 ms)
 RUN   perf_tiers_throughput
-  PERF add_u32_scalar_GBps = 17.4082 GB/s
-  PERF add_u32_sse2_GBps = 43.3718 GB/s
-  PERF add_u32_avx2_GBps = 55.1648 GB/s
-  PERF memcpy_scalar_GBps = 5.7525 GB/s
-  PERF memcpy_sse2_GBps = 66.1487 GB/s
-  PERF memcpy_avx_GBps = 61.5557 GB/s
-  PERF crc32c_scalar_GBps = 0.669907 GB/s
-  PERF crc32c_sse42_GBps = 7.1217 GB/s
-  PERF adler32_scalar_GBps = 4.474 GB/s
-  PERF adler32_sse2_GBps = 16.1345 GB/s
-  PERF adler32_ssse3_GBps = 19.4004 GB/s
-  PERF adler32_avx2_GBps = 24.5576 GB/s
-  PERF count8_scalar_GBps = 4.23612 GB/s
-  PERF count8_sse2_GBps = 29.1373 GB/s
-  PERF count8_popcnt_GBps = 52.1614 GB/s
-  PERF count8_avx2_GBps = 95.2846 GB/s
-PERF  perf_tiers_throughput (228.4 ms)
+  PERF add_u32_scalar_GBps = 17.578 GB/s
+  PERF add_u32_sse2_GBps = 53.4834 GB/s
+  PERF add_u32_avx2_GBps = 60.8647 GB/s
+  PERF memcpy_scalar_GBps = 6.20173 GB/s
+  PERF memcpy_sse2_GBps = 71.4712 GB/s
+  PERF memcpy_avx_GBps = 65.1035 GB/s
+  PERF crc32c_scalar_GBps = 0.68243 GB/s
+  PERF crc32c_sse42_GBps = 7.25563 GB/s
+  PERF adler32_scalar_GBps = 4.68905 GB/s
+  PERF adler32_sse2_GBps = 16.8747 GB/s
+  PERF adler32_ssse3_GBps = 20.3502 GB/s
+  PERF adler32_avx2_GBps = 24.6255 GB/s
+  PERF count8_scalar_GBps = 4.36386 GB/s
+  PERF count8_sse2_GBps = 30.1522 GB/s
+  PERF count8_popcnt_GBps = 55.1348 GB/s
+  PERF count8_avx2_GBps = 101.833 GB/s
+PERF  perf_tiers_throughput (227.9 ms)
 SUMMARY exe=simd_dispatch arch=x86 total=87 pass=75 fail=0 crash=0 skip=11 xfail=0 perf=1 checks=7530 checks_failed=0 exit=0

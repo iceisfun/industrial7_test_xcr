@@ -13,78 +13,78 @@ RUN   ctx_env_report
   INFO bench_cpu = 15
   INFO mode = quick
   NOTE running under Wine 11.0: numbers describe the host + Wine, not Windows
-PASS  ctx_env_report (3.2 ms)
-RUN   ctx_rtlcapturecontext
+PASS  ctx_env_report (1.7 ms)
+RUN   ctx_rtlcapturecontext_rate
   INFO pinned_cpu = 15 (performance core)
-  PERF rtlcapturecontext = 14.5673 Mops/s (n=9 min=4.61126 max=14.6553 sd=3.93)
-  INFO rtlcapturecontext.sd_pct = 31.12
-PERF  ctx_rtlcapturecontext (20.6 ms)
+  PERF rtlcapturecontext = 14.6093 Mops/s (n=9 min=14.1013 max=14.6453 sd=0.175)
+  INFO rtlcapturecontext.sd_pct = 1.20
+PERF  ctx_rtlcapturecontext_rate (13.9 ms)
 RUN   ctx_rtlcapturecontext2_xstate
-  SKIP ntdll!RtlCaptureContext2 not exported (before Windows 10 2004)
-SKIP  ctx_rtlcapturecontext2_xstate (0.1 ms): ntdll!RtlCaptureContext2 not exported (before Windows 10 2004)
+  SKIP ntdll!RtlCaptureContext2 not exported (needs Windows 10 version 2004, build 19041, or later; x64); simd_bench ctx_capture2_reference_selfcheck runs the reference capture
+SKIP  ctx_rtlcapturecontext2_xstate (0.3 ms): ntdll!RtlCaptureContext2 not exported (needs Windows 10 version 2004, build 19041, or later; x64); simd_bench ctx_capture2_reference_selfcheck runs the reference capture
 RUN   ctx_get_control
   INFO pinned_cpu = 15 (performance core)
-  PERF getthreadcontext_control = 14.3114 us/op (n=9 min=11.9024 max=15.9713 sd=1.23)
-  INFO getthreadcontext_control.sd_pct = 8.55
-PERF  ctx_get_control (15.3 ms)
+  PERF getthreadcontext_control = 10.3219 us/op (n=9 min=10.0627 max=13.7291 sd=1.16)
+  INFO getthreadcontext_control.sd_pct = 10.85
+PERF  ctx_get_control (15.2 ms)
 RUN   ctx_get_full_fp
   INFO pinned_cpu = 15 (performance core)
-  PERF getthreadcontext_full_fp = 10.2945 us/op (n=9 min=10.1302 max=2364 sd=783)
-  INFO getthreadcontext_full_fp.sd_pct = 284.79
-PERF  ctx_get_full_fp (19.4 ms)
-RUN   ctx_get_xstate_avx
+  PERF getthreadcontext_full_fp = 10.36 us/op (n=9 min=10.0906 max=13.9944 sd=1.49)
+  INFO getthreadcontext_full_fp.sd_pct = 13.34
+PERF  ctx_get_full_fp (15.3 ms)
+RUN   ctx_get_xstate_avx_ymm
   INFO enabled_xstate_features = 0x7
   INFO pinned_cpu = 15 (performance core)
-  PERF getthreadcontext_xstate_avx = 10.1087 us/op (n=9 min=10.066 max=10.2 sd=0.0461)
-  INFO getthreadcontext_xstate_avx.sd_pct = 0.46
-PERF  ctx_get_xstate_avx (15.4 ms)
-RUN   ctx_get_xstate_avx512
+  PERF getthreadcontext_xstate_avx = 10.4264 us/op (n=9 min=9.77857 max=12.4025 sd=0.952)
+  INFO getthreadcontext_xstate_avx.sd_pct = 8.87
+PERF  ctx_get_xstate_avx_ymm (15.3 ms)
+RUN   ctx_get_xstate_avx512_zmm
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
-SKIP  ctx_get_xstate_avx512 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
+SKIP  ctx_get_xstate_avx512_zmm (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   ctx_getset_full_fp
   INFO pinned_cpu = 15 (performance core)
-  PERF get_set_threadcontext_full_fp = 16.5934 us/op (n=9 min=13.508 max=18.6136 sd=1.64)
-  INFO get_set_threadcontext_full_fp.sd_pct = 9.96
+  PERF get_set_threadcontext_full_fp = 16.214 us/op (n=9 min=15.7916 max=16.8344 sd=0.327)
+  INFO get_set_threadcontext_full_fp.sd_pct = 2.01
 PERF  ctx_getset_full_fp (15.3 ms)
-RUN   ctx_getset_xstate_avx
+RUN   ctx_getset_xstate_avx_ymm
   INFO enabled_xstate_features = 0x7
   INFO pinned_cpu = 15 (performance core)
-  PERF get_set_threadcontext_xstate_avx = 17.6565 us/op (n=9 min=14.6883 max=20.3432 sd=1.65)
-  INFO get_set_threadcontext_xstate_avx.sd_pct = 9.28
-PERF  ctx_getset_xstate_avx (15.4 ms)
-RUN   ctx_getset_xstate_avx512
+  PERF get_set_threadcontext_xstate_avx = 15.5938 us/op (n=9 min=15.4571 max=15.9702 sd=0.171)
+  INFO get_set_threadcontext_xstate_avx.sd_pct = 1.10
+PERF  ctx_getset_xstate_avx_ymm (15.5 ms)
+RUN   ctx_getset_xstate_avx512_zmm
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
-SKIP  ctx_getset_xstate_avx512 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
+SKIP  ctx_getset_xstate_avx512_zmm (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   ctx_exception_raise_veh_roundtrip
   INFO pinned_cpu = 15 (performance core)
-  PERF raiseexception_veh_continue = 569.983 kexceptions/s (n=9 min=565.726 max=572.678 sd=2.03)
-  INFO raiseexception_veh_continue.sd_pct = 0.36
+  PERF raiseexception_veh_continue = 568.016 kexceptions/s (n=9 min=565.838 max=570.825 sd=1.52)
+  INFO raiseexception_veh_continue.sd_pct = 0.27
 PERF  ctx_exception_raise_veh_roundtrip (14.0 ms)
 RUN   ctx_exception_hw_ud2_veh_roundtrip
-  PERF ud2_veh_continue = 379.822 kexceptions/s (n=9 min=333.113 max=381.381 sd=15.5)
-  INFO child_ms = 27
-PERF  ctx_exception_hw_ud2_veh_roundtrip (27.1 ms)
+  PERF ud2_veh_continue = 380.399 kexceptions/s (n=9 min=366.072 max=381.963 sd=4.85)
+  INFO child_ms = 24
+PERF  ctx_exception_hw_ud2_veh_roundtrip (23.9 ms)
 RUN   ctx_fiber_switch_noflag
-  PERF switchtofiber_roundtrip_noflag = 70.7686 Mroundtrips/s (n=9 min=68.1021 max=71.04 sd=1.16)
-  INFO switchtofiber_roundtrip_noflag.sd_pct = 1.66
+  PERF switchtofiber_roundtrip_noflag = 71.136 Mroundtrips/s (n=9 min=69.2053 max=71.968 sd=0.738)
+  INFO switchtofiber_roundtrip_noflag.sd_pct = 1.04
   EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
-  FAIL context_bench.c:345: t.x.main_bad == 0 (946320 of the timed round trips came back with a foreign MXCSR on the main fiber (want 0x1f80 control bits))
-  FAIL context_bench.c:346: t.x.other_bad == 0 (946320 resumptions of the other fiber saw a foreign MXCSR (want 0xbf80))
-XFAIL ctx_fiber_switch_noflag (15.8 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+  FAIL context_bench.c:345: t.x.main_bad == 0 (958720 of the timed round trips came back with a foreign MXCSR on the main fiber (want 0x1f80 control bits))
+  FAIL context_bench.c:346: t.x.other_bad == 0 (958720 resumptions of the other fiber saw a foreign MXCSR (want 0xbf80))
+XFAIL ctx_fiber_switch_noflag (15.6 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
 RUN   ctx_fiber_switch_float_switch
-  PERF switchtofiber_roundtrip_float_switch = 70.2293 Mroundtrips/s (n=9 min=62.2613 max=70.9179 sd=2.74)
-  INFO switchtofiber_roundtrip_float_switch.sd_pct = 3.95
+  PERF switchtofiber_roundtrip_float_switch = 71.2213 Mroundtrips/s (n=9 min=71.0187 max=71.7227 sd=0.251)
+  INFO switchtofiber_roundtrip_float_switch.sd_pct = 0.35
   EXPECT-FAIL Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
-  FAIL context_bench.c:345: t.x.main_bad == 0 (935584 of the timed round trips came back with a foreign MXCSR on the main fiber (want 0x1f80 control bits))
-  FAIL context_bench.c:346: t.x.other_bad == 0 (935584 resumptions of the other fiber saw a foreign MXCSR (want 0xbf80))
-XFAIL ctx_fiber_switch_float_switch (15.8 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
-RUN   ctx_thread_create_join
+  FAIL context_bench.c:345: t.x.main_bad == 0 (962464 of the timed round trips came back with a foreign MXCSR on the main fiber (want 0x1f80 control bits))
+  FAIL context_bench.c:346: t.x.other_bad == 0 (962464 resumptions of the other fiber saw a foreign MXCSR (want 0xbf80))
+XFAIL ctx_fiber_switch_float_switch (14.8 ms): Wine: SwitchToFiber does not switch MXCSR / x87 control word per fiber
+RUN   ctx_thread_create_join_single
   INFO pinned_cpu = 15 (performance core)
-  PERF createthread_wait_close = 6.90218 kthreads/s (n=9 min=2.28551 max=7.20555 sd=2)
-  INFO createthread_wait_close.sd_pct = 35.13
-PERF  ctx_thread_create_join (18.0 ms)
+  PERF createthread_wait_close = 7.02202 kthreads/s (n=9 min=0.552547 max=7.88281 sd=2.42)
+  INFO createthread_wait_close.sd_pct = 39.77
+PERF  ctx_thread_create_join_single (17.4 ms)
 RUN   ctx_thread_create_join_batch64
-  PERF createthread_batch64_wait_close = 12.0727 kthreads/s (n=9 min=11.4804 max=16.2214 sd=1.65)
-  INFO createthread_batch64_wait_close.sd_pct = 12.96
-PERF  ctx_thread_create_join_batch64 (78.0 ms)
+  PERF createthread_batch64_wait_close = 12.3013 kthreads/s (n=9 min=11.4984 max=14.9617 sd=1.21)
+  INFO createthread_batch64_wait_close.sd_pct = 9.58
+PERF  ctx_thread_create_join_batch64 (99.7 ms)
 SUMMARY exe=context_bench arch=x64 total=16 pass=1 fail=0 crash=0 skip=3 xfail=2 perf=10 checks=88 checks_failed=4 exit=0

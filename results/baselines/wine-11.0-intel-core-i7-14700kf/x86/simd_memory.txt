@@ -17,19 +17,19 @@ PASS  nt_copy_movntpd (0.7 ms)
 RUN   nt_copy_movntq_mmx
 PASS  nt_copy_movntq_mmx (0.7 ms)
 RUN   nt_copy_maskmovdqu
-PASS  nt_copy_maskmovdqu (0.7 ms)
+PASS  nt_copy_maskmovdqu (0.8 ms)
 RUN   nt_copy_movntdqa
 PASS  nt_copy_movntdqa (0.6 ms)
 RUN   nt_copy_vmovntdq_xmm
 PASS  nt_copy_vmovntdq_xmm (0.7 ms)
 RUN   nt_copy_vmovntdq_ymm
-PASS  nt_copy_vmovntdq_ymm (0.7 ms)
+PASS  nt_copy_vmovntdq_ymm (0.8 ms)
 RUN   nt_copy_vmovntps_ymm
-PASS  nt_copy_vmovntps_ymm (0.7 ms)
+PASS  nt_copy_vmovntps_ymm (0.8 ms)
 RUN   nt_copy_vmovntpd_ymm
 PASS  nt_copy_vmovntpd_ymm (0.7 ms)
 RUN   nt_copy_vmovntdqa_ymm
-PASS  nt_copy_vmovntdqa_ymm (0.7 ms)
+PASS  nt_copy_vmovntdqa_ymm (0.6 ms)
 RUN   nt_copy_vmovntdq_zmm
   SKIP vmovntdq_zmm needs avx512f (cpuid bit 0)
 SKIP  nt_copy_vmovntdq_zmm (0.1 ms): vmovntdq_zmm needs avx512f (cpuid bit 0)
@@ -38,24 +38,24 @@ RUN   nt_copy_vmovntdqa_zmm
 SKIP  nt_copy_vmovntdqa_zmm (0.1 ms): vmovntdqa_zmm needs avx512f (cpuid bit 0)
 RUN   nt_memcpy_edge_sizes_offsets
   INFO kernels = 12
-PASS  nt_memcpy_edge_sizes_offsets (4.7 ms)
+PASS  nt_memcpy_edge_sizes_offsets (4.3 ms)
 RUN   nt_copy_32mb_equals_memcpy
   INFO kernels = 10
-PASS  nt_copy_32mb_equals_memcpy (110.4 ms)
+PASS  nt_copy_32mb_equals_memcpy (105.9 ms)
 RUN   nt_copy_bandwidth_perf
-  PERF memcpy_16mb = 19.7078 GB/s
-  PERF movntdq_16mb = 36.5756 GB/s
-  PERF vmovntdq_ymm_16mb = 38.0868 GB/s
-  PERF movnti32_16mb = 20.1238 GB/s
-  PERF movntdqa_16mb = 18.7896 GB/s
-PERF  nt_copy_bandwidth_perf (44.4 ms)
+  PERF memcpy_16mb = 21.1994 GB/s
+  PERF movntdq_16mb = 39.6624 GB/s
+  PERF vmovntdq_ymm_16mb = 41.3232 GB/s
+  PERF movnti32_16mb = 19.5904 GB/s
+  PERF movntdqa_16mb = 20.0636 GB/s
+PERF  nt_copy_bandwidth_perf (41.7 ms)
 RUN   nt_program_order_same_thread
-PASS  nt_program_order_same_thread (0.5 ms)
+PASS  nt_program_order_same_thread (0.4 ms)
 RUN   nt_stores_survive_context_switch_and_migration
   INFO migrations = 200
-PASS  nt_stores_survive_context_switch_and_migration (84.6 ms)
+PASS  nt_stores_survive_context_switch_and_migration (95.4 ms)
 RUN   nt_movnti_unaligned_and_page_crossing
-PASS  nt_movnti_unaligned_and_page_crossing (0.1 ms)
+PASS  nt_movnti_unaligned_and_page_crossing (0.0 ms)
 RUN   nt_movntss_movntsd_sse4a
   SKIP sse4a not usable (cpuid bit 0)
 SKIP  nt_movntss_movntsd_sse4a (0.1 ms): sse4a not usable (cpuid bit 0)
@@ -68,7 +68,7 @@ RUN   nt_misaligned_store_load_faults
   NOTE movntpd_mis: #GP reported as code=0xc0000005 rw=0 addr=0xffffffff
   INFO movntdqa_mis = rw=0 addr=0xffffffff
   NOTE movntdqa_mis: #GP reported as code=0xc0000005 rw=0 addr=0xffffffff
-PASS  nt_misaligned_store_load_faults (65.3 ms)
+PASS  nt_misaligned_store_load_faults (51.2 ms)
 RUN   nt_vex_evex_misaligned_faults
   INFO vmovntdq_xmm_mis = rw=0 addr=0xffffffff
   NOTE vmovntdq_xmm_mis: #GP reported as code=0xc0000005 rw=0 addr=0xffffffff
@@ -77,154 +77,154 @@ RUN   nt_vex_evex_misaligned_faults
   INFO vmovntdqa_ymm_mis = rw=0 addr=0xffffffff
   NOTE vmovntdqa_ymm_mis: #GP reported as code=0xc0000005 rw=0 addr=0xffffffff
   NOTE vmovntdq_zmm_mis: not available here
-PASS  nt_vex_evex_misaligned_faults (47.0 ms)
+PASS  nt_vex_evex_misaligned_faults (37.4 ms)
 RUN   nt_store_to_noaccess_and_readonly_faults
-PASS  nt_store_to_noaccess_and_readonly_faults (31.5 ms)
+PASS  nt_store_to_noaccess_and_readonly_faults (20.8 ms)
 RUN   nt_load_from_noaccess_faults
-PASS  nt_load_from_noaccess_faults (18.5 ms)
+PASS  nt_load_from_noaccess_faults (17.4 ms)
 RUN   mp_movnti32_sfence_flag
   INFO messages = 400
 PASS  mp_movnti32_sfence_flag (1.6 ms)
 RUN   mp_movntdq_sfence_flag
   INFO messages = 400
-PASS  mp_movntdq_sfence_flag (1.5 ms)
+PASS  mp_movntdq_sfence_flag (1.7 ms)
 RUN   mp_movntps_sfence_flag
   INFO messages = 400
-PASS  mp_movntps_sfence_flag (1.5 ms)
+PASS  mp_movntps_sfence_flag (1.6 ms)
 RUN   mp_maskmovdqu_sfence_flag
   INFO messages = 400
-PASS  mp_maskmovdqu_sfence_flag (1.7 ms)
+PASS  mp_maskmovdqu_sfence_flag (1.6 ms)
 RUN   mp_vmovntdq_ymm_sfence_flag
   INFO messages = 400
-PASS  mp_vmovntdq_ymm_sfence_flag (1.6 ms)
+PASS  mp_vmovntdq_ymm_sfence_flag (1.5 ms)
 RUN   mp_vmovntdq_zmm_sfence_flag
   SKIP vmovntdq_zmm needs avx512f (cpuid bit 0)
-SKIP  mp_vmovntdq_zmm_sfence_flag (0.2 ms): vmovntdq_zmm needs avx512f (cpuid bit 0)
+SKIP  mp_vmovntdq_zmm_sfence_flag (0.1 ms): vmovntdq_zmm needs avx512f (cpuid bit 0)
 RUN   ev_movntdq_nofence_setevent
   INFO cross_cpu = 1
-PASS  ev_movntdq_nofence_setevent (9.0 ms)
+PASS  ev_movntdq_nofence_setevent (8.0 ms)
 RUN   ev_movnti32_nofence_setevent
   INFO cross_cpu = 1
 PASS  ev_movnti32_nofence_setevent (8.1 ms)
 RUN   ev_vmovntdq_ymm_nofence_setevent
   INFO cross_cpu = 1
-PASS  ev_vmovntdq_ymm_nofence_setevent (7.9 ms)
+PASS  ev_vmovntdq_ymm_nofence_setevent (8.0 ms)
 RUN   litmus_sb_plain_info
   INFO iterations = 20000
-  INFO forbidden_or_relaxed = 74
-  NOTE SB plain: relaxed outcome observed 74/20000 times (allowed by the x86 model)
-PASS  litmus_sb_plain_info (5.2 ms)
+  INFO forbidden_or_relaxed = 2091
+  NOTE SB plain: relaxed outcome observed 2091/20000 times (allowed by the x86 model)
+PASS  litmus_sb_plain_info (7.5 ms)
 RUN   litmus_sb_mfence
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_sb_mfence (5.3 ms)
+PASS  litmus_sb_mfence (5.4 ms)
 RUN   litmus_sb_xchg
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_sb_xchg (5.3 ms)
+PASS  litmus_sb_xchg (5.4 ms)
 RUN   litmus_sb_lock_or
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_sb_lock_or (5.1 ms)
+PASS  litmus_sb_lock_or (7.7 ms)
 RUN   litmus_sb_sfence_info
   INFO iterations = 20000
-  INFO forbidden_or_relaxed = 1020
-  NOTE SB+sfence: relaxed outcome observed 1020/20000 times (allowed by the x86 model)
-PASS  litmus_sb_sfence_info (5.1 ms)
+  INFO forbidden_or_relaxed = 189
+  NOTE SB+sfence: relaxed outcome observed 189/20000 times (allowed by the x86 model)
+PASS  litmus_sb_sfence_info (4.0 ms)
 RUN   litmus_sb_lfence_info
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
   NOTE SB+lfence: relaxed outcome observed 0/20000 times (allowed by the x86 model)
-PASS  litmus_sb_lfence_info (4.9 ms)
+PASS  litmus_sb_lfence_info (5.6 ms)
 RUN   litmus_mp_plain
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_mp_plain (5.0 ms)
+PASS  litmus_mp_plain (7.8 ms)
 RUN   litmus_mp_movnti_sfence
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_mp_movnti_sfence (6.9 ms)
+PASS  litmus_mp_movnti_sfence (6.4 ms)
 RUN   litmus_mp_movnti_nofence_info
   INFO iterations = 20000
-  INFO forbidden_or_relaxed = 10465
-  NOTE MP movnti no fence: relaxed outcome observed 10465/20000 times (allowed by the x86 model)
-PASS  litmus_mp_movnti_nofence_info (5.1 ms)
+  INFO forbidden_or_relaxed = 10633
+  NOTE MP movnti no fence: relaxed outcome observed 10633/20000 times (allowed by the x86 model)
+PASS  litmus_mp_movnti_nofence_info (5.0 ms)
 RUN   litmus_lb_plain
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_lb_plain (5.1 ms)
+PASS  litmus_lb_plain (5.3 ms)
 RUN   litmus_mp_movnti_mfence
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_mp_movnti_mfence (6.7 ms)
+PASS  litmus_mp_movnti_mfence (7.2 ms)
 RUN   litmus_mp_movnti_lock_or
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_mp_movnti_lock_or (6.9 ms)
+PASS  litmus_mp_movnti_lock_or (6.7 ms)
 RUN   litmus_mp_movnti_xchg_flag
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_mp_movnti_xchg_flag (6.9 ms)
+PASS  litmus_mp_movnti_xchg_flag (6.7 ms)
 RUN   litmus_mp_movntdq_sfence
   INFO iterations = 20000
   INFO forbidden_or_relaxed = 0
-PASS  litmus_mp_movntdq_sfence (7.0 ms)
+PASS  litmus_mp_movntdq_sfence (7.1 ms)
 RUN   fences_preserve_flags_and_registers
 PASS  fences_preserve_flags_and_registers (0.0 ms)
 RUN   serialize_preserves_flags
 PASS  serialize_preserves_flags (0.0 ms)
 RUN   pause_latency_info_and_spin_handoff
-  INFO ns_per_pause = 30.02
-PASS  pause_latency_info_and_spin_handoff (6.1 ms)
+  INFO ns_per_pause = 29.74
+PASS  pause_latency_info_and_spin_handoff (6.0 ms)
 RUN   pause_spin_pingpong_threads
-PASS  pause_spin_pingpong_threads (0.7 ms)
+PASS  pause_spin_pingpong_threads (1.2 ms)
 RUN   rdtsc_lfence_monotonic_pinned
-  INFO min_fenced_delta_ticks = 30
+  INFO min_fenced_delta_ticks = 29
   INFO rdtsc_back_to_back_ticks = 16
 PASS  rdtsc_lfence_monotonic_pinned (5.5 ms)
 RUN   rdtscp_aux_stable_per_cpu
   INFO cpus_tested = 16
   INFO distinct_tsc_aux = 16
-PASS  rdtscp_aux_stable_per_cpu (13.2 ms)
+PASS  rdtscp_aux_stable_per_cpu (9.9 ms)
 RUN   rdpid_equals_rdtscp_aux
-PASS  rdpid_equals_rdtscp_aux (0.2 ms)
+PASS  rdpid_equals_rdtscp_aux (2.8 ms)
 RUN   tsc_rate_vs_qpc_info
   INFO tsc_mhz_vs_qpc = 3417.6
   INFO invariant_tsc = 1
-PASS  tsc_rate_vs_qpc_info (50.3 ms)
+PASS  tsc_rate_vs_qpc_info (50.2 ms)
 RUN   cache_clflush_data_intact
   INFO clflush_line = 64
-PASS  cache_clflush_data_intact (0.8 ms)
+PASS  cache_clflush_data_intact (0.7 ms)
 RUN   cache_clflush_readonly_exec_ok
 PASS  cache_clflush_readonly_exec_ok (0.0 ms)
 RUN   cache_clflush_noaccess_faults
   INFO clflush_noacc = rw=0 addr=0x1f10c0
-PASS  cache_clflush_noaccess_faults (18.6 ms)
+PASS  cache_clflush_noaccess_faults (15.9 ms)
 RUN   cache_clflushopt_data_intact
 PASS  cache_clflushopt_data_intact (0.4 ms)
 RUN   cache_clflushopt_readonly_exec_ok
 PASS  cache_clflushopt_readonly_exec_ok (0.0 ms)
 RUN   cache_clflushopt_noaccess_faults
   INFO clflushopt_noacc = rw=0 addr=0x1f10c0
-PASS  cache_clflushopt_noaccess_faults (18.6 ms)
+PASS  cache_clflushopt_noaccess_faults (17.3 ms)
 RUN   cache_clwb_data_intact
-PASS  cache_clwb_data_intact (0.6 ms)
+PASS  cache_clwb_data_intact (0.5 ms)
 RUN   cache_clwb_readonly_exec_ok
-PASS  cache_clwb_readonly_exec_ok (0.0 ms)
+PASS  cache_clwb_readonly_exec_ok (0.1 ms)
 RUN   cache_clwb_noaccess_faults
   INFO clwb_noacc = rw=0 addr=0x1f10c0
-PASS  cache_clwb_noaccess_faults (16.9 ms)
+PASS  cache_clwb_noaccess_faults (12.5 ms)
 RUN   cache_cldemote_hint
   NOTE cldemote executed as a hint NOP (CPUID bit clear)
-PASS  cache_cldemote_hint (0.3 ms)
+PASS  cache_cldemote_hint (0.1 ms)
 RUN   cache_clzero_zeroes_one_line
   SKIP clzero not usable (cpuid bit 0)
-SKIP  cache_clzero_zeroes_one_line (0.2 ms): clzero not usable (cpuid bit 0)
+SKIP  cache_clzero_zeroes_one_line (0.1 ms): clzero not usable (cpuid bit 0)
 RUN   prefetch_valid_memory_all_hints
   INFO hints = 5
 PASS  prefetch_valid_memory_all_hints (0.2 ms)
 RUN   prefetch_noaccess_and_readonly_no_fault
-PASS  prefetch_noaccess_and_readonly_no_fault (0.1 ms)
+PASS  prefetch_noaccess_and_readonly_no_fault (0.0 ms)
 RUN   prefetch_reserved_and_freed_no_fault
 PASS  prefetch_reserved_and_freed_no_fault (0.0 ms)
 RUN   prefetch_null_and_kernel_addresses_no_fault
@@ -244,11 +244,11 @@ PASS  maskmovdqu_byte_select (0.1 ms)
 RUN   maskmovq_mmx_byte_select
 PASS  maskmovq_mmx_byte_select (0.1 ms)
 RUN   maskmovdqu_active_byte_in_bad_page_faults
-PASS  maskmovdqu_active_byte_in_bad_page_faults (17.3 ms)
+PASS  maskmovdqu_active_byte_in_bad_page_faults (14.9 ms)
 RUN   maskmovdqu_inactive_bytes_bad_page_info
   NOTE maskmovdqu_inactive_info: faulted (implementation-dependent) rw=1 off=0
   NOTE maskmovdqu_zero_info: faulted (implementation-dependent) rw=1 off=40
-PASS  maskmovdqu_inactive_bytes_bad_page_info (30.3 ms)
+PASS  maskmovdqu_inactive_bytes_bad_page_info (27.9 ms)
 RUN   masked_vmaskmovps_xmm
 PASS  masked_vmaskmovps_xmm (0.1 ms)
 RUN   masked_vmaskmovps_ymm
@@ -281,7 +281,7 @@ RUN   masked_avx512_vmovups_vmovupd
   SKIP avx512_vmovups_vmovupd: no form usable on this CPU/OS
 SKIP  masked_avx512_vmovups_vmovupd (0.1 ms): avx512_vmovups_vmovupd: no form usable on this CPU/OS
 RUN   masked_vex_active_lane_in_bad_page_faults
-PASS  masked_vex_active_lane_in_bad_page_faults (54.3 ms)
+PASS  masked_vex_active_lane_in_bad_page_faults (44.3 ms)
 RUN   masked_avx512_active_lane_in_bad_page_faults
   SKIP avx512f not usable (cpuid bit 0)
 SKIP  masked_avx512_active_lane_in_bad_page_faults (0.1 ms): avx512f not usable (cpuid bit 0)
@@ -321,14 +321,14 @@ RUN   scatter_avx512_vpscatterqq_zmm
   SKIP avx512f not usable (cpuid bit 0)
 SKIP  scatter_avx512_vpscatterqq_zmm (0.1 ms): avx512f not usable (cpuid bit 0)
 RUN   gather_avx2_active_lane_in_bad_page_faults
-PASS  gather_avx2_active_lane_in_bad_page_faults (11.4 ms)
+PASS  gather_avx2_active_lane_in_bad_page_faults (12.7 ms)
 RUN   gather_avx512_active_lane_in_bad_page_faults
   SKIP avx512f not usable (cpuid bit 0)
-SKIP  gather_avx512_active_lane_in_bad_page_faults (0.1 ms): avx512f not usable (cpuid bit 0)
+SKIP  gather_avx512_active_lane_in_bad_page_faults (0.2 ms): avx512f not usable (cpuid bit 0)
 RUN   resume_gather_avx2_guard_pages
-PASS  resume_gather_avx2_guard_pages (0.1 ms)
+PASS  resume_gather_avx2_guard_pages (0.2 ms)
 RUN   resume_gather_avx2_qq_guard_pages
-PASS  resume_gather_avx2_qq_guard_pages (0.1 ms)
+PASS  resume_gather_avx2_qq_guard_pages (0.2 ms)
 RUN   resume_gather_avx2_commit_on_demand
 PASS  resume_gather_avx2_commit_on_demand (0.1 ms)
 RUN   resume_gather_avx512_guard_pages
@@ -381,15 +381,15 @@ RUN   lock_cmpxchg8b_threads_counter
 PASS  lock_cmpxchg8b_threads_counter (2.5 ms)
 RUN   lock_xadd_threads_counter
   INFO threads = 8
-PASS  lock_xadd_threads_counter (5.1 ms)
+PASS  lock_xadd_threads_counter (6.9 ms)
 RUN   lock_cmpxchg_readonly_page_write_faults
-PASS  lock_cmpxchg_readonly_page_write_faults (15.0 ms)
+PASS  lock_cmpxchg_readonly_page_write_faults (12.2 ms)
 RUN   lock_split_cacheline_info
-  INFO split_lock_ms = 12.084
-PASS  lock_split_cacheline_info (22.4 ms)
+  INFO split_lock_ms = 11.862
+PASS  lock_split_cacheline_info (27.2 ms)
 RUN   rdrand_16
   INFO cf0_retries = 0
-  INFO distinct = 1015/1024
+  INFO distinct = 1016/1024
 PASS  rdrand_16 (0.5 ms)
 RUN   rdrand_32
   INFO cf0_retries = 0
@@ -399,22 +399,22 @@ RUN   rdrand_64
   SKIP 64-bit operand size needs 64-bit mode
 SKIP  rdrand_64 (0.1 ms): 64-bit operand size needs 64-bit mode
 RUN   rdseed_16
-  INFO cf0_retries = 4429
-  INFO distinct = 1017/1024
+  INFO cf0_retries = 4459
+  INFO distinct = 1016/1024
 PASS  rdseed_16 (2.0 ms)
 RUN   rdseed_32
-  INFO cf0_retries = 4452
+  INFO cf0_retries = 4466
   INFO distinct = 1024/1024
 PASS  rdseed_32 (2.0 ms)
 RUN   rdseed_64
   SKIP 64-bit operand size needs 64-bit mode
 SKIP  rdseed_64 (0.1 ms): 64-bit operand size needs 64-bit mode
 RUN   rdrand_bit_balance
-  INFO ones_fraction = 0.49891
+  INFO ones_fraction = 0.50159
 PASS  rdrand_bit_balance (1.4 ms)
 RUN   rdrand_threads_unique
   INFO values = 2048
-PASS  rdrand_threads_unique (1.1 ms)
+PASS  rdrand_threads_unique (1.2 ms)
 RUN   movdiri_direct_store
 PASS  movdiri_direct_store (0.0 ms)
 RUN   movdir64b_direct_store
@@ -422,16 +422,16 @@ PASS  movdir64b_direct_store (0.0 ms)
 RUN   movdir64b_misaligned_destination_faults
   INFO movdir64b_mis = rw=0 addr=0xffffffff
   NOTE movdir64b_mis: #GP reported as code=0xc0000005 rw=0 addr=0xffffffff
-PASS  movdir64b_misaligned_destination_faults (13.3 ms)
+PASS  movdir64b_misaligned_destination_faults (17.6 ms)
 RUN   waitpkg_tpause_umwait_bounded
-  NOTE waitpkg: tpause_cf=0 tpause_ticks=100281 umwait_cf=0 umwait_ticks=100105
-PASS  waitpkg_tpause_umwait_bounded (14.4 ms)
+  NOTE waitpkg: tpause_cf=0 tpause_ticks=100252 umwait_cf=0 umwait_ticks=100109
+PASS  waitpkg_tpause_umwait_bounded (10.5 ms)
 RUN   wc_memory_roundtrip_note
   INFO protect = 0x4
-  NOTE PAGE_WRITECOMBINE: 1 MB NT store 0.31 ms, read back 0.25 ms
+  NOTE PAGE_WRITECOMBINE: 1 MB NT store 0.32 ms, read back 0.25 ms
 PASS  wc_memory_roundtrip_note (1.5 ms)
 RUN   nocache_memory_roundtrip_note
   INFO protect = 0x204
-  NOTE PAGE_NOCACHE: 1 MB NT store 0.25 ms, read back 0.24 ms
+  NOTE PAGE_NOCACHE: 1 MB NT store 0.24 ms, read back 0.23 ms
 PASS  nocache_memory_roundtrip_note (1.2 ms)
 SUMMARY exe=simd_memory arch=x86 total=149 pass=114 fail=0 crash=0 skip=34 xfail=0 perf=1 checks=5306 checks_failed=0 exit=0

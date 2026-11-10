@@ -4,7 +4,7 @@ ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0x
 ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
 ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
 RUN   ref_nop_roundtrip_xmm
-PASS  ref_nop_roundtrip_xmm (0.1 ms)
+PASS  ref_nop_roundtrip_xmm (0.0 ms)
 RUN   ref_nop_roundtrip_ymm
 PASS  ref_nop_roundtrip_ymm (0.0 ms)
 RUN   ref_nop_roundtrip_zmm
@@ -49,7 +49,7 @@ PASS  veh_av_write_null (0.0 ms)
 RUN   veh_av_read_null_ymm
 PASS  veh_av_read_null_ymm (0.0 ms)
 RUN   veh_av_read_guard_page_end
-  INFO straddle_info1 = 0xd01000 (load at p+60, page at p+64)
+  INFO straddle_info1 = 0xc01000 (load at p+60, page at p+64)
 PASS  veh_av_read_guard_page_end (0.2 ms)
 RUN   veh_av_write_readonly
 PASS  veh_av_write_readonly (0.0 ms)
@@ -60,7 +60,7 @@ PASS  veh_av_execute_nx (0.0 ms)
 RUN   veh_movaps_misaligned
   INFO nparams = VEH: 2 (info0=0x0 info1=0xffffffffffffffff)
   INFO code = 0xc0000005 np=2 info1=0xffffffffffffffff
-PASS  veh_movaps_misaligned (0.3 ms)
+PASS  veh_movaps_misaligned (0.2 ms)
 RUN   veh_guard_page_read_once
 PASS  veh_guard_page_read_once (0.0 ms)
 RUN   veh_guard_page_write_once
@@ -107,7 +107,7 @@ RUN   fp_sse_invalid_unmasked
 PASS  fp_sse_invalid_unmasked (0.1 ms)
 RUN   fp_sse_denormal_unmasked
   EXPECT-FAIL Wine gap: SSE #XM with only DE unmasked is reported as STATUS_FLOAT_UNDERFLOW (Linux maps DE to FPE_FLTUND)
-  FAIL exception_xstate.c:907: code == e->code || alt (VEH: ExceptionCode 0xc0000093, expected 0xc0000090)
+  FAIL exception_xstate.c:874: code == e->code || alt (VEH: ExceptionCode 0xc0000093, expected 0xc0000090)
   INFO code = 0xc0000093 np=2 info0=0x0 info1=0x1e82
 XFAIL fp_sse_denormal_unmasked (0.6 ms): Wine gap: SSE #XM with only DE unmasked is reported as STATUS_FLOAT_UNDERFLOW (Linux maps DE to FPE_FLTUND)
 RUN   fp_sse_overflow_unmasked
@@ -123,17 +123,17 @@ RUN   fp_sse_zero_divide_unmasked_ymm
   INFO code = 0xc000008e np=2 info0=0x0 info1=0x1d84
 PASS  fp_sse_zero_divide_unmasked_ymm (0.1 ms)
 RUN   fp_sse_masked_no_exception
-PASS  fp_sse_masked_no_exception (0.1 ms)
+PASS  fp_sse_masked_no_exception (0.0 ms)
 RUN   fp_x87_zero_divide_unmasked
   EXPECT-FAIL Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
-  FAIL exception_xstate.c:914: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
-  FAIL exception_xstate.c:921: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
+  FAIL exception_xstate.c:881: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
+  FAIL exception_xstate.c:888: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
   INFO code = 0xc000008e np=0
 XFAIL fp_x87_zero_divide_unmasked (0.8 ms): Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
 RUN   fp_x87_stack_overflow_unmasked
   EXPECT-FAIL Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
-  FAIL exception_xstate.c:914: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
-  FAIL exception_xstate.c:921: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
+  FAIL exception_xstate.c:881: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
+  FAIL exception_xstate.c:888: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
   INFO code = 0xc0000092 np=0
 XFAIL fp_x87_stack_overflow_unmasked (0.8 ms): Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
 RUN   fp_x87_masked_no_exception
@@ -159,18 +159,18 @@ PASS  seh_nested_call_flag (0.0 ms)
 RUN   seh_unwind_same_frame_nonvolatile_x64
   INFO mxcsr_after_unwind = 0xbf80 (at fault 0xbf80)
   INFO mxcsr_after_unwind = 0xbf80 (at fault 0xbf80)
-PASS  seh_unwind_same_frame_nonvolatile_x64 (0.3 ms)
+PASS  seh_unwind_same_frame_nonvolatile_x64 (0.2 ms)
 RUN   seh_unwind_through_inner_frame_x64
 PASS  seh_unwind_through_inner_frame_x64 (0.0 ms)
 RUN   veh_first_last_order
 PASS  veh_first_last_order (0.0 ms)
 RUN   vch_called_after_veh_continue
   EXPECT-FAIL Wine gap: vectored continue handlers are registered but never called by the dispatcher
-  FAIL exception_xstate.c:2104: ok (VEH(continue) then continue handler: handler order [3 ] want [3 9 ])
+  FAIL exception_xstate.c:2100: ok (VEH(continue) then continue handler: handler order [3 ] want [3 9 ])
 XFAIL vch_called_after_veh_continue (0.4 ms): Wine gap: vectored continue handlers are registered but never called by the dispatcher
 RUN   vch_context_edit_takes_effect
   EXPECT-FAIL Wine gap: vectored continue handlers are registered but never called by the dispatcher
-  FAIL exception_xstate.c:2171: s->nested_calls == 1 (continue handler ran 0 times after the VEH continued)
+  FAIL exception_xstate.c:2167: s->nested_calls == 1 (continue handler ran 0 times after the VEH continued)
 XFAIL vch_context_edit_takes_effect (0.4 ms): Wine gap: vectored continue handlers are registered but never called by the dispatcher
 RUN   vch_reference_dispatch_selfcheck
 PASS  vch_reference_dispatch_selfcheck (0.0 ms)
@@ -192,33 +192,33 @@ PASS  raise_context_flags_info (0.1 ms)
 RUN   thr_worker_exceptions_isolated_xmm
   INFO threads = 8
   INFO exceptions = 384
-PASS  thr_worker_exceptions_isolated_xmm (23.5 ms)
+PASS  thr_worker_exceptions_isolated_xmm (13.7 ms)
 RUN   thr_worker_exceptions_isolated_ymm
   INFO threads = 16
   INFO exceptions = 768
-PASS  thr_worker_exceptions_isolated_ymm (2.9 ms)
+PASS  thr_worker_exceptions_isolated_ymm (4.2 ms)
 RUN   thr_worker_exceptions_isolated_zmm
   SKIP AVX-512F not usable
 SKIP  thr_worker_exceptions_isolated_zmm (0.1 ms): AVX-512F not usable
 RUN   thr_worker_fp_exceptions
   NOTE Wine: iterations with a known exception-code gap (see fp_sse_*_unmasked) replaced by ZE/IE
-PASS  thr_worker_fp_exceptions (1.7 ms)
+PASS  thr_worker_fp_exceptions (1.9 ms)
 RUN   child_ud2_illegal_instruction_handled
   NOTE child ud2: nparams = VEH: 0 (info0=0x0 info1=0x0)
   NOTE child ud2: nparams = VEH: 0 (info0=0x0 info1=0x0)
-PASS  child_ud2_illegal_instruction_handled (15.6 ms)
+PASS  child_ud2_illegal_instruction_handled (18.8 ms)
 RUN   child_ud2_frame_handler
   NOTE child ud2: nparams = SEH: 0 (info0=0x0 info1=0x0)
-PASS  child_ud2_frame_handler (7.5 ms)
+PASS  child_ud2_frame_handler (9.3 ms)
 RUN   child_ud2_unhandled_exit_code
-PASS  child_ud2_unhandled_exit_code (9.1 ms)
+PASS  child_ud2_unhandled_exit_code (8.5 ms)
 RUN   child_div0_unhandled_exit_code
-PASS  child_div0_unhandled_exit_code (11.0 ms)
+PASS  child_div0_unhandled_exit_code (9.6 ms)
 RUN   child_privileged_hlt_cli_sti
   NOTE child hlt: nparams = VEH: 0 (info0=0x0 info1=0x0)
   NOTE child cli: nparams = VEH: 0 (info0=0x0 info1=0x0)
   NOTE child sti: nparams = VEH: 0 (info0=0x0 info1=0x0)
-PASS  child_privileged_hlt_cli_sti (30.5 ms)
+PASS  child_privileged_hlt_cli_sti (31.4 ms)
 RUN   child_privileged_misc
   NOTE child inb: nparams = VEH: 0 (info0=0x0 info1=0x0)
   NOTE child outb: nparams = VEH: 0 (info0=0x0 info1=0x0)
@@ -231,25 +231,25 @@ RUN   child_privileged_misc
   NOTE child clts: nparams = VEH: 0 (info0=0x0 info1=0x0)
   NOTE child invd: nparams = VEH: 0 (info0=0x0 info1=0x0)
   INFO codes = inb=0xc0000096 outb=0xc0000096 wbinvd=0xc0000096 rdmsr=0xc0000005 wrmsr=0xc0000005 movcr=0xc0000096 clts=0xc0000096 invd=0xc0000096 
-PASS  child_privileged_misc (80.0 ms)
+PASS  child_privileged_misc (71.1 ms)
 RUN   child_xsetbv_privileged
   NOTE child xsetbv: VEH: ExceptionCode 0xc0000005 (accepted alternative to 0xc0000096)
   NOTE child xsetbv: nparams = VEH: 2 (info0=0x0 info1=0xffffffffffffffff)
   INFO code = 0xc0000005
-PASS  child_xsetbv_privileged (11.4 ms)
+PASS  child_xsetbv_privileged (8.8 ms)
 RUN   child_int2c_assertion_failure
   NOTE child int2c: nparams = VEH: 0 (info0=0x0 info1=0x0)
   INFO code = 0xc0000420
-PASS  child_int2c_assertion_failure (8.9 ms)
+PASS  child_int2c_assertion_failure (9.6 ms)
 RUN   child_fastfail_bypasses_handlers
   INFO exit = 0xc0000409
-PASS  child_fastfail_bypasses_handlers (10.5 ms)
+PASS  child_fastfail_bypasses_handlers (6.3 ms)
 RUN   child_noncontinuable_continue_raises_0xC0000025
   INFO chained_record = 0x00000000
-PASS  child_noncontinuable_continue_raises_0xC0000025 (9.0 ms)
+PASS  child_noncontinuable_continue_raises_0xC0000025 (7.8 ms)
 RUN   child_noncontinuable_veh_continue_info
   INFO outcome = RaiseException returned exit=0x00000000
-PASS  child_noncontinuable_veh_continue_info (8.3 ms)
+PASS  child_noncontinuable_veh_continue_info (8.8 ms)
 RUN   x86_into_overflow_trap
   SKIP INTO is invalid in 64-bit mode
 SKIP  x86_into_overflow_trap (0.1 ms): INTO is invalid in 64-bit mode
@@ -298,35 +298,35 @@ RUN   cap_ntcontinue_ymm_x64
 SKIP  cap_ntcontinue_ymm_x64 (0.2 ms): ntdll!RtlCaptureContext2 not exported (needs Windows 10 version 2004, build 19041, or later; x64)
 RUN   fp_x87_invalid_unmasked
   EXPECT-FAIL Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
-  FAIL exception_xstate.c:914: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
-  FAIL exception_xstate.c:921: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
+  FAIL exception_xstate.c:881: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
+  FAIL exception_xstate.c:888: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
   INFO code = 0xc0000090 np=0
 XFAIL fp_x87_invalid_unmasked (0.9 ms): Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
 RUN   fp_x87_denormal_unmasked
   EXPECT-FAIL Wine gap: x87 #MF exception record has NumberParameters=0 and only-DE-unmasked is reported as STATUS_FLOAT_UNDERFLOW
-  FAIL exception_xstate.c:907: code == e->code || alt (VEH: ExceptionCode 0xc0000093, expected 0xc0000090)
-  FAIL exception_xstate.c:914: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
-  FAIL exception_xstate.c:921: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
+  FAIL exception_xstate.c:874: code == e->code || alt (VEH: ExceptionCode 0xc0000093, expected 0xc0000090)
+  FAIL exception_xstate.c:881: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
+  FAIL exception_xstate.c:888: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
   INFO code = 0xc0000093 np=0
-XFAIL fp_x87_denormal_unmasked (1.1 ms): Wine gap: x87 #MF exception record has NumberParameters=0 and only-DE-unmasked is reported as STATUS_FLOAT_UNDERFLOW
+XFAIL fp_x87_denormal_unmasked (1.2 ms): Wine gap: x87 #MF exception record has NumberParameters=0 and only-DE-unmasked is reported as STATUS_FLOAT_UNDERFLOW
 RUN   fp_x87_overflow_unmasked
   EXPECT-FAIL Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
-  FAIL exception_xstate.c:914: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
-  FAIL exception_xstate.c:921: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
+  FAIL exception_xstate.c:881: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
+  FAIL exception_xstate.c:888: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
   INFO code = 0xc0000091 np=0
   INFO st0_scaled_result = 00000000 00000080 0020
 XFAIL fp_x87_overflow_unmasked (1.0 ms): Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
 RUN   fp_x87_underflow_unmasked
   EXPECT-FAIL Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
-  FAIL exception_xstate.c:914: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
-  FAIL exception_xstate.c:921: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
+  FAIL exception_xstate.c:881: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
+  FAIL exception_xstate.c:888: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
   INFO code = 0xc0000093 np=0
   INFO st0_scaled_result = 00000000 00000080 0060
 XFAIL fp_x87_underflow_unmasked (1.0 ms): Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
 RUN   fp_x87_inexact_unmasked
   EXPECT-FAIL Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
-  FAIL exception_xstate.c:914: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
-  FAIL exception_xstate.c:921: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
+  FAIL exception_xstate.c:881: (int)rec->NumberParameters == e->nparams (VEH: NumberParameters 0 want 1)
+  FAIL exception_xstate.c:888: rec->NumberParameters > (DWORD)i && rec->ExceptionInformation[i] == e->info[i] (VEH: ExceptionInformation[0] = 0x0 want 0x0)
   INFO code = 0xc000008f np=0
 XFAIL fp_x87_inexact_unmasked (0.9 ms): Wine gap: x87 #MF exception record has NumberParameters=0 (Windows x64 KiFloatingErrorFault: 1)
 RUN   fp_avx_zero_divide_unmasked_ymm
@@ -347,19 +347,19 @@ PASS  veh_nested_hw_fault_in_handler (0.1 ms)
 RUN   seh_nested_hw_fault_in_frame_handler
 PASS  seh_nested_hw_fault_in_frame_handler (0.1 ms)
 RUN   child_unhandled_filter_continue
-PASS  child_unhandled_filter_continue (24.5 ms)
+PASS  child_unhandled_filter_continue (23.6 ms)
 RUN   child_stack_overflow_context
   XFAIL Wine gap: STATUS_STACK_OVERFLOW delivered without the guaranteed stack; handler cannot run
 XFAIL child_stack_overflow_context (0.2 ms): Wine gap: STATUS_STACK_OVERFLOW delivered without the guaranteed stack; handler cannot run
 RUN   veh_hw_breakpoint_dr0_rf
   INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
   INFO nparams = VEH: 0 (info0=0x0 info1=0x0)
-PASS  veh_hw_breakpoint_dr0_rf (14.0 ms)
+PASS  veh_hw_breakpoint_dr0_rf (16.7 ms)
 RUN   stress_random_patterns_main_thread
   INFO exceptions = 244
-PASS  stress_random_patterns_main_thread (2.5 ms)
+PASS  stress_random_patterns_main_thread (2.9 ms)
 RUN   perf_exception_roundtrip
-  PERF div0_veh_xmm = 375799 exceptions/s (n=7 min=372439 max=377430 sd=1.65e+03)
-  PERF div0_veh_ymm = 338926 exceptions/s (n=7 min=336870 max=340426 sd=1.06e+03)
+  PERF div0_veh_xmm = 377644 exceptions/s (n=7 min=376435 max=378072 sd=700)
+  PERF div0_veh_ymm = 341064 exceptions/s (n=7 min=339559 max=342114 sd=810)
 PERF  perf_exception_roundtrip (8.2 ms)
 SUMMARY exe=exception_xstate arch=x64 total=116 pass=93 fail=0 crash=0 skip=11 xfail=11 perf=1 checks=172514 checks_failed=18 exit=0

@@ -253,111 +253,111 @@ RUN   zmm_xsavec_layouts
 SKIP  zmm_xsavec_layouts (0.1 ms): AVX-512F not usable (CPUID=0, XCR0=0x207)
 RUN   thread_xrstor_xsave_isolation
   INFO threads = 32 (ncpu 28), iterations 12, spin 300000, lost 0
-PASS  thread_xrstor_xsave_isolation (171.8 ms)
+PASS  thread_xrstor_xsave_isolation (166.2 ms)
 RUN   thread_fxrstor_fxsave_isolation
   INFO threads = 32 (ncpu 28), iterations 12, spin 300000, lost 0
-PASS  thread_fxrstor_fxsave_isolation (153.6 ms)
+PASS  thread_fxrstor_fxsave_isolation (156.2 ms)
 RUN   thread_xsaveopt_tracking
   INFO threads = 32 (ncpu 28), iterations 12, spin 300000, lost 0
-PASS  thread_xsaveopt_tracking (153.1 ms)
+PASS  thread_xsaveopt_tracking (149.8 ms)
 RUN   thread_x87_pointer_preservation
   INFO threads = 32 (ncpu 28), iterations 12, spin 300000, lost 0
-PASS  thread_x87_pointer_preservation (157.2 ms)
+PASS  thread_x87_pointer_preservation (148.5 ms)
 RUN   thread_no_pattern_leak_same_cpu
   INFO iterations = 60, holder rounds 3
-PASS  thread_no_pattern_leak_same_cpu (197.5 ms)
+PASS  thread_no_pattern_leak_same_cpu (201.6 ms)
 RUN   fault_xsave_unaligned
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
-PASS  fault_xsave_unaligned (10.1 ms)
+PASS  fault_xsave_unaligned (11.8 ms)
 RUN   fault_xsaveopt_unaligned
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
-PASS  fault_xsaveopt_unaligned (9.3 ms)
+PASS  fault_xsaveopt_unaligned (9.4 ms)
 RUN   fault_xsavec_unaligned
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
-PASS  fault_xsavec_unaligned (9.2 ms)
+PASS  fault_xsavec_unaligned (8.4 ms)
 RUN   fault_xrstor_unaligned
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_unaligned (7.7 ms)
+PASS  fault_xrstor_unaligned (8.5 ms)
 RUN   fault_fxsave_unaligned
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
-PASS  fault_fxsave_unaligned (8.5 ms)
+PASS  fault_fxsave_unaligned (7.9 ms)
 RUN   fault_fxrstor_unaligned
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_fxrstor_unaligned (7.8 ms)
+PASS  fault_fxrstor_unaligned (7.9 ms)
 RUN   fault_xrstor_bv_not_in_xcr0
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_bv_not_in_xcr0 (8.3 ms)
+PASS  fault_xrstor_bv_not_in_xcr0 (7.8 ms)
 RUN   fault_xrstor_std_xcomp_nonzero
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_std_xcomp_nonzero (7.8 ms)
+PASS  fault_xrstor_std_xcomp_nonzero (9.6 ms)
 RUN   fault_xrstor_std_hdr_bytes_16_23
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_std_hdr_bytes_16_23 (7.5 ms)
+PASS  fault_xrstor_std_hdr_bytes_16_23 (7.3 ms)
 RUN   fault_xrstor_cmp_xcomp_not_in_xcr0
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_cmp_xcomp_not_in_xcr0 (12.0 ms)
+PASS  fault_xrstor_cmp_xcomp_not_in_xcr0 (9.5 ms)
 RUN   fault_xrstor_cmp_bv_not_in_xcomp
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_cmp_bv_not_in_xcomp (11.1 ms)
+PASS  fault_xrstor_cmp_bv_not_in_xcomp (10.2 ms)
 RUN   fault_xrstor_cmp_reserved_hdr
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_cmp_reserved_hdr (10.7 ms)
+PASS  fault_xrstor_cmp_reserved_hdr (7.3 ms)
 RUN   fault_xrstor_mxcsr_reserved
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_mxcsr_reserved (12.5 ms)
+PASS  fault_xrstor_mxcsr_reserved (8.8 ms)
 RUN   fault_xrstor_cmp_mxcsr_reserved
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_cmp_mxcsr_reserved (10.6 ms)
+PASS  fault_xrstor_cmp_mxcsr_reserved (10.0 ms)
 RUN   fault_fxrstor_mxcsr_reserved
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_fxrstor_mxcsr_reserved (12.0 ms)
+PASS  fault_fxrstor_mxcsr_reserved (9.9 ms)
 RUN   fault_xrstor_mxcsr_not_loaded_no_fault
   INFO child = fault=0 code=0x00000000 site=0 info0=0x0 info1=0x0 intact=1 lo=0x0 hi=0x0
-PASS  fault_xrstor_mxcsr_not_loaded_no_fault (12.2 ms)
+PASS  fault_xrstor_mxcsr_not_loaded_no_fault (9.3 ms)
 RUN   fault_xsetbv_cpl3
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=-1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
-PASS  fault_xsetbv_cpl3 (9.9 ms)
+PASS  fault_xsetbv_cpl3 (11.1 ms)
 RUN   fault_xsaves_cpl3
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=-1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
-PASS  fault_xsaves_cpl3 (8.5 ms)
+PASS  fault_xsaves_cpl3 (10.3 ms)
 RUN   fault_xrstors_cpl3
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=-1 lo=0x0 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
-PASS  fault_xrstors_cpl3 (12.6 ms)
+PASS  fault_xrstors_cpl3 (7.7 ms)
 RUN   fault_xsave_guard_overrun
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x1 info1=0xa0103f intact=-1 lo=0xa01000 hi=0xa01040
-PASS  fault_xsave_guard_overrun (13.3 ms)
+PASS  fault_xsave_guard_overrun (7.3 ms)
 RUN   fault_xrstor_guard_overrun
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xa0103f intact=-1 lo=0xa01000 hi=0xa01040
-PASS  fault_xrstor_guard_overrun (11.6 ms)
+PASS  fault_xrstor_guard_overrun (10.2 ms)
 RUN   fault_xsave_readonly_page
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x1 info1=0xa0033f intact=1 lo=0xa00000 hi=0xa00340
 PASS  fault_xsave_readonly_page (10.1 ms)
@@ -366,7 +366,7 @@ RUN   fault_xrstor_mxcsr_lowest_reserved_bit
   INFO child = fault=1 code=0xc0000005 site=1 info0=0x0 info1=0xffffffffffffffff intact=1 lo=0x10 hi=0x0
   INFO exception = STATUS_ACCESS_VIOLATION
   INFO state_intact = 1
-PASS  fault_xrstor_mxcsr_lowest_reserved_bit (14.3 ms)
+PASS  fault_xrstor_mxcsr_lowest_reserved_bit (8.8 ms)
 RUN   fault_xrstor_compacted_without_xsavec
   SKIP XSAVEC/compaction supported: XCOMP_BV[63]=1 is legal here (covered by the compacted cases)
 SKIP  fault_xrstor_compacted_without_xsavec (0.2 ms): XSAVEC/compaction supported: XCOMP_BV[63]=1 is legal here (covered by the compacted cases)

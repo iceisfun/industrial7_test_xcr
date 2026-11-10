@@ -9,7 +9,7 @@ RUN   ymm_gate_state
   INFO osxsave = 1
   INFO xcr0 = 0x207
   INFO avx_xsave_offset = 576
-PASS  ymm_gate_state (0.4 ms)
+PASS  ymm_gate_state (0.2 ms)
 RUN   ymm_api_reporting
   INFO GetEnabledXStateFeatures = 0x7
   INFO pf_avx = 1
@@ -141,7 +141,7 @@ PASS  ymm_mix_vex256_legacy_chain (0.0 ms)
 RUN   ymm_xsave_captures_both_lanes
   INFO xstate_bv = 0x6
   INFO x86_ymm8_15_area_untouched = 1
-PASS  ymm_xsave_captures_both_lanes (0.2 ms)
+PASS  ymm_xsave_captures_both_lanes (0.1 ms)
 RUN   ymm_xsave_after_vzeroupper
   INFO xstate_bv_after_vzeroupper = 0x2
   NOTE XSTATE_BV[2]=0 after VZEROUPPER: processor tracks the AVX component as initial
@@ -152,21 +152,21 @@ RUN   ymm_xinuse_tracks_avx_state
   INFO xinuse_dirty = 0x207
   INFO xinuse_after_vzeroupper = 0x203
   INFO xinuse_after_vzeroall = 0x201
-PASS  ymm_xinuse_tracks_avx_state (0.3 ms)
+PASS  ymm_xinuse_tracks_avx_state (0.4 ms)
 RUN   ymm_fault_vmovdqa_misaligned16
   INFO exc_code = 0xc0000005
-PASS  ymm_fault_vmovdqa_misaligned16 (16.3 ms)
+PASS  ymm_fault_vmovdqa_misaligned16 (15.7 ms)
 RUN   ymm_fault_vmovdqa_misaligned1
   INFO exc_code = 0xc0000005
-PASS  ymm_fault_vmovdqa_misaligned1 (16.7 ms)
+PASS  ymm_fault_vmovdqa_misaligned1 (15.3 ms)
 RUN   ymm_fault_vmovntdq_misaligned
   INFO exc_code = 0xc0000005
-PASS  ymm_fault_vmovntdq_misaligned (16.0 ms)
+PASS  ymm_fault_vmovntdq_misaligned (15.3 ms)
 RUN   ymm_fault_vex128_vmovaps_misaligned
   INFO exc_code = 0xc0000005
-PASS  ymm_fault_vex128_vmovaps_misaligned (20.5 ms)
+PASS  ymm_fault_vex128_vmovaps_misaligned (13.6 ms)
 RUN   ymm_fault_load_into_guard_page
-PASS  ymm_fault_load_into_guard_page (18.7 ms)
+PASS  ymm_fault_load_into_guard_page (10.8 ms)
 RUN   ymm_vex_unaligned_memory_operands
 PASS  ymm_vex_unaligned_memory_operands (0.0 ms)
 RUN   ymm_exception_int3_continue_restores
@@ -174,141 +174,141 @@ RUN   ymm_exception_int3_continue_restores
   INFO ctx_xstate = 1
   INFO ctx_hi_match = 8
   INFO ctx_lo_match = 8
-PASS  ymm_exception_int3_continue_restores (18.6 ms)
+PASS  ymm_exception_int3_continue_restores (12.3 ms)
 RUN   ymm_exception_ud2_continue_restores
   INFO upper_halves_lost = 0
   INFO ctx_xstate = 1
   INFO ctx_hi_match = 8
   INFO ctx_lo_match = 8
-PASS  ymm_exception_ud2_continue_restores (17.3 ms)
+PASS  ymm_exception_ud2_continue_restores (12.6 ms)
 RUN   ymm_exception_av_continue_restores
   INFO upper_halves_lost = 0
   INFO ctx_xstate = 1
   INFO ctx_hi_match = 8
   INFO ctx_lo_match = 8
-PASS  ymm_exception_av_continue_restores (19.6 ms)
+PASS  ymm_exception_av_continue_restores (18.8 ms)
 RUN   ymm_exception_div0_continue_restores
   INFO upper_halves_lost = 0
   INFO ctx_xstate = 1
   INFO ctx_hi_match = 8
   INFO ctx_lo_match = 8
-PASS  ymm_exception_div0_continue_restores (21.1 ms)
+PASS  ymm_exception_div0_continue_restores (11.8 ms)
 RUN   ymm_preempt_spin_2_threads
   INFO threads = 2
   INFO ready = 2
   INFO disturb_ops = 0
-PASS  ymm_preempt_spin_2_threads (153.0 ms)
+PASS  ymm_preempt_spin_2_threads (153.8 ms)
 RUN   ymm_preempt_spin_16_threads
   INFO threads = 16
   INFO ready = 16
   INFO disturb_ops = 0
-PASS  ymm_preempt_spin_16_threads (224.6 ms)
+PASS  ymm_preempt_spin_16_threads (228.1 ms)
 RUN   ymm_preempt_spin_64_threads
   INFO threads = 64
   INFO ready = 64
   INFO disturb_ops = 0
-PASS  ymm_preempt_spin_64_threads (348.8 ms)
+PASS  ymm_preempt_spin_64_threads (313.5 ms)
 RUN   ymm_preempt_spin_256_threads
   INFO threads = 256
   INFO ready = 256
   INFO disturb_ops = 0
-PASS  ymm_preempt_spin_256_threads (1368.4 ms)
+PASS  ymm_preempt_spin_256_threads (2441.4 ms)
 RUN   ymm_preempt_oversubscribed
   INFO threads = 112
   INFO ready = 112
   INFO disturb_ops = 0
-PASS  ymm_preempt_oversubscribed (528.4 ms)
+PASS  ymm_preempt_oversubscribed (510.6 ms)
 RUN   ymm_suspend_resume_spinning
   INFO threads = 4
   INFO ready = 4
-  INFO disturb_ops = 556
-PASS  ymm_suspend_resume_spinning (302.6 ms)
+  INFO disturb_ops = 552
+PASS  ymm_suspend_resume_spinning (302.5 ms)
 RUN   ymm_getcontext_spinning_no_xstate
   INFO threads = 4
   INFO ready = 4
-  INFO disturb_ops = 552
-PASS  ymm_getcontext_spinning_no_xstate (302.5 ms)
+  INFO disturb_ops = 528
+PASS  ymm_getcontext_spinning_no_xstate (302.7 ms)
 RUN   ymm_setcontext_control_spinning
   INFO threads = 4
   INFO ready = 4
   INFO disturb_ops = 540
-PASS  ymm_setcontext_control_spinning (302.7 ms)
+PASS  ymm_setcontext_control_spinning (302.3 ms)
 RUN   ymm_affinity_migration_spinning
   INFO threads = 4
   INFO ready = 4
-  INFO disturb_ops = 556
-PASS  ymm_affinity_migration_spinning (304.9 ms)
+  INFO disturb_ops = 532
+PASS  ymm_affinity_migration_spinning (303.2 ms)
 RUN   ymm_priority_changes_spinning
   INFO threads = 8
   INFO ready = 8
   INFO disturb_ops = 1144
-PASS  ymm_priority_changes_spinning (303.7 ms)
+PASS  ymm_priority_changes_spinning (304.4 ms)
 RUN   ymm_isolation_churn_8_threads
   INFO threads = 8
   INFO ready = 8
   INFO disturb_ops = 0
-  INFO churn_rounds = 39157
-PASS  ymm_isolation_churn_8_threads (304.8 ms)
+  INFO churn_rounds = 39447
+PASS  ymm_isolation_churn_8_threads (305.5 ms)
 RUN   ymm_isolation_churn_64_threads
   INFO threads = 64
   INFO ready = 64
   INFO disturb_ops = 0
-  INFO churn_rounds = 41612
-PASS  ymm_isolation_churn_64_threads (440.2 ms)
+  INFO churn_rounds = 55984
+PASS  ymm_isolation_churn_64_threads (445.0 ms)
 RUN   ymm_isolation_churn_with_suspend
   INFO threads = 8
   INFO ready = 8
   INFO disturb_ops = 2080
-  INFO churn_rounds = 18012
-PASS  ymm_isolation_churn_with_suspend (303.1 ms)
+  INFO churn_rounds = 19654
+PASS  ymm_isolation_churn_with_suspend (303.6 ms)
 RUN   ymm_clean_upper_threads_stay_clean
   INFO threads = 84
   INFO ready = 84
   INFO disturb_ops = 0
-PASS  ymm_clean_upper_threads_stay_clean (554.4 ms)
+PASS  ymm_clean_upper_threads_stay_clean (548.0 ms)
 RUN   ymm_clean_upper_threads_suspend_context
   INFO threads = 9
   INFO ready = 9
   INFO disturb_ops = 1170
-PASS  ymm_clean_upper_threads_suspend_context (304.4 ms)
+PASS  ymm_clean_upper_threads_suspend_context (304.1 ms)
 RUN   ymm_clean_upper_threads_migration
   INFO threads = 6
   INFO ready = 6
-  INFO disturb_ops = 1548
-PASS  ymm_clean_upper_threads_migration (304.0 ms)
+  INFO disturb_ops = 1524
+PASS  ymm_clean_upper_threads_migration (303.4 ms)
 RUN   ymm_special_apc_interrupts_spin
   INFO apc_queued = 0
   INFO apc_ran = 0
   SKIP QueueUserAPC2(SPECIAL_USER_APC) failed with error 50: special user APCs unsupported
-SKIP  ymm_special_apc_interrupts_spin (1.9 ms): QueueUserAPC2(SPECIAL_USER_APC) failed with error 50: special user APCs unsupported
+SKIP  ymm_special_apc_interrupts_spin (2.2 ms): QueueUserAPC2(SPECIAL_USER_APC) failed with error 50: special user APCs unsupported
 RUN   ymm_context_get_xstate_spinning
   INFO ctx_len = 1123
   INFO xstate_mask = 0x7
   INFO avx_len = 256
   INFO sse_len = 128
-PASS  ymm_context_get_xstate_spinning (21.9 ms)
+PASS  ymm_context_get_xstate_spinning (22.4 ms)
 RUN   ymm_context_set_xstate_upper_spinning
   INFO ctx_len = 1123
   INFO xstate_mask = 0x7
   INFO avx_len = 256
   INFO sse_len = 128
-PASS  ymm_context_set_xstate_upper_spinning (22.0 ms)
+PASS  ymm_context_set_xstate_upper_spinning (21.6 ms)
 RUN   ymm_context_xstate_clean_upper_thread
   INFO xstate_mask = 0x3
   INFO xstate_mask_set = 0x3
   INFO avx_bit_clear_for_clean_thread = 1
-PASS  ymm_context_xstate_clean_upper_thread (21.8 ms)
+PASS  ymm_context_xstate_clean_upper_thread (22.1 ms)
 RUN   ymm_context_set_xstate_mask_without_avx
   INFO xstate_mask = 0x7
   INFO xstate_mask_set = 0x3
   INFO uppers_kept = 0
   INFO uppers_initialised = 8
   NOTE SetThreadContext with AVX cleared in the XSTATE mask initialised the upper lanes
-PASS  ymm_context_set_xstate_mask_without_avx (22.4 ms)
+PASS  ymm_context_set_xstate_mask_without_avx (22.9 ms)
 RUN   ymm_new_thread_no_foreign_state
   INFO probes = 8
   INFO nonzero_upper_lanes_at_start = 0
-PASS  ymm_new_thread_no_foreign_state (3.6 ms)
+PASS  ymm_new_thread_no_foreign_state (4.2 ms)
 RUN   ymm_call_null_full_preserved
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 6/6
@@ -324,19 +324,19 @@ RUN   ymm_call_sleep1
   INFO xmm0_5_preserved = 5/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_sleep1 (6.1 ms)
+PASS  ymm_call_sleep1 (5.6 ms)
 RUN   ymm_call_switchtothread
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 6/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_switchtothread (0.8 ms)
+PASS  ymm_call_switchtothread (0.4 ms)
 RUN   ymm_call_wait_signaled
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 2/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_wait_signaled (1.2 ms)
+PASS  ymm_call_wait_signaled (0.7 ms)
 RUN   ymm_call_wait_timeout
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 2/6
@@ -354,13 +354,13 @@ RUN   ymm_call_event_pingpong_dirty_peer
   INFO xmm0_5_preserved = 2/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_event_pingpong_dirty_peer (1.5 ms)
+PASS  ymm_call_event_pingpong_dirty_peer (1.8 ms)
 RUN   ymm_call_mutex_contention
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 2/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_mutex_contention (41.8 ms)
+PASS  ymm_call_mutex_contention (42.6 ms)
 RUN   ymm_call_ntyieldexecution
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 6/6
@@ -390,37 +390,37 @@ RUN   ymm_call_no_syscall_apis
   INFO xmm0_5_preserved = 6/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_no_syscall_apis (0.6 ms)
+PASS  ymm_call_no_syscall_apis (0.8 ms)
 RUN   ymm_call_getcontext_self
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 6/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_getcontext_self (0.4 ms)
+PASS  ymm_call_getcontext_self (0.8 ms)
 RUN   ymm_call_outputdebugstring
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 2/6
   INFO xmm6_7_preserved = 1/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_outputdebugstring (0.5 ms)
+PASS  ymm_call_outputdebugstring (0.9 ms)
 RUN   ymm_call_threadpool_roundtrip
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 0/6
   INFO xmm6_7_preserved = 0/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_threadpool_roundtrip (0.8 ms)
+PASS  ymm_call_threadpool_roundtrip (1.2 ms)
 RUN   ymm_call_user_apc_alertable
   INFO upper_halves_preserved = 0/8
   INFO xmm0_5_preserved = 0/6
   INFO xmm6_7_preserved = 0/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_user_apc_alertable (0.4 ms)
+PASS  ymm_call_user_apc_alertable (0.9 ms)
 RUN   ymm_call_raiseexception_veh
   INFO upper_halves_preserved = 0/8
   INFO xmm0_5_preserved = 2/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_raiseexception_veh (0.4 ms)
+PASS  ymm_call_raiseexception_veh (0.8 ms)
 RUN   ymm_call_fiber_switch
   INFO upper_halves_preserved = 0/8
   INFO xmm0_5_preserved = 0/6
@@ -438,20 +438,20 @@ RUN   ymm_call_create_join_threads
   INFO xmm0_5_preserved = 0/6
   INFO xmm6_7_preserved = 0/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_create_join_threads (2.1 ms)
+PASS  ymm_call_create_join_threads (1.3 ms)
 RUN   ymm_call_affinity_migration
   INFO upper_halves_preserved = 8/8
   INFO xmm0_5_preserved = 4/6
   INFO xmm6_7_preserved = 2/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
-PASS  ymm_call_affinity_migration (3.3 ms)
+PASS  ymm_call_affinity_migration (2.0 ms)
 RUN   ymm_call_window_message_callback
   INFO upper_halves_preserved = 0/8
   INFO xmm0_5_preserved = 0/6
   INFO xmm6_7_preserved = 0/2
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
   INFO window_messages = 14
-PASS  ymm_call_window_message_callback (173.4 ms)
+PASS  ymm_call_window_message_callback (178.2 ms)
 RUN   ymm_call_abi_legal_clobber
   INFO upper_halves_preserved = 0/8
   INFO xmm0_5_preserved = 0/6
@@ -459,16 +459,16 @@ RUN   ymm_call_abi_legal_clobber
   NOTE x86 ABI: every XMM/YMM register is volatile across calls; preservation recorded only
 PASS  ymm_call_abi_legal_clobber (0.4 ms)
 RUN   ymm_sse_avx_transition_perf
-  PERF sse_clean_upper_ns_per_iter = 0.78462 ns/iter
-  PERF sse_dirty_upper_ns_per_iter = 0.805021 ns/iter
-  PERF alternate_vex256_sse_ns_per_iter = 150.574 ns/iter
-  PERF alternate_with_vzeroupper_ns_per_iter = 0.790045 ns/iter
+  PERF sse_clean_upper_ns_per_iter = 0.742774 ns/iter
+  PERF sse_dirty_upper_ns_per_iter = 0.761399 ns/iter
+  PERF alternate_vex256_sse_ns_per_iter = 145.605 ns/iter
+  PERF alternate_with_vzeroupper_ns_per_iter = 0.761825 ns/iter
   INFO dirty_vs_clean_ratio = 1.03
-  INFO alternate_vs_vzeroupper_ratio = 190.59
-PERF  ymm_sse_avx_transition_perf (130.3 ms)
+  INFO alternate_vs_vzeroupper_ratio = 191.13
+PERF  ymm_sse_avx_transition_perf (128.9 ms)
 RUN   ymm_load_store_alignment_perf
-  PERF aligned32_ns_per_4x32B = 0.398371 ns/iter
+  PERF aligned32_ns_per_4x32B = 0.377164 ns/iter
   PERF aligned16_same_line_ns_per_4x32B = 0.377202 ns/iter
-  PERF split_cache_line_ns_per_4x32B = 0.75544 ns/iter
+  PERF split_cache_line_ns_per_4x32B = 0.742254 ns/iter
 PERF  ymm_load_store_alignment_perf (90.5 ms)
 SUMMARY exe=ymm_registers arch=x86 total=118 pass=111 fail=0 crash=0 skip=5 xfail=0 perf=2 checks=9754 checks_failed=0 exit=0

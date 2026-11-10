@@ -10,24 +10,24 @@ RUN   initial_env_case_thread
 PASS  initial_env_case_thread (0.2 ms)
 RUN   new_thread_default_env
   INFO new_thread_env = mxcsr=0x1f80 fcw=0x027f fsw=0x0000 ftw=0xffff
-PASS  new_thread_default_env (2.2 ms)
+PASS  new_thread_default_env (3.0 ms)
 RUN   new_thread_not_inherit_parent_env
-PASS  new_thread_not_inherit_parent_env (0.2 ms)
+PASS  new_thread_not_inherit_parent_env (0.3 ms)
 RUN   new_thread_from_worker_gets_default_env
 PASS  new_thread_from_worker_gets_default_env (0.5 ms)
 RUN   thread_env_change_not_visible_to_others
-PASS  thread_env_change_not_visible_to_others (0.5 ms)
+PASS  thread_env_change_not_visible_to_others (0.4 ms)
 RUN   crt_beginthreadex_env
   INFO beginthreadex_fcw = 0x027f
-PASS  crt_beginthreadex_env (0.4 ms)
+PASS  crt_beginthreadex_env (0.2 ms)
 RUN   threads_env_isolated_under_preemption
   INFO threads = 58 (ncpu 28)
-PASS  threads_env_isolated_under_preemption (428.4 ms)
+PASS  threads_env_isolated_under_preemption (365.8 ms)
 RUN   env_control_preserved_across_waits
-PASS  env_control_preserved_across_waits (32.1 ms)
+PASS  env_control_preserved_across_waits (32.2 ms)
 RUN   mxcsr_mask_from_fxsave
   INFO mxcsr_mask_raw = 0x0000ffff
-PASS  mxcsr_mask_from_fxsave (0.1 ms)
+PASS  mxcsr_mask_from_fxsave (0.2 ms)
 RUN   mxcsr_writable_bits_roundtrip
 PASS  mxcsr_writable_bits_roundtrip (0.0 ms)
 RUN   mxcsr_flags_sticky_and_accumulate
@@ -41,7 +41,7 @@ PASS  sse_and_x87_state_independent (0.0 ms)
 RUN   mxcsr_reserved_bits_fault
   INFO gp_code_bit_0x10000 = 0xc0000005
   INFO gp_code_bit_0x80000000 = 0xc0000005
-PASS  mxcsr_reserved_bits_fault (38.7 ms)
+PASS  mxcsr_reserved_bits_fault (36.3 ms)
 RUN   sse_masked_invalid_operation
 PASS  sse_masked_invalid_operation (0.0 ms)
 RUN   sse_masked_divide_by_zero
@@ -71,107 +71,107 @@ RUN   sse_unmasked_invalid_operation
   INFO handler_mxcsr = 0x00001f01
   INFO exception_info = n=2 [0]=0x0 [1]=0x1f01
   INFO ctx_flags = 0x0001007f
-PASS  sse_unmasked_invalid_operation (26.3 ms)
+PASS  sse_unmasked_invalid_operation (15.5 ms)
 RUN   sse_unmasked_denormal_operand
   INFO code_DE = 0xc00002b5
   INFO handler_mxcsr = 0x00001e82
   INFO exception_info = n=2 [0]=0x0 [1]=0x1e82
   INFO ctx_flags = 0x0001007f
-PASS  sse_unmasked_denormal_operand (26.0 ms)
+PASS  sse_unmasked_denormal_operand (20.1 ms)
 RUN   sse_unmasked_divide_by_zero
   INFO code_ZE = 0xc00002b5
   INFO handler_mxcsr = 0x00001d84
   INFO exception_info = n=2 [0]=0x0 [1]=0x1d84
   INFO ctx_flags = 0x0001007f
-PASS  sse_unmasked_divide_by_zero (19.9 ms)
+PASS  sse_unmasked_divide_by_zero (22.9 ms)
 RUN   sse_unmasked_overflow
   INFO code_OE = 0xc00002b5
   INFO handler_mxcsr = 0x00001b88
   INFO exception_info = n=2 [0]=0x0 [1]=0x1b88
   INFO ctx_flags = 0x0001007f
-PASS  sse_unmasked_overflow (19.9 ms)
+PASS  sse_unmasked_overflow (17.5 ms)
 RUN   sse_unmasked_underflow_exact_tiny
   INFO code_UE = 0xc00002b5
   INFO handler_mxcsr = 0x00001790
   INFO exception_info = n=2 [0]=0x0 [1]=0x1790
   INFO ctx_flags = 0x0001007f
-PASS  sse_unmasked_underflow_exact_tiny (19.3 ms)
+PASS  sse_unmasked_underflow_exact_tiny (13.5 ms)
 RUN   sse_unmasked_inexact
   INFO code_PE = 0xc00002b5
   INFO handler_mxcsr = 0x00000fa0
   INFO exception_info = n=2 [0]=0x0 [1]=0xfa0
   INFO ctx_flags = 0x0001007f
-PASS  sse_unmasked_inexact (18.2 ms)
+PASS  sse_unmasked_inexact (16.2 ms)
 RUN   sse_unmasked_packed_dest_unchanged
   INFO code_PACKED = 0xc00002b5
   INFO handler_mxcsr = 0x00001d84
   INFO exception_info = n=2 [0]=0x0 [1]=0x1d84
   INFO ctx_flags = 0x0001007f
-PASS  sse_unmasked_packed_dest_unchanged (22.7 ms)
+PASS  sse_unmasked_packed_dest_unchanged (16.8 ms)
 RUN   sse_unmasked_unhandled_terminates_with_code
-PASS  sse_unmasked_unhandled_terminates_with_code (18.4 ms)
+PASS  sse_unmasked_unhandled_terminates_with_code (16.2 ms)
 RUN   x87_unmasked_invalid_operation
   INFO x87_exception_address = faulting x87 instruction (FIP)
-  INFO fip_matches_op = 1 (FIP 0x7bf25cc6, op 0x7bf25cc6)
+  INFO fip_matches_op = 1 (FIP 0x7bf25ce6, op 0x7bf25ce6)
   INFO code_x87_IE = 0xc0000090
   INFO handler_fcw = 0x037e
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_invalid_operation (25.8 ms)
+PASS  x87_unmasked_invalid_operation (16.4 ms)
 RUN   x87_unmasked_stack_fault
   INFO x87_exception_address = faulting x87 instruction (FIP)
-  INFO fip_matches_op = 1 (FIP 0x7bf25c7c, op 0x7bf25c7c)
+  INFO fip_matches_op = 1 (FIP 0x7bf25c9c, op 0x7bf25c9c)
   INFO code_x87_SF = 0xc0000092
   INFO handler_fcw = 0x037e
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_stack_fault (22.5 ms)
+PASS  x87_unmasked_stack_fault (18.2 ms)
 RUN   x87_unmasked_denormal_operand
   INFO x87_exception_address = faulting x87 instruction (FIP)
-  INFO fip_matches_op = 1 (FIP 0x7bf25bc0, op 0x7bf25bc0)
+  INFO fip_matches_op = 1 (FIP 0x7bf25be0, op 0x7bf25be0)
   INFO code_x87_DE = 0xc000008d
   INFO handler_fcw = 0x037d
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_denormal_operand (21.4 ms)
+PASS  x87_unmasked_denormal_operand (22.4 ms)
 RUN   x87_unmasked_divide_by_zero
   INFO x87_exception_address = faulting x87 instruction (FIP)
-  INFO fip_matches_op = 1 (FIP 0x7bf25c3e, op 0x7bf25c3e)
+  INFO fip_matches_op = 1 (FIP 0x7bf25c5e, op 0x7bf25c5e)
   INFO code_x87_ZE = 0xc000008e
   INFO handler_fcw = 0x037b
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_divide_by_zero (23.4 ms)
+PASS  x87_unmasked_divide_by_zero (22.1 ms)
 RUN   x87_unmasked_overflow
   INFO x87_exception_address = faulting x87 instruction (FIP)
-  INFO fip_matches_op = 1 (FIP 0x7bf25bfe, op 0x7bf25bfe)
+  INFO fip_matches_op = 1 (FIP 0x7bf25c1e, op 0x7bf25c1e)
   INFO code_x87_OE = 0xc0000091
   INFO handler_fcw = 0x0377
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_overflow (24.4 ms)
+PASS  x87_unmasked_overflow (17.5 ms)
 RUN   x87_unmasked_underflow
   INFO x87_exception_address = faulting x87 instruction (FIP)
-  INFO fip_matches_op = 1 (FIP 0x7bf25bfe, op 0x7bf25bfe)
+  INFO fip_matches_op = 1 (FIP 0x7bf25c1e, op 0x7bf25c1e)
   INFO code_x87_UE = 0xc0000093
   INFO handler_fcw = 0x036f
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_underflow (18.9 ms)
+PASS  x87_unmasked_underflow (22.5 ms)
 RUN   x87_unmasked_inexact
   INFO x87_exception_address = faulting x87 instruction (FIP)
-  INFO fip_matches_op = 1 (FIP 0x7bf25c3e, op 0x7bf25c3e)
+  INFO fip_matches_op = 1 (FIP 0x7bf25c5e, op 0x7bf25c5e)
   INFO code_x87_PE = 0xc000008f
   INFO handler_fcw = 0x035f
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_inexact (25.4 ms)
+PASS  x87_unmasked_inexact (24.1 ms)
 RUN   x87_unmasked_unhandled_terminates_with_code
-PASS  x87_unmasked_unhandled_terminates_with_code (19.3 ms)
+PASS  x87_unmasked_unhandled_terminates_with_code (14.4 ms)
 RUN   x87_fninit_state
   INFO fninit_fcw_raw = 0x037f
 PASS  x87_fninit_state (0.1 ms)
 RUN   x87_cw_writable_bits
   INFO fcw_after_fldcw_ffff = 0x1f7f
   INFO fcw_after_fldcw_0000 = 0x0040
-PASS  x87_cw_writable_bits (0.3 ms)
+PASS  x87_cw_writable_bits (0.1 ms)
 RUN   x87_stack_order_and_top
 PASS  x87_stack_order_and_top (0.0 ms)
 RUN   x87_tag_word_and_save_layouts
-  INFO fnstenv_fip = 0x7bf25afb
+  INFO fnstenv_fip = 0x7bf25b1b
 PASS  x87_tag_word_and_save_layouts (0.1 ms)
 RUN   x87_precision_control
 PASS  x87_precision_control (0.0 ms)
@@ -192,7 +192,7 @@ PASS  x87_80bit_load_store_exact (0.0 ms)
 RUN   x87_long_double_follows_precision_control
   INFO sizeof_long_double = 12
   INFO LDBL_MANT_DIG = 64
-PASS  x87_long_double_follows_precision_control (0.2 ms)
+PASS  x87_long_double_follows_precision_control (0.1 ms)
 RUN   mmx_tags_valid_and_emms
   INFO ftw_after_mmx = 0x1082
 PASS  mmx_tags_valid_and_emms (0.1 ms)
@@ -246,29 +246,29 @@ PASS  ctx_get_set_thread_context_fp_env (1.4 ms)
 RUN   ctx_set_context_before_thread_start_info
   INFO suspended_new_thread_ctx = mxcsr=0x00001f80 fcw=0x027f
   INFO pre_start_setcontext_mxcsr_seen = 0x3f80 (set 0x3f80)
-PASS  ctx_set_context_before_thread_start_info (0.6 ms)
+PASS  ctx_set_context_before_thread_start_info (0.8 ms)
 RUN   sse_unmasked_packed_precomputation_first
   INFO code = 0xc00002b5
-PASS  sse_unmasked_packed_precomputation_first (17.9 ms)
+PASS  sse_unmasked_packed_precomputation_first (20.8 ms)
 RUN   sse_unmasked_packed_postcomputation_with_masked_precomputation
   INFO code = 0xc00002b5
-PASS  sse_unmasked_packed_postcomputation_with_masked_precomputation (22.1 ms)
+PASS  sse_unmasked_packed_postcomputation_with_masked_precomputation (20.5 ms)
 RUN   x87_fldenv_pending_exception_delivered
   INFO x87_exception_address = fip
-PASS  x87_fldenv_pending_exception_delivered (17.6 ms)
+PASS  x87_fldenv_pending_exception_delivered (19.1 ms)
 RUN   sse_unmasked_exceptions_concurrent_threads
   INFO threads = 16 x 64 exceptions
-PASS  sse_unmasked_exceptions_concurrent_threads (41.9 ms)
+PASS  sse_unmasked_exceptions_concurrent_threads (38.7 ms)
 RUN   ctx_continue_reserved_mxcsr_bits_sanitized
   XFAIL Wine 11.0: a CONTEXT MXCSR with reserved bits hangs the process (exit 0xdead0001 exc 0x00000000)
-XFAIL ctx_continue_reserved_mxcsr_bits_sanitized (5008.5 ms): Wine 11.0: a CONTEXT MXCSR with reserved bits hangs the process (exit 0xdead0001 exc 0x00000000)
+XFAIL ctx_continue_reserved_mxcsr_bits_sanitized (5011.0 ms): Wine 11.0: a CONTEXT MXCSR with reserved bits hangs the process (exit 0xdead0001 exc 0x00000000)
 RUN   ctx_setthreadcontext_reserved_mxcsr_bits_sanitized
   XFAIL Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0xc000001d exc 0xc000001d)
-XFAIL ctx_setthreadcontext_reserved_mxcsr_bits_sanitized (28.0 ms): Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0xc000001d exc 0xc000001d)
+XFAIL ctx_setthreadcontext_reserved_mxcsr_bits_sanitized (21.7 ms): Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0xc000001d exc 0xc000001d)
 RUN   fxrstor_xrstor_reserved_mxcsr_fault
   INFO xrstor_x87_only_reserved_mxcsr = no fault
-PASS  fxrstor_xrstor_reserved_mxcsr_fault (69.2 ms)
+PASS  fxrstor_xrstor_reserved_mxcsr_fault (47.3 ms)
 RUN   env_preserved_across_cpu_migration
   INFO affinity_moves = 56 over 28 CPUs (0 refused)
-PASS  env_preserved_across_cpu_migration (124.2 ms)
+PASS  env_preserved_across_cpu_migration (118.8 ms)
 SUMMARY exe=fp_environment arch=x86 total=84 pass=79 fail=0 crash=0 skip=3 xfail=2 perf=0 checks=2841 checks_failed=0 exit=0

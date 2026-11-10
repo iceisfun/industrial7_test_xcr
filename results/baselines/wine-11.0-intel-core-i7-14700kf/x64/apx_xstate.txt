@@ -14,9 +14,9 @@ RUN   apx_api_enabled_features
   SKIP CPUID.(7,1).EDX[21] APX_F not set
 SKIP  apx_api_enabled_features (0.1 ms): CPUID.(7,1).EDX[21] APX_F not set
 RUN   apx_rex2_ud_or_model
-PASS  apx_rex2_ud_or_model (12.3 ms)
+PASS  apx_rex2_ud_or_model (8.2 ms)
 RUN   apx_evex_egpr_ud_or_model
-PASS  apx_evex_egpr_ud_or_model (10.5 ms)
+PASS  apx_evex_egpr_ud_or_model (9.0 ms)
 RUN   apx_model_push2_pop2_ndd_ccmp
   SKIP CPUID.(7,1).EDX[21] APX_F not set
 SKIP  apx_model_push2_pop2_ndd_ccmp (0.1 ms): CPUID.(7,1).EDX[21] APX_F not set

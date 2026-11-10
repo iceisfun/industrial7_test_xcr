@@ -75,7 +75,7 @@ PASS  xmm_gpr_extract_forms (0.0 ms)
 RUN   xmm_maskmovdqu_byte_select
 PASS  xmm_maskmovdqu_byte_select (0.0 ms)
 RUN   xmm_page_edge_exact_width_access
-PASS  xmm_page_edge_exact_width_access (0.0 ms)
+PASS  xmm_page_edge_exact_width_access (0.1 ms)
 RUN   xmm_split_page_access_fresh_pages
 PASS  xmm_split_page_access_fresh_pages (0.2 ms)
 RUN   xmm_independent_of_full_x87_stack
@@ -109,119 +109,119 @@ RUN   xmm_preempt_single_spinner
   INFO threads = 1
   INFO new_thread_mxcsr = 0x1f80
   INFO new_thread_x87_cw = 0x27f
-PASS  xmm_preempt_single_spinner (202.1 ms)
+PASS  xmm_preempt_single_spinner (201.8 ms)
 RUN   xmm_preempt_2_threads_one_cpu
   INFO threads = 2 (pinned to one CPU)
   INFO new_thread_mxcsr = 0x1f80
   INFO new_thread_x87_cw = 0x27f
-PASS  xmm_preempt_2_threads_one_cpu (305.8 ms)
+PASS  xmm_preempt_2_threads_one_cpu (302.7 ms)
 RUN   xmm_preempt_16_threads_one_cpu
   INFO threads = 16 (pinned to one CPU)
   INFO new_thread_mxcsr = 0x1f80
   INFO new_thread_x87_cw = 0x27f
-PASS  xmm_preempt_16_threads_one_cpu (447.7 ms)
+PASS  xmm_preempt_16_threads_one_cpu (449.2 ms)
 RUN   xmm_preempt_64_threads_unpinned
   INFO threads = 64
   INFO new_thread_mxcsr = 0x1f80
   INFO new_thread_x87_cw = 0x27f
-PASS  xmm_preempt_64_threads_unpinned (460.2 ms)
+PASS  xmm_preempt_64_threads_unpinned (478.0 ms)
 RUN   xmm_preempt_256_threads_unpinned
   INFO threads = 256
   INFO new_thread_mxcsr = 0x1f80
   INFO new_thread_x87_cw = 0x27f
-PASS  xmm_preempt_256_threads_unpinned (1483.1 ms)
+PASS  xmm_preempt_256_threads_unpinned (1434.8 ms)
 RUN   xmm_migration_across_cpus_spinner
   INFO migration = 128 affinity hops over 28 CPUs (0 refused)
-PASS  xmm_migration_across_cpus_spinner (138.2 ms)
+PASS  xmm_migration_across_cpus_spinner (136.8 ms)
 RUN   xmm_preempt_spin_while_main_yields
-PASS  xmm_preempt_spin_while_main_yields (596.5 ms)
+PASS  xmm_preempt_spin_while_main_yields (564.6 ms)
 RUN   xmm_suspend_resume_spinner_200x
-PASS  xmm_suspend_resume_spinner_200x (16.9 ms)
+PASS  xmm_suspend_resume_spinner_200x (17.8 ms)
 RUN   xmm_getthreadcontext_reports_spinner_xmm
   INFO ctx_MxCsr_field = 0x1f80 (FltSave.MxCsr 0x1f80)
-PASS  xmm_getthreadcontext_reports_spinner_xmm (1.6 ms)
+PASS  xmm_getthreadcontext_reports_spinner_xmm (1.9 ms)
 RUN   xmm_setthreadcontext_changes_spinner_xmm
-PASS  xmm_setthreadcontext_changes_spinner_xmm (1.4 ms)
+PASS  xmm_setthreadcontext_changes_spinner_xmm (1.8 ms)
 RUN   xmm_get_set_context_identity_100x
-PASS  xmm_get_set_context_identity_100x (4.5 ms)
+PASS  xmm_get_set_context_identity_100x (4.7 ms)
 RUN   xmm_exc_ud2_continue
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_ud2_continue (12.3 ms)
+PASS  xmm_exc_ud2_continue (15.0 ms)
 RUN   xmm_exc_int3_continue
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_int3_continue (10.0 ms)
+PASS  xmm_exc_int3_continue (13.7 ms)
 RUN   xmm_exc_div0_continue
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_div0_continue (10.8 ms)
+PASS  xmm_exc_div0_continue (13.5 ms)
 RUN   xmm_exc_access_violation_continue
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_access_violation_continue (10.4 ms)
+PASS  xmm_exc_access_violation_continue (14.1 ms)
 RUN   xmm_exc_privileged_hlt_continue
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_privileged_hlt_continue (14.0 ms)
+PASS  xmm_exc_privileged_hlt_continue (14.3 ms)
 RUN   xmm_exc_misaligned_movaps_gp
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_misaligned_movaps_gp (15.5 ms)
+PASS  xmm_exc_misaligned_movaps_gp (10.2 ms)
 RUN   xmm_exc_single_step_continue
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_single_step_continue (13.5 ms)
+PASS  xmm_exc_single_step_continue (12.7 ms)
 RUN   xmm_exc_handler_modifies_xmm_ud2
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_handler_modifies_xmm_ud2 (10.1 ms)
+PASS  xmm_exc_handler_modifies_xmm_ud2 (14.8 ms)
 RUN   xmm_exc_handler_modifies_xmm_av
   INFO context_flags = 0x0010005f
-PASS  xmm_exc_handler_modifies_xmm_av (12.4 ms)
+PASS  xmm_exc_handler_modifies_xmm_av (13.7 ms)
 RUN   xmm_abi_plain_c_call
   INFO volatile_xmm0_5_changed = 0 of 6 (after plain C call)
-PASS  xmm_abi_plain_c_call (0.1 ms)
+PASS  xmm_abi_plain_c_call (0.3 ms)
 RUN   xmm_abi_callee_uses_all_xmm
   INFO volatile_xmm0_5_changed = 6 of 6 (after callee overwrote all XMM (ABI-correctly))
-PASS  xmm_abi_callee_uses_all_xmm (0.2 ms)
+PASS  xmm_abi_callee_uses_all_xmm (0.4 ms)
 RUN   xmm_abi_nested_calls_depth64
   INFO volatile_xmm0_5_changed = 6 of 6 (after 64-deep nested calls)
-PASS  xmm_abi_nested_calls_depth64 (0.2 ms)
+PASS  xmm_abi_nested_calls_depth64 (0.3 ms)
 RUN   xmm_abi_sleep0
   INFO volatile_xmm0_5_changed = 0 of 6 (after Sleep(0))
-PASS  xmm_abi_sleep0 (0.1 ms)
+PASS  xmm_abi_sleep0 (0.2 ms)
 RUN   xmm_abi_sleep1
   INFO volatile_xmm0_5_changed = 2 of 6 (after Sleep(1))
-PASS  xmm_abi_sleep1 (1.2 ms)
+PASS  xmm_abi_sleep1 (1.3 ms)
 RUN   xmm_abi_switchtothread
   INFO volatile_xmm0_5_changed = 0 of 6 (after SwitchToThread)
-PASS  xmm_abi_switchtothread (0.2 ms)
+PASS  xmm_abi_switchtothread (0.3 ms)
 RUN   xmm_abi_sleep0_10000_in_one_call
   INFO volatile_xmm0_5_changed = 0 of 6 (after 10000 x Sleep(0))
-PASS  xmm_abi_sleep0_10000_in_one_call (4.5 ms)
+PASS  xmm_abi_sleep0_10000_in_one_call (5.2 ms)
 RUN   xmm_abi_switchtothread_10000_iterations
-PASS  xmm_abi_switchtothread_10000_iterations (5.6 ms)
+PASS  xmm_abi_switchtothread_10000_iterations (5.5 ms)
 RUN   xmm_abi_sleep0_after_x87_use
   INFO volatile_xmm0_5_changed = 0 of 6 (after x87 use + Sleep(0))
   INFO volatile_xmm0_5_changed = 0 of 6 (after x87 use + SwitchToThread)
 PASS  xmm_abi_sleep0_after_x87_use (0.3 ms)
 RUN   xmm_abi_wait_signaled
   INFO volatile_xmm0_5_changed = 3 of 6 (after WaitForSingleObject (signaled))
-PASS  xmm_abi_wait_signaled (0.2 ms)
+PASS  xmm_abi_wait_signaled (0.5 ms)
 RUN   xmm_abi_wait_timeout
   INFO volatile_xmm0_5_changed = 3 of 6 (after WaitForSingleObject (timeout))
-PASS  xmm_abi_wait_timeout (2.3 ms)
+PASS  xmm_abi_wait_timeout (2.6 ms)
 RUN   xmm_abi_event_pingpong_1000
   INFO volatile_xmm0_5_changed = 3 of 6 (after 1000 event ping-pongs with an XMM-clobbering thread)
-PASS  xmm_abi_event_pingpong_1000 (22.2 ms)
+PASS  xmm_abi_event_pingpong_1000 (17.8 ms)
 RUN   xmm_abi_mutex_contention
   INFO volatile_xmm0_5_changed = 3 of 6 (after blocking on a contended mutex)
-PASS  xmm_abi_mutex_contention (50.6 ms)
+PASS  xmm_abi_mutex_contention (51.1 ms)
 RUN   xmm_abi_critical_section_contention
   INFO volatile_xmm0_5_changed = 3 of 6 (after blocking on a contended critical section)
-PASS  xmm_abi_critical_section_contention (50.6 ms)
+PASS  xmm_abi_critical_section_contention (51.6 ms)
 RUN   xmm_abi_gettickcount64_loop
   INFO volatile_xmm0_5_changed = 1 of 6 (after GetTickCount64 loop until tick)
-PASS  xmm_abi_gettickcount64_loop (16.0 ms)
+PASS  xmm_abi_gettickcount64_loop (15.8 ms)
 RUN   xmm_abi_ntyieldexecution_1000
   INFO volatile_xmm0_5_changed = 0 of 6 (after 1000 NtYieldExecution system calls)
 PASS  xmm_abi_ntyieldexecution_1000 (0.6 ms)
 RUN   xmm_abi_syscall_mix
   INFO volatile_xmm0_5_changed = 6 of 6 (after events/handles/VM/thread-times system calls)
-PASS  xmm_abi_syscall_mix (3.0 ms)
+PASS  xmm_abi_syscall_mix (3.2 ms)
 RUN   xmm_abi_direct_dll_exports
   INFO volatile_xmm0_5_changed = 0 of 6 (after direct call to kernel32.dll!SwitchToThread)
   INFO volatile_xmm0_5_changed = 0 of 6 (after direct call to kernel32.dll!Sleep)
@@ -233,7 +233,7 @@ RUN   xmm_abi_direct_dll_exports
   INFO volatile_xmm0_5_changed = 0 of 6 (after direct call to ntdll.dll!NtYieldExecution)
   NOTE ntdll.dll!RtlGetCurrentProcessorNumber not exported
   INFO volatile_xmm0_5_changed = 1 of 6 (after direct call to kernel32.dll!FlushProcessWriteBuffers)
-PASS  xmm_abi_direct_dll_exports (14.0 ms)
+PASS  xmm_abi_direct_dll_exports (11.3 ms)
 RUN   xmm_abi_user_apc_sleepex_self
   INFO volatile_xmm0_5_changed = 3 of 6 (after SleepEx delivered 2 user APCs)
 PASS  xmm_abi_user_apc_sleepex_self (0.2 ms)
@@ -243,10 +243,10 @@ PASS  xmm_abi_user_apc_from_other_thread (21.4 ms)
 RUN   xmm_abi_self_migration_across_cpus
   INFO volatile_xmm0_5_changed = 6 of 6 (after the thread migrated itself across all CPUs)
   INFO self_migration = 112 hops, on the requested CPU afterwards 112, elsewhere 0
-PASS  xmm_abi_self_migration_across_cpus (36.2 ms)
+PASS  xmm_abi_self_migration_across_cpus (11.6 ms)
 RUN   xmm_abi_threadpool_callback
   INFO volatile_xmm0_5_changed = 6 of 6 (after waiting for a thread-pool callback)
-PASS  xmm_abi_threadpool_callback (0.8 ms)
+PASS  xmm_abi_threadpool_callback (0.9 ms)
 RUN   xmm_abi_qsort_callback
   INFO volatile_xmm0_5_changed = 6 of 6 (after qsort with XMM-using comparator)
 PASS  xmm_abi_qsort_callback (0.6 ms)
@@ -255,18 +255,18 @@ RUN   xmm_abi_raiseexception_continued
 PASS  xmm_abi_raiseexception_continued (0.4 ms)
 RUN   xmm_abi_create_join_32_threads
   INFO volatile_xmm0_5_changed = 6 of 6 (after creating and joining 32 threads)
-PASS  xmm_abi_create_join_32_threads (7.8 ms)
+PASS  xmm_abi_create_join_32_threads (8.0 ms)
 RUN   xmm_abi_virtualalloc_touch_8mb
   INFO volatile_xmm0_5_changed = 3 of 6 (after allocating/touching/freeing 8 MB)
-PASS  xmm_abi_virtualalloc_touch_8mb (3.3 ms)
+PASS  xmm_abi_virtualalloc_touch_8mb (3.1 ms)
 RUN   xmm_abi_callee_uses_x87_stack
   INFO volatile_xmm0_5_changed = 1 of 6 (after callee used all 8 x87 registers)
-PASS  xmm_abi_callee_uses_x87_stack (0.4 ms)
+PASS  xmm_abi_callee_uses_x87_stack (0.3 ms)
 RUN   xmm_abi_mxcsr_and_x87cw_preserved
   INFO volatile_xmm0_5_changed = 2 of 6 (after Sleep/SwitchToThread with non-default MXCSR)
 PASS  xmm_abi_mxcsr_and_x87cw_preserved (1.4 ms)
 RUN   xmm_new_thread_initial_xmm_info
   INFO volatile_xmm0_5_changed = 3 of 6 (after CreateThread+join)
   INFO new_thread_xmm_zero = 16 of 16 registers zero at thread procedure entry
-PASS  xmm_new_thread_initial_xmm_info (0.5 ms)
+PASS  xmm_new_thread_initial_xmm_info (0.8 ms)
 SUMMARY exe=xmm_registers arch=x64 total=99 pass=99 fail=0 crash=0 skip=0 xfail=0 perf=0 checks=8147 checks_failed=0 exit=0

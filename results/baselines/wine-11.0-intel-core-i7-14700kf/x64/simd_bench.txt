@@ -17,15 +17,15 @@ RUN   bench_env_report
   INFO bench_cpu = 15
   NOTE hybrid CPU: every case is pinned to processor 15 (performance core preferred)
   NOTE running under Wine 11.0: numbers describe the host + Wine, not Windows
-PASS  bench_env_report (5.1 ms)
+PASS  bench_env_report (2.8 ms)
 RUN   bench_stats_selftest
 PASS  bench_stats_selftest (0.0 ms)
 RUN   bench_qpc_contract
   INFO pinned_cpu = 15 (performance core)
   INFO qpc_min_nonzero_delta_ns = 100.0
-  PERF qpc_call = 53.9835 ns/call (n=9 min=53.7078 max=54.7934 sd=0.308)
-  INFO qpc_call.sd_pct = 0.57
-PERF  bench_qpc_contract (25.7 ms)
+  PERF qpc_call = 53.6066 ns/call (n=9 min=53.4738 max=53.8489 sd=0.112)
+  INFO qpc_call.sd_pct = 0.21
+PERF  bench_qpc_contract (24.6 ms)
 RUN   bench_tsc_estimate
   INFO pinned_cpu = 15 (performance core)
   INFO tsc_ghz_estimate = 3.418 (min 3.418 max 3.418) - TSC rate, NOT the core clock
@@ -34,107 +34,107 @@ RUN   bench_tsc_estimate
 PASS  bench_tsc_estimate (25.4 ms)
 RUN   bench_affinity_contract
   INFO cpus_checked = 16
-PASS  bench_affinity_contract (14.6 ms)
+PASS  bench_affinity_contract (5.3 ms)
 RUN   arradd_f32_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF add_f32_scalar_24KB = 57.7623 GB/s (n=9 min=57.1234 max=58.4792 sd=0.426)
-  INFO add_f32_scalar_24KB.sd_pct = 0.74
-  PERF add_f32_scalar_192KB = 55.9831 GB/s (n=9 min=52.5354 max=57.6601 sd=1.69)
-  INFO add_f32_scalar_192KB.sd_pct = 3.03
-  PERF add_f32_scalar_48MB = 24.2084 GB/s (n=9 min=19.2451 max=25.5971 sd=2.16)
-  INFO add_f32_scalar_48MB.sd_pct = 9.03
-PERF  arradd_f32_scalar (79.0 ms)
+  PERF add_f32_scalar_24KB = 62.7751 GB/s (n=9 min=62.4966 max=62.8326 sd=0.11)
+  INFO add_f32_scalar_24KB.sd_pct = 0.18
+  PERF add_f32_scalar_192KB = 60.1928 GB/s (n=9 min=59.987 max=60.4161 sd=0.143)
+  INFO add_f32_scalar_192KB.sd_pct = 0.24
+  PERF add_f32_scalar_48MB = 29.7451 GB/s (n=9 min=27.4976 max=31.0881 sd=0.983)
+  INFO add_f32_scalar_48MB.sd_pct = 3.30
+PERF  arradd_f32_scalar (69.7 ms)
 RUN   arradd_f32_sse
   INFO pinned_cpu = 15 (performance core)
-  PERF add_f32_sse_24KB = 195.445 GB/s (n=9 min=191.775 max=199.885 sd=2.45)
-  INFO add_f32_sse_24KB.sd_pct = 1.25
-  PERF add_f32_sse_192KB = 161.624 GB/s (n=9 min=158.02 max=163.764 sd=2.21)
-  INFO add_f32_sse_192KB.sd_pct = 1.37
-  PERF add_f32_sse_48MB = 28.5004 GB/s (n=9 min=26.2349 max=35.9127 sd=3.43)
-  INFO add_f32_sse_48MB.sd_pct = 11.55
-PERF  arradd_f32_sse (73.7 ms)
+  PERF add_f32_sse_24KB = 184.369 GB/s (n=9 min=162.66 max=197.427 sd=11.8)
+  INFO add_f32_sse_24KB.sd_pct = 6.42
+  PERF add_f32_sse_192KB = 166.919 GB/s (n=9 min=166.624 max=167.072 sd=0.13)
+  INFO add_f32_sse_192KB.sd_pct = 0.08
+  PERF add_f32_sse_48MB = 36.5889 GB/s (n=9 min=33.4975 max=37.5245 sd=1.16)
+  INFO add_f32_sse_48MB.sd_pct = 3.19
+PERF  arradd_f32_sse (77.4 ms)
 RUN   arradd_f32_avx
   INFO pinned_cpu = 15 (performance core)
-  PERF add_f32_avx_24KB = 226.738 GB/s (n=9 min=215.73 max=230.801 sd=5.32)
-  INFO add_f32_avx_24KB.sd_pct = 2.36
-  PERF add_f32_avx_192KB = 178.627 GB/s (n=9 min=176.043 max=181.224 sd=1.75)
-  INFO add_f32_avx_192KB.sd_pct = 0.98
-  PERF add_f32_avx_48MB = 28.9412 GB/s (n=9 min=27.2137 max=34.2567 sd=2.26)
-  INFO add_f32_avx_48MB.sd_pct = 7.75
-PERF  arradd_f32_avx (72.7 ms)
+  PERF add_f32_avx_24KB = 244.187 GB/s (n=9 min=237.584 max=245.989 sd=2.59)
+  INFO add_f32_avx_24KB.sd_pct = 1.06
+  PERF add_f32_avx_192KB = 184.75 GB/s (n=9 min=184.332 max=184.93 sd=0.193)
+  INFO add_f32_avx_192KB.sd_pct = 0.10
+  PERF add_f32_avx_48MB = 38.9443 GB/s (n=9 min=37.7553 max=40.1785 sd=0.812)
+  INFO add_f32_avx_48MB.sd_pct = 2.09
+PERF  arradd_f32_avx (75.3 ms)
 RUN   arradd_f32_avx512
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  arradd_f32_avx512 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   arradd_i32_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF add_i32_scalar_24KB = 43.0399 GB/s (n=9 min=33.372 max=62.7465 sd=13.2)
-  INFO add_i32_scalar_24KB.sd_pct = 28.03
-  PERF add_i32_scalar_192KB = 55.7586 GB/s (n=9 min=53.5513 max=56.559 sd=0.915)
-  INFO add_i32_scalar_192KB.sd_pct = 1.64
-  PERF add_i32_scalar_48MB = 29.0163 GB/s (n=9 min=27.7523 max=29.4993 sd=0.504)
-  INFO add_i32_scalar_48MB.sd_pct = 1.75
-PERF  arradd_i32_scalar (64.7 ms)
+  PERF add_i32_scalar_24KB = 50.787 GB/s (n=9 min=41.8228 max=56.7504 sd=6.13)
+  INFO add_i32_scalar_24KB.sd_pct = 12.25
+  PERF add_i32_scalar_192KB = 60.9444 GB/s (n=9 min=59.971 max=61.7302 sd=0.617)
+  INFO add_i32_scalar_192KB.sd_pct = 1.01
+  PERF add_i32_scalar_48MB = 28.054 GB/s (n=9 min=27.3037 max=29.6679 sd=0.973)
+  INFO add_i32_scalar_48MB.sd_pct = 3.43
+PERF  arradd_i32_scalar (64.1 ms)
 RUN   arradd_i32_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF add_i32_sse2_24KB = 196.51 GB/s (n=9 min=192.545 max=203.377 sd=3.56)
-  INFO add_i32_sse2_24KB.sd_pct = 1.80
-  PERF add_i32_sse2_192KB = 159.975 GB/s (n=9 min=155.62 max=163.709 sd=2.75)
-  INFO add_i32_sse2_192KB.sd_pct = 1.72
-  PERF add_i32_sse2_48MB = 36.2085 GB/s (n=9 min=35.25 max=37.0917 sd=0.617)
-  INFO add_i32_sse2_48MB.sd_pct = 1.70
+  PERF add_i32_sse2_24KB = 182.125 GB/s (n=9 min=132.792 max=199.934 sd=23.3)
+  INFO add_i32_sse2_24KB.sd_pct = 13.07
+  PERF add_i32_sse2_192KB = 164.135 GB/s (n=9 min=163.229 max=164.222 sd=0.333)
+  INFO add_i32_sse2_192KB.sd_pct = 0.20
+  PERF add_i32_sse2_48MB = 37.7865 GB/s (n=9 min=27.3408 max=38.3319 sd=3.83)
+  INFO add_i32_sse2_48MB.sd_pct = 10.63
 PERF  arradd_i32_sse2 (71.7 ms)
 RUN   arradd_i32_avx2
   INFO pinned_cpu = 15 (performance core)
-  PERF add_i32_avx2_24KB = 240.894 GB/s (n=9 min=237.06 max=245.432 sd=3.57)
-  INFO add_i32_avx2_24KB.sd_pct = 1.48
-  PERF add_i32_avx2_192KB = 181.916 GB/s (n=9 min=180.283 max=184.132 sd=1.63)
-  INFO add_i32_avx2_192KB.sd_pct = 0.89
-  PERF add_i32_avx2_48MB = 37.1808 GB/s (n=9 min=35.9859 max=37.8861 sd=0.591)
-  INFO add_i32_avx2_48MB.sd_pct = 1.59
-PERF  arradd_i32_avx2 (71.1 ms)
+  PERF add_i32_avx2_24KB = 241.385 GB/s (n=9 min=157.915 max=242.647 sd=27.9)
+  INFO add_i32_avx2_24KB.sd_pct = 12.16
+  PERF add_i32_avx2_192KB = 183.689 GB/s (n=9 min=183.321 max=184.156 sd=0.229)
+  INFO add_i32_avx2_192KB.sd_pct = 0.12
+  PERF add_i32_avx2_48MB = 37.989 GB/s (n=9 min=36.7103 max=38.6498 sd=0.636)
+  INFO add_i32_avx2_48MB.sd_pct = 1.68
+PERF  arradd_i32_avx2 (72.7 ms)
 RUN   arradd_i32_avx512
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  arradd_i32_avx512 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   imul_scalar32_tput
   INFO pinned_cpu = 15 (performance core)
-  PERF imul32_scalar_8chains = 5195.03 Mmul/s (n=9 min=5007.04 max=5292.91 sd=88.3)
-  INFO imul32_scalar_8chains.sd_pct = 1.71
-PERF  imul_scalar32_tput (13.9 ms)
+  PERF imul32_scalar_8chains = 5296.43 Mmul/s (n=9 min=5246.59 max=5301.19 sd=17)
+  INFO imul32_scalar_8chains.sd_pct = 0.32
+PERF  imul_scalar32_tput (14.0 ms)
 RUN   imul_scalar32_lat
   INFO pinned_cpu = 15 (performance core)
-  PERF imul32_scalar_latency = 0.597975 ns/mul (n=9 min=0.597 max=0.609336 sd=0.00553)
-  INFO imul32_scalar_latency.sd_pct = 0.92
-PERF  imul_scalar32_lat (13.9 ms)
+  PERF imul32_scalar_latency = 0.597448 ns/mul (n=9 min=0.596961 max=0.598339 sd=0.00048)
+  INFO imul32_scalar_latency.sd_pct = 0.08
+PERF  imul_scalar32_lat (14.0 ms)
 RUN   imul_scalar64_tput
   INFO pinned_cpu = 15 (performance core)
-  PERF imul64_scalar_8chains = 5118.29 Mmul/s (n=9 min=5099.19 max=5201.88 sd=49.7)
-  INFO imul64_scalar_8chains.sd_pct = 0.97
-PERF  imul_scalar64_tput (13.9 ms)
+  PERF imul64_scalar_8chains = 5295.73 Mmul/s (n=9 min=5291.33 max=5297.49 sd=1.94)
+  INFO imul64_scalar_8chains.sd_pct = 0.04
+PERF  imul_scalar64_tput (14.0 ms)
 RUN   imul_scalar64_lat
   INFO pinned_cpu = 15 (performance core)
-  PERF imul64_scalar_latency = 0.608324 ns/mul (n=9 min=0.597771 max=0.610006 sd=0.00507)
-  INFO imul64_scalar_latency.sd_pct = 0.84
-PERF  imul_scalar64_lat (13.9 ms)
+  PERF imul64_scalar_latency = 0.598095 ns/mul (n=9 min=0.597567 max=0.598464 sd=0.000315)
+  INFO imul64_scalar_latency.sd_pct = 0.05
+PERF  imul_scalar64_lat (14.0 ms)
 RUN   imul_sse2_pmullw
   INFO pinned_cpu = 15 (performance core)
-  PERF pmullw_sse2_16bit = 32588.9 Mmul/s (n=9 min=31938.4 max=33189.4 sd=396)
-  INFO pmullw_sse2_16bit.sd_pct = 1.21
+  PERF pmullw_sse2_16bit = 33185 Mmul/s (n=9 min=33163.2 max=33196.1 sd=12.8)
+  INFO pmullw_sse2_16bit.sd_pct = 0.04
 PERF  imul_sse2_pmullw (13.9 ms)
 RUN   imul_sse2_pmuludq
   INFO pinned_cpu = 15 (performance core)
-  PERF pmuludq_sse2_32x32to64 = 8293 Mmul/s (n=9 min=8248.78 max=8311.6 sd=17.3)
-  INFO pmuludq_sse2_32x32to64.sd_pct = 0.21
-PERF  imul_sse2_pmuludq (13.9 ms)
+  PERF pmuludq_sse2_32x32to64 = 8307.17 Mmul/s (n=9 min=8300.12 max=8312.15 sd=4.06)
+  INFO pmuludq_sse2_32x32to64.sd_pct = 0.05
+PERF  imul_sse2_pmuludq (14.0 ms)
 RUN   imul_sse41_pmulld
   INFO pinned_cpu = 15 (performance core)
-  PERF pmulld_sse41 = 8234.59 Mmul/s (n=9 min=8053.95 max=8524.92 sd=160)
-  INFO pmulld_sse41.sd_pct = 1.93
+  PERF pmulld_sse41 = 8536.97 Mmul/s (n=9 min=8530.03 max=8539.25 sd=3.62)
+  INFO pmulld_sse41.sd_pct = 0.04
 PERF  imul_sse41_pmulld (13.9 ms)
 RUN   imul_avx2_vpmulld
   INFO pinned_cpu = 15 (performance core)
-  PERF vpmulld_avx2_ymm = 16304.3 Mmul/s (n=9 min=16112.2 max=16743.1 sd=269)
-  INFO vpmulld_avx2_ymm.sd_pct = 1.64
-PERF  imul_avx2_vpmulld (13.9 ms)
+  PERF vpmulld_avx2_ymm = 17062.6 Mmul/s (n=9 min=16744.2 max=17076.2 sd=108)
+  INFO vpmulld_avx2_ymm.sd_pct = 0.63
+PERF  imul_avx2_vpmulld (14.0 ms)
 RUN   imul_avx512_vpmulld
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  imul_avx512_vpmulld (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
@@ -143,88 +143,88 @@ RUN   imul_avx512_vpmullq
 SKIP  imul_avx512_vpmullq (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   fpt_sse_addss_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse_addss_scalar = 9.82428 GFLOP/s (n=9 min=9.8149 max=9.84067 sd=0.00906)
-  INFO fpt_sse_addss_scalar.sd_pct = 0.09
-PERF  fpt_sse_addss_scalar (13.9 ms)
+  PERF fpt_sse_addss_scalar = 10.2004 GFLOP/s (n=9 min=10.1956 max=10.2045 sd=0.00358)
+  INFO fpt_sse_addss_scalar.sd_pct = 0.04
+PERF  fpt_sse_addss_scalar (14.0 ms)
 RUN   fpt_sse2_addsd_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse2_addsd_scalar = 9.82909 GFLOP/s (n=9 min=9.81751 max=9.85705 sd=0.0109)
-  INFO fpt_sse2_addsd_scalar.sd_pct = 0.11
+  PERF fpt_sse2_addsd_scalar = 10.2154 GFLOP/s (n=9 min=10.2066 max=10.2216 sd=0.00511)
+  INFO fpt_sse2_addsd_scalar.sd_pct = 0.05
 PERF  fpt_sse2_addsd_scalar (13.9 ms)
 RUN   fpt_sse2_mulsd_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse2_mulsd_scalar = 9.19689 GFLOP/s (n=9 min=9.0367 max=9.20897 sd=0.0648)
-  INFO fpt_sse2_mulsd_scalar.sd_pct = 0.71
-PERF  fpt_sse2_mulsd_scalar (13.9 ms)
+  PERF fpt_sse2_mulsd_scalar = 9.43172 GFLOP/s (n=9 min=9.29879 max=9.48317 sd=0.0633)
+  INFO fpt_sse2_mulsd_scalar.sd_pct = 0.67
+PERF  fpt_sse2_mulsd_scalar (14.0 ms)
 RUN   fpt_sse_addps
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse_addps = 39.3137 GFLOP/s (n=9 min=39.2727 max=39.9636 sd=0.284)
-  INFO fpt_sse_addps.sd_pct = 0.72
-PERF  fpt_sse_addps (13.8 ms)
+  PERF fpt_sse_addps = 40.7825 GFLOP/s (n=9 min=40.7607 max=40.8016 sd=0.0144)
+  INFO fpt_sse_addps.sd_pct = 0.04
+PERF  fpt_sse_addps (13.9 ms)
 RUN   fpt_sse_mulps
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse_mulps = 35.7223 GFLOP/s (n=9 min=35.6055 max=36.7049 sd=0.387)
-  INFO fpt_sse_mulps.sd_pct = 1.07
+  PERF fpt_sse_mulps = 37.086 GFLOP/s (n=9 min=37.0106 max=37.4816 sd=0.199)
+  INFO fpt_sse_mulps.sd_pct = 0.54
 PERF  fpt_sse_mulps (13.9 ms)
 RUN   fpt_sse_divps
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse_divps = 7.07897 GFLOP/s (n=9 min=6.76484 max=7.09311 sd=0.121)
-  INFO fpt_sse_divps.sd_pct = 1.73
-PERF  fpt_sse_divps (13.9 ms)
+  PERF fpt_sse_divps = 7.21925 GFLOP/s (n=9 min=7.21541 max=7.22503 sd=0.00351)
+  INFO fpt_sse_divps.sd_pct = 0.05
+PERF  fpt_sse_divps (14.0 ms)
 RUN   fpt_sse_sqrtps
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse_sqrtps = 7.08415 GFLOP/s (n=9 min=7.0785 max=7.09264 sd=0.00465)
-  INFO fpt_sse_sqrtps.sd_pct = 0.07
-PERF  fpt_sse_sqrtps (13.9 ms)
+  PERF fpt_sse_sqrtps = 7.2207 GFLOP/s (n=9 min=7.21349 max=7.22599 sd=0.00407)
+  INFO fpt_sse_sqrtps.sd_pct = 0.06
+PERF  fpt_sse_sqrtps (14.0 ms)
 RUN   fpt_sse2_addpd
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse2_addpd = 20.0596 GFLOP/s (n=9 min=19.7674 max=20.0774 sd=0.0983)
-  INFO fpt_sse2_addpd.sd_pct = 0.49
+  PERF fpt_sse2_addpd = 20.4186 GFLOP/s (n=9 min=20.3981 max=20.4431 sd=0.0161)
+  INFO fpt_sse2_addpd.sd_pct = 0.08
 PERF  fpt_sse2_addpd (13.9 ms)
 RUN   fpt_sse2_mulpd
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_sse2_mulpd = 18.4216 GFLOP/s (n=9 min=18.3767 max=18.748 sd=0.155)
-  INFO fpt_sse2_mulpd.sd_pct = 0.84
-PERF  fpt_sse2_mulpd (13.8 ms)
+  PERF fpt_sse2_mulpd = 18.7626 GFLOP/s (n=9 min=18.7442 max=18.895 sd=0.0622)
+  INFO fpt_sse2_mulpd.sd_pct = 0.33
+PERF  fpt_sse2_mulpd (13.9 ms)
 RUN   fpt_avx_addps_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_avx_addps_ymm = 79.8836 GFLOP/s (n=9 min=79.7792 max=79.9486 sd=0.0604)
-  INFO fpt_avx_addps_ymm.sd_pct = 0.08
-PERF  fpt_avx_addps_ymm (13.9 ms)
+  PERF fpt_avx_addps_ymm = 81.3249 GFLOP/s (n=9 min=79.7195 max=81.5213 sd=0.567)
+  INFO fpt_avx_addps_ymm.sd_pct = 0.70
+PERF  fpt_avx_addps_ymm (14.0 ms)
 RUN   fpt_avx_mulps_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_avx_mulps_ymm = 72.0267 GFLOP/s (n=9 min=71.4589 max=73.4534 sd=0.724)
-  INFO fpt_avx_mulps_ymm.sd_pct = 1.00
+  PERF fpt_avx_mulps_ymm = 74.6574 GFLOP/s (n=9 min=73.74 max=74.7685 sd=0.313)
+  INFO fpt_avx_mulps_ymm.sd_pct = 0.42
 PERF  fpt_avx_mulps_ymm (13.9 ms)
 RUN   fpt_avx_divps_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_avx_divps_ymm = 8.53152 GFLOP/s (n=9 min=8.23338 max=8.54969 sd=0.113)
-  INFO fpt_avx_divps_ymm.sd_pct = 1.34
-PERF  fpt_avx_divps_ymm (13.9 ms)
+  PERF fpt_avx_divps_ymm = 8.70563 GFLOP/s (n=9 min=8.70043 max=8.71084 sd=0.00386)
+  INFO fpt_avx_divps_ymm.sd_pct = 0.04
+PERF  fpt_avx_divps_ymm (14.0 ms)
 RUN   fpt_avx_addpd_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_avx_addpd_ymm = 40.1138 GFLOP/s (n=9 min=40.0238 max=40.1767 sd=0.0467)
-  INFO fpt_avx_addpd_ymm.sd_pct = 0.12
-PERF  fpt_avx_addpd_ymm (13.9 ms)
+  PERF fpt_avx_addpd_ymm = 40.9191 GFLOP/s (n=9 min=40.8726 max=40.9464 sd=0.024)
+  INFO fpt_avx_addpd_ymm.sd_pct = 0.06
+PERF  fpt_avx_addpd_ymm (14.0 ms)
 RUN   fpt_avx_mulpd_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_avx_mulpd_ymm = 36.819 GFLOP/s (n=9 min=36.7267 max=36.8771 sd=0.0499)
-  INFO fpt_avx_mulpd_ymm.sd_pct = 0.14
-PERF  fpt_avx_mulpd_ymm (13.9 ms)
+  PERF fpt_avx_mulpd_ymm = 37.5153 GFLOP/s (n=9 min=37.4011 max=37.7966 sd=0.149)
+  INFO fpt_avx_mulpd_ymm.sd_pct = 0.40
+PERF  fpt_avx_mulpd_ymm (14.1 ms)
 RUN   fpt_fma_ps_xmm
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_fma_ps_xmm = 73.5118 GFLOP/s (n=9 min=72.1237 max=74.9532 sd=1.05)
-  INFO fpt_fma_ps_xmm.sd_pct = 1.43
+  PERF fpt_fma_ps_xmm = 75.279 GFLOP/s (n=9 min=75.2489 max=75.3463 sd=0.0363)
+  INFO fpt_fma_ps_xmm.sd_pct = 0.05
 PERF  fpt_fma_ps_xmm (13.9 ms)
 RUN   fpt_fma_ps_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_fma_ps_ymm = 150.158 GFLOP/s (n=9 min=149.499 max=152.168 sd=0.818)
-  INFO fpt_fma_ps_ymm.sd_pct = 0.54
+  PERF fpt_fma_ps_ymm = 151.032 GFLOP/s (n=9 min=147.208 max=152.306 sd=1.55)
+  INFO fpt_fma_ps_ymm.sd_pct = 1.03
 PERF  fpt_fma_ps_ymm (13.9 ms)
 RUN   fpt_fma_pd_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fpt_fma_pd_ymm = 75.4673 GFLOP/s (n=9 min=75.279 max=75.8116 sd=0.157)
-  INFO fpt_fma_pd_ymm.sd_pct = 0.21
+  PERF fpt_fma_pd_ymm = 75.9528 GFLOP/s (n=9 min=75.4824 max=76.7236 sd=0.44)
+  INFO fpt_fma_pd_ymm.sd_pct = 0.58
 PERF  fpt_fma_pd_ymm (13.9 ms)
 RUN   fpt_avx512_addps_zmm
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
@@ -240,212 +240,212 @@ RUN   fpt_avx512_fmapd_zmm
 SKIP  fpt_avx512_fmapd_zmm (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   fplat_sse2_addsd
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_sse2_addsd = 0.415912 ns/op (n=9 min=0.415441 max=0.416413 sd=0.000354)
-  INFO fplat_sse2_addsd.sd_pct = 0.09
+  PERF fplat_sse2_addsd = 0.41576 ns/op (n=9 min=0.415261 max=0.415996 sd=0.000229)
+  INFO fplat_sse2_addsd.sd_pct = 0.06
 PERF  fplat_sse2_addsd (13.9 ms)
 RUN   fplat_sse2_mulsd
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_sse2_mulsd = 0.780626 ns/op (n=9 min=0.779951 max=0.780886 sd=0.00041)
-  INFO fplat_sse2_mulsd.sd_pct = 0.05
+  PERF fplat_sse2_mulsd = 0.78073 ns/op (n=9 min=0.779951 max=0.809522 sd=0.00967)
+  INFO fplat_sse2_mulsd.sd_pct = 1.23
 PERF  fplat_sse2_mulsd (13.9 ms)
 RUN   fplat_sse2_divsd
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_sse2_divsd = 2.42333 ns/op (n=9 min=2.42078 max=2.42637 sd=0.00166)
-  INFO fplat_sse2_divsd.sd_pct = 0.07
+  PERF fplat_sse2_divsd = 2.42317 ns/op (n=9 min=2.42078 max=2.42446 sd=0.00134)
+  INFO fplat_sse2_divsd.sd_pct = 0.06
 PERF  fplat_sse2_divsd (13.9 ms)
 RUN   fplat_sse2_sqrtsd
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_sse2_sqrtsd = 2.60683 ns/op (n=9 min=2.60324 max=2.60944 sd=0.00215)
-  INFO fplat_sse2_sqrtsd.sd_pct = 0.08
+  PERF fplat_sse2_sqrtsd = 2.60718 ns/op (n=9 min=2.60446 max=2.71145 sd=0.035)
+  INFO fplat_sse2_sqrtsd.sd_pct = 1.34
 PERF  fplat_sse2_sqrtsd (13.9 ms)
 RUN   fplat_sse_addps
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_sse_addps = 0.416441 ns/op (n=9 min=0.416031 max=0.416943 sd=0.000284)
-  INFO fplat_sse_addps.sd_pct = 0.07
+  PERF fplat_sse_addps = 0.41635 ns/op (n=9 min=0.415878 max=0.416824 sd=0.000338)
+  INFO fplat_sse_addps.sd_pct = 0.08
 PERF  fplat_sse_addps (13.9 ms)
 RUN   fplat_sse_mulps
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_sse_mulps = 0.78151 ns/op (n=9 min=0.780678 max=0.781667 sd=0.0004)
-  INFO fplat_sse_mulps.sd_pct = 0.05
-PERF  fplat_sse_mulps (13.8 ms)
+  PERF fplat_sse_mulps = 0.781615 ns/op (n=9 min=0.780782 max=0.784911 sd=0.00123)
+  INFO fplat_sse_mulps.sd_pct = 0.16
+PERF  fplat_sse_mulps (13.9 ms)
 RUN   fplat_avx_addps_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_avx_addps_ymm = 0.41718 ns/op (n=9 min=0.416733 max=0.420811 sd=0.00129)
-  INFO fplat_avx_addps_ymm.sd_pct = 0.31
-PERF  fplat_avx_addps_ymm (13.9 ms)
+  PERF fplat_avx_addps_ymm = 0.417061 ns/op (n=9 min=0.416678 max=0.424744 sd=0.00261)
+  INFO fplat_avx_addps_ymm.sd_pct = 0.62
+PERF  fplat_avx_addps_ymm (14.0 ms)
 RUN   fplat_fma_sd
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_fma_sd = 0.780418 ns/op (n=9 min=0.779484 max=0.783339 sd=0.00118)
-  INFO fplat_fma_sd.sd_pct = 0.15
-PERF  fplat_fma_sd (13.8 ms)
+  PERF fplat_fma_sd = 0.780366 ns/op (n=9 min=0.779639 max=0.784544 sd=0.0015)
+  INFO fplat_fma_sd.sd_pct = 0.19
+PERF  fplat_fma_sd (13.9 ms)
 RUN   fplat_fma_ps_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_fma_ps_ymm = 0.782084 ns/op (n=9 min=0.78125 max=0.793411 sd=0.00389)
-  INFO fplat_fma_ps_ymm.sd_pct = 0.50
-PERF  fplat_fma_ps_ymm (13.9 ms)
+  PERF fplat_fma_ps_ymm = 0.781406 ns/op (n=9 min=0.780938 max=0.782189 sd=0.000405)
+  INFO fplat_fma_ps_ymm.sd_pct = 0.05
+PERF  fplat_fma_ps_ymm (14.0 ms)
 RUN   fplat_avx512_addps_zmm
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  fplat_avx512_addps_zmm (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   fplat_x87_fadd
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_x87_fadd = 0.599363 ns/op (n=9 min=0.598708 max=0.6003 sd=0.000585)
-  INFO fplat_x87_fadd.sd_pct = 0.10
-PERF  fplat_x87_fadd (13.8 ms)
+  PERF fplat_x87_fadd = 0.600878 ns/op (n=9 min=0.599033 max=0.633162 sd=0.011)
+  INFO fplat_x87_fadd.sd_pct = 1.82
+PERF  fplat_x87_fadd (13.9 ms)
 RUN   fplat_x87_fmul
   INFO pinned_cpu = 15 (performance core)
-  PERF fplat_x87_fmul = 0.78198 ns/op (n=9 min=0.781198 max=0.788556 sd=0.00228)
-  INFO fplat_x87_fmul.sd_pct = 0.29
-PERF  fplat_x87_fmul (13.8 ms)
+  PERF fplat_x87_fmul = 0.781719 ns/op (n=9 min=0.781094 max=0.792177 sd=0.00414)
+  INFO fplat_x87_fmul.sd_pct = 0.53
+PERF  fplat_x87_fmul (14.0 ms)
 RUN   fpt_mmx_paddw
   INFO pinned_cpu = 15 (performance core)
-  PERF mmx_paddw_4chains = 10.2298 Ginstr/s (n=9 min=9.91778 max=10.2461 sd=0.128)
-  INFO mmx_paddw_4chains.sd_pct = 1.26
+  PERF mmx_paddw_4chains = 10.242 Ginstr/s (n=9 min=9.911 max=10.2509 sd=0.114)
+  INFO mmx_paddw_4chains.sd_pct = 1.12
 PERF  fpt_mmx_paddw (13.9 ms)
 RUN   fp_denormal_penalty
   INFO mxcsr_mask = 0x0000ffff
   INFO pinned_cpu = 15 (performance core)
-  PERF mulps_denormal_default = 5.53521 ns/mul (n=9 min=5.53046 max=5.54097 sd=0.00324)
-  INFO mulps_denormal_default.sd_pct = 0.06
-  PERF mulps_denormal_ftz_daz = 0.0268888 ns/mul (n=9 min=0.0265542 max=0.0273401 sd=0.000247)
-  INFO mulps_denormal_ftz_daz.sd_pct = 0.91
-  INFO denormal_slowdown = 205.86x
-PERF  fp_denormal_penalty (29.5 ms)
+  PERF mulps_denormal_default = 5.53216 ns/mul (n=9 min=5.52945 max=5.62778 sd=0.0323)
+  INFO mulps_denormal_default.sd_pct = 0.58
+  PERF mulps_denormal_ftz_daz = 0.0267091 ns/mul (n=9 min=0.026666 max=0.0269258 sd=9.69e-05)
+  INFO mulps_denormal_ftz_daz.sd_pct = 0.36
+  INFO denormal_slowdown = 207.13x
+PERF  fp_denormal_penalty (29.6 ms)
 RUN   dot_scalar_f32
   INFO pinned_cpu = 15 (performance core)
-  PERF dot_scalar_32KB = 2642.58 Melem/s (n=9 min=2628.06 max=2645.84 sd=6.02)
-  INFO dot_scalar_32KB.sd_pct = 0.23
-  PERF dot_scalar_2MB = 2725.17 Melem/s (n=9 min=2678.7 max=2733.87 sd=18.7)
-  INFO dot_scalar_2MB.sd_pct = 0.69
-  PERF dot_scalar_32MB = 2419.28 Melem/s (n=9 min=2370.06 max=2439.68 sd=26.8)
-  INFO dot_scalar_32MB.sd_pct = 1.11
-PERF  dot_scalar_f32 (64.6 ms)
+  PERF dot_scalar_32KB = 2643.9 Melem/s (n=9 min=2635.19 max=2646.81 sd=3.7)
+  INFO dot_scalar_32KB.sd_pct = 0.14
+  PERF dot_scalar_2MB = 2736.01 Melem/s (n=9 min=2728 max=2738.15 sd=3.03)
+  INFO dot_scalar_2MB.sd_pct = 0.11
+  PERF dot_scalar_32MB = 2428.52 Melem/s (n=9 min=2379.75 max=2493.05 sd=36.6)
+  INFO dot_scalar_32MB.sd_pct = 1.50
+PERF  dot_scalar_f32 (64.5 ms)
 RUN   dot_sse_f32
   INFO pinned_cpu = 15 (performance core)
-  PERF dot_sse_32KB = 20926.4 Melem/s (n=9 min=19640.4 max=21748.3 sd=720)
-  INFO dot_sse_32KB.sd_pct = 3.46
-  PERF dot_sse_2MB = 12605.6 Melem/s (n=9 min=12302.3 max=12619.7 sd=102)
-  INFO dot_sse_2MB.sd_pct = 0.81
-  PERF dot_sse_32MB = 4522.65 Melem/s (n=9 min=3845.34 max=4666.04 sd=284)
-  INFO dot_sse_32MB.sd_pct = 6.38
-PERF  dot_sse_f32 (62.8 ms)
+  PERF dot_sse_32KB = 22031 Melem/s (n=9 min=21786.5 max=22244 sd=141)
+  INFO dot_sse_32KB.sd_pct = 0.64
+  PERF dot_sse_2MB = 10208.9 Melem/s (n=9 min=10199.5 max=10224.4 sd=7.22)
+  INFO dot_sse_2MB.sd_pct = 0.07
+  PERF dot_sse_32MB = 4599.02 Melem/s (n=9 min=4159.57 max=4840.23 sd=241)
+  INFO dot_sse_32MB.sd_pct = 5.29
+PERF  dot_sse_f32 (62.1 ms)
 RUN   dot_avx_f32
   INFO pinned_cpu = 15 (performance core)
-  PERF dot_avx_32KB = 31555.6 Melem/s (n=9 min=30949.4 max=32705.2 sd=648)
-  INFO dot_avx_32KB.sd_pct = 2.04
-  PERF dot_avx_2MB = 17005.4 Melem/s (n=9 min=16723.7 max=17118.8 sd=117)
-  INFO dot_avx_2MB.sd_pct = 0.69
-  PERF dot_avx_32MB = 5361.85 Melem/s (n=9 min=4564.98 max=5783.92 sd=349)
-  INFO dot_avx_32MB.sd_pct = 6.60
-PERF  dot_avx_f32 (60.4 ms)
+  PERF dot_avx_32KB = 31758.3 Melem/s (n=9 min=30436.7 max=32044.4 sd=557)
+  INFO dot_avx_32KB.sd_pct = 1.76
+  PERF dot_avx_2MB = 16176.4 Melem/s (n=9 min=15986.5 max=16274.7 sd=118)
+  INFO dot_avx_2MB.sd_pct = 0.73
+  PERF dot_avx_32MB = 6141 Melem/s (n=9 min=5245.5 max=6447.82 sd=335)
+  INFO dot_avx_32MB.sd_pct = 5.55
+PERF  dot_avx_f32 (65.1 ms)
 RUN   dot_fma_f32
   INFO pinned_cpu = 15 (performance core)
-  PERF dot_avx2_fma_32KB = 28601.8 Melem/s (n=9 min=28106.8 max=29229.1 sd=483)
-  INFO dot_avx2_fma_32KB.sd_pct = 1.68
-  PERF dot_avx2_fma_2MB = 16570.4 Melem/s (n=9 min=16438.1 max=16583.7 sd=45.7)
-  INFO dot_avx2_fma_2MB.sd_pct = 0.28
-  PERF dot_avx2_fma_32MB = 5544.6 Melem/s (n=9 min=4798.43 max=5749.82 sd=335)
-  INFO dot_avx2_fma_32MB.sd_pct = 6.19
-PERF  dot_fma_f32 (63.0 ms)
+  PERF dot_avx2_fma_32KB = 28929.5 Melem/s (n=9 min=27571.5 max=29365.6 sd=591)
+  INFO dot_avx2_fma_32KB.sd_pct = 2.05
+  PERF dot_avx2_fma_2MB = 15852.7 Melem/s (n=9 min=15611 max=15943.2 sd=97.4)
+  INFO dot_avx2_fma_2MB.sd_pct = 0.61
+  PERF dot_avx2_fma_32MB = 6201.53 Melem/s (n=9 min=6076.06 max=6312.6 sd=88.9)
+  INFO dot_avx2_fma_32MB.sd_pct = 1.43
+PERF  dot_fma_f32 (63.6 ms)
 RUN   dot_avx512_f32
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  dot_avx512_f32 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   matmul_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF matmul_scalar_64x64 = 6.78163 GFLOP/s (n=9 min=6.56007 max=6.8949 sd=0.126)
-  INFO matmul_scalar_64x64.sd_pct = 1.86
-  PERF matmul_scalar_256x256 = 7.908 GFLOP/s (n=9 min=7.75001 max=7.99277 sd=0.0745)
-  INFO matmul_scalar_256x256.sd_pct = 0.94
-PERF  matmul_scalar (72.8 ms)
+  PERF matmul_scalar_64x64 = 8.587 GFLOP/s (n=9 min=6.19726 max=9.07012 sd=1.19)
+  INFO matmul_scalar_64x64.sd_pct = 14.98
+  PERF matmul_scalar_256x256 = 7.83817 GFLOP/s (n=9 min=6.1888 max=8.51895 sd=0.885)
+  INFO matmul_scalar_256x256.sd_pct = 11.91
+PERF  matmul_scalar (77.1 ms)
 RUN   matmul_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF matmul_sse2_64x64 = 50.6272 GFLOP/s (n=9 min=48.9632 max=50.9695 sd=0.864)
-  INFO matmul_sse2_64x64.sd_pct = 1.72
-  PERF matmul_sse2_256x256 = 47.3086 GFLOP/s (n=9 min=46.9052 max=47.903 sd=0.34)
-  INFO matmul_sse2_256x256.sd_pct = 0.72
-PERF  matmul_sse2 (43.0 ms)
+  PERF matmul_sse2_64x64 = 56.1165 GFLOP/s (n=9 min=55.1074 max=56.9385 sd=0.602)
+  INFO matmul_sse2_64x64.sd_pct = 1.07
+  PERF matmul_sse2_256x256 = 48.0654 GFLOP/s (n=9 min=48.0172 max=48.3819 sd=0.131)
+  INFO matmul_sse2_256x256.sd_pct = 0.27
+PERF  matmul_sse2 (42.5 ms)
 RUN   matmul_avx2_fma
   INFO pinned_cpu = 15 (performance core)
-  PERF matmul_avx2_fma_64x64 = 148.519 GFLOP/s (n=9 min=144.047 max=149.487 sd=1.63)
-  INFO matmul_avx2_fma_64x64.sd_pct = 1.10
-  PERF matmul_avx2_fma_256x256 = 152.164 GFLOP/s (n=9 min=142.802 max=160.432 sd=4.73)
-  INFO matmul_avx2_fma_256x256.sd_pct = 3.12
-PERF  matmul_avx2_fma (36.4 ms)
+  PERF matmul_avx2_fma_64x64 = 152.19 GFLOP/s (n=9 min=148.09 max=152.888 sd=1.42)
+  INFO matmul_avx2_fma_64x64.sd_pct = 0.94
+  PERF matmul_avx2_fma_256x256 = 152.194 GFLOP/s (n=9 min=151.761 max=152.372 sd=0.185)
+  INFO matmul_avx2_fma_256x256.sd_pct = 0.12
+PERF  matmul_avx2_fma (36.2 ms)
 RUN   matmul_avx512
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  matmul_avx512 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   popcount_scalar_swar
   INFO pinned_cpu = 15 (performance core)
-  PERF popcount_scalar_swar_64KB = 12.2754 GB/s (n=9 min=12.1873 max=12.2888 sd=0.0323)
-  INFO popcount_scalar_swar_64KB.sd_pct = 0.26
-  PERF popcount_scalar_swar_8MB = 12.4037 GB/s (n=9 min=12.3854 max=12.4701 sd=0.0334)
-  INFO popcount_scalar_swar_8MB.sd_pct = 0.27
-PERF  popcount_scalar_swar (53.1 ms)
+  PERF popcount_scalar_swar_64KB = 12.3562 GB/s (n=9 min=12.3455 max=12.3636 sd=0.00621)
+  INFO popcount_scalar_swar_64KB.sd_pct = 0.05
+  PERF popcount_scalar_swar_8MB = 12.4725 GB/s (n=9 min=12.3199 max=12.5023 sd=0.0731)
+  INFO popcount_scalar_swar_8MB.sd_pct = 0.59
+PERF  popcount_scalar_swar (53.0 ms)
 RUN   popcount_popcnt
   INFO pinned_cpu = 15 (performance core)
-  PERF popcount_popcnt_64KB = 41.9616 GB/s (n=9 min=41.798 max=42.0192 sd=0.0675)
-  INFO popcount_popcnt_64KB.sd_pct = 0.16
-  PERF popcount_popcnt_8MB = 43.5998 GB/s (n=9 min=43.2291 max=43.6878 sd=0.16)
-  INFO popcount_popcnt_8MB.sd_pct = 0.37
-PERF  popcount_popcnt (30.4 ms)
+  PERF popcount_popcnt_64KB = 41.956 GB/s (n=9 min=41.8278 max=41.9996 sd=0.0497)
+  INFO popcount_popcnt_64KB.sd_pct = 0.12
+  PERF popcount_popcnt_8MB = 43.3492 GB/s (n=9 min=42.8783 max=43.6424 sd=0.265)
+  INFO popcount_popcnt_8MB.sd_pct = 0.61
+PERF  popcount_popcnt (30.3 ms)
 RUN   popcount_ssse3_pshufb
   INFO pinned_cpu = 15 (performance core)
-  PERF popcount_ssse3_pshufb_64KB = 30.2198 GB/s (n=9 min=29.1281 max=30.8271 sd=0.64)
-  INFO popcount_ssse3_pshufb_64KB.sd_pct = 2.13
-  PERF popcount_ssse3_pshufb_8MB = 30.5485 GB/s (n=9 min=30.2056 max=30.9581 sd=0.219)
-  INFO popcount_ssse3_pshufb_8MB.sd_pct = 0.72
-PERF  popcount_ssse3_pshufb (31.7 ms)
+  PERF popcount_ssse3_pshufb_64KB = 30.8502 GB/s (n=9 min=30.8251 max=30.8749 sd=0.0172)
+  INFO popcount_ssse3_pshufb_64KB.sd_pct = 0.06
+  PERF popcount_ssse3_pshufb_8MB = 31.729 GB/s (n=9 min=31.5539 max=31.8494 sd=0.0998)
+  INFO popcount_ssse3_pshufb_8MB.sd_pct = 0.31
+PERF  popcount_ssse3_pshufb (30.8 ms)
 RUN   popcount_avx2_pshufb
   INFO pinned_cpu = 15 (performance core)
-  PERF popcount_avx2_vpshufb_64KB = 63.6051 GB/s (n=9 min=62.0159 max=64.7323 sd=0.819)
-  INFO popcount_avx2_vpshufb_64KB.sd_pct = 1.28
-  PERF popcount_avx2_vpshufb_8MB = 58.8261 GB/s (n=9 min=57.2246 max=59.6784 sd=0.73)
-  INFO popcount_avx2_vpshufb_8MB.sd_pct = 1.24
-PERF  popcount_avx2_pshufb (30.5 ms)
+  PERF popcount_avx2_vpshufb_64KB = 64.7409 GB/s (n=9 min=63.274 max=64.8067 sd=0.49)
+  INFO popcount_avx2_vpshufb_64KB.sd_pct = 0.76
+  PERF popcount_avx2_vpshufb_8MB = 59.5551 GB/s (n=9 min=59.1884 max=59.9498 sd=0.268)
+  INFO popcount_avx2_vpshufb_8MB.sd_pct = 0.45
+PERF  popcount_avx2_pshufb (30.2 ms)
 RUN   bytesum_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF bytesum_scalar_64KB = 5.27918 GB/s (n=9 min=5.20093 max=5.40323 sd=0.0696)
-  INFO bytesum_scalar_64KB.sd_pct = 1.31
-  PERF bytesum_scalar_8MB = 5.41935 GB/s (n=9 min=5.29818 max=5.47774 sd=0.0611)
-  INFO bytesum_scalar_8MB.sd_pct = 1.13
-PERF  bytesum_scalar (34.5 ms)
+  PERF bytesum_scalar_64KB = 5.45442 GB/s (n=9 min=5.4508 max=5.45697 sd=0.0023)
+  INFO bytesum_scalar_64KB.sd_pct = 0.04
+  PERF bytesum_scalar_8MB = 5.46525 GB/s (n=9 min=5.3615 max=5.48239 sd=0.0373)
+  INFO bytesum_scalar_8MB.sd_pct = 0.68
+PERF  bytesum_scalar (34.6 ms)
 RUN   bytesum_sse2_psadbw
   INFO pinned_cpu = 15 (performance core)
-  PERF bytesum_sse2_psadbw_64KB = 64.5268 GB/s (n=9 min=64.2561 max=64.7981 sd=0.197)
-  INFO bytesum_sse2_psadbw_64KB.sd_pct = 0.30
-  PERF bytesum_sse2_psadbw_8MB = 56.9316 GB/s (n=9 min=56.7286 max=60.0786 sd=1.49)
-  INFO bytesum_sse2_psadbw_8MB.sd_pct = 2.58
-PERF  bytesum_sse2_psadbw (30.7 ms)
+  PERF bytesum_sse2_psadbw_64KB = 51.578 GB/s (n=9 min=51.4804 max=51.6424 sd=0.0478)
+  INFO bytesum_sse2_psadbw_64KB.sd_pct = 0.09
+  PERF bytesum_sse2_psadbw_8MB = 54.3093 GB/s (n=9 min=54.0433 max=54.4397 sd=0.146)
+  INFO bytesum_sse2_psadbw_8MB.sd_pct = 0.27
+PERF  bytesum_sse2_psadbw (30.3 ms)
 RUN   bytesum_avx2_psadbw
   INFO pinned_cpu = 15 (performance core)
-  PERF bytesum_avx2_vpsadbw_64KB = 119.049 GB/s (n=9 min=114.876 max=120.816 sd=1.89)
-  INFO bytesum_avx2_vpsadbw_64KB.sd_pct = 1.59
-  PERF bytesum_avx2_vpsadbw_8MB = 68.9286 GB/s (n=9 min=67.5244 max=70.0083 sd=0.746)
-  INFO bytesum_avx2_vpsadbw_8MB.sd_pct = 1.08
-PERF  bytesum_avx2_psadbw (30.6 ms)
+  PERF bytesum_avx2_vpsadbw_64KB = 125.777 GB/s (n=9 min=123.251 max=128.215 sd=1.64)
+  INFO bytesum_avx2_vpsadbw_64KB.sd_pct = 1.31
+  PERF bytesum_avx2_vpsadbw_8MB = 69.7932 GB/s (n=9 min=66.7042 max=70.0308 sd=1.05)
+  INFO bytesum_avx2_vpsadbw_8MB.sd_pct = 1.52
+PERF  bytesum_avx2_psadbw (30.5 ms)
 RUN   cvt_f32_i32_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF cvttss_scalar = 5203.68 Mconv/s (n=9 min=5007.4 max=5384.97 sd=135)
-  INFO cvttss_scalar.sd_pct = 2.60
-PERF  cvt_f32_i32_scalar (14.4 ms)
+  PERF cvttss_scalar = 5446.08 Mconv/s (n=9 min=5437.41 max=5450.8 sd=4.71)
+  INFO cvttss_scalar.sd_pct = 0.09
+PERF  cvt_f32_i32_scalar (14.6 ms)
 RUN   cvt_f32_i32_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF cvttps2dq_sse2 = 18308.6 Mconv/s (n=9 min=18072.3 max=18680.9 sd=178)
-  INFO cvttps2dq_sse2.sd_pct = 0.97
+  PERF cvttps2dq_sse2 = 19042.8 Mconv/s (n=9 min=18952.9 max=19092.8 sd=42.8)
+  INFO cvttps2dq_sse2.sd_pct = 0.22
 PERF  cvt_f32_i32_sse2 (14.3 ms)
 RUN   cvt_f32_i32_avx
   INFO pinned_cpu = 15 (performance core)
-  PERF vcvttps2dq_avx_ymm = 17284.2 Mconv/s (n=9 min=16309.9 max=17719.5 sd=532)
-  INFO vcvttps2dq_avx_ymm.sd_pct = 3.12
-PERF  cvt_f32_i32_avx (14.3 ms)
+  PERF vcvttps2dq_avx_ymm = 18934 Mconv/s (n=9 min=18444.3 max=18950.4 sd=173)
+  INFO vcvttps2dq_avx_ymm.sd_pct = 0.92
+PERF  cvt_f32_i32_avx (14.4 ms)
 RUN   gather_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF gather_scalar_loads = 5249.47 Melem/s (n=9 min=5119.32 max=5255.04 sd=43.7)
-  INFO gather_scalar_loads.sd_pct = 0.83
+  PERF gather_scalar_loads = 5454.79 Melem/s (n=9 min=5403.59 max=5456.97 sd=17.1)
+  INFO gather_scalar_loads.sd_pct = 0.31
 PERF  gather_scalar (14.3 ms)
 RUN   gather_avx2
   INFO pinned_cpu = 15 (performance core)
-  PERF gather_avx2_vpgatherdd = 9344.82 Melem/s (n=9 min=9222.46 max=9464.47 sd=88.6)
-  INFO gather_avx2_vpgatherdd.sd_pct = 0.95
+  PERF gather_avx2_vpgatherdd = 9786.71 Melem/s (n=9 min=9606.82 max=9797.09 sd=72.1)
+  INFO gather_avx2_vpgatherdd.sd_pct = 0.74
 PERF  gather_avx2 (14.3 ms)
 RUN   gather_avx512
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
@@ -459,209 +459,209 @@ RUN   memset_kernels_correctness
 PASS  memset_kernels_correctness (0.7 ms)
 RUN   memcpy_crt
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_crt_32KB = 63.9328 GB/s (n=9 min=60.1719 max=64.6274 sd=1.5)
-  INFO memcpy_crt_32KB.sd_pct = 2.36
-  PERF memcpy_crt_256KB = 73.8163 GB/s (n=9 min=70.3918 max=74.7088 sd=1.28)
-  INFO memcpy_crt_256KB.sd_pct = 1.74
-  PERF memcpy_crt_32MB = 13.1514 GB/s (n=9 min=12.5311 max=13.6168 sd=0.324)
-  INFO memcpy_crt_32MB.sd_pct = 2.46
-PERF  memcpy_crt (67.4 ms)
+  PERF memcpy_crt_32KB = 66.6586 GB/s (n=9 min=64.505 max=66.7023 sd=0.715)
+  INFO memcpy_crt_32KB.sd_pct = 1.08
+  PERF memcpy_crt_256KB = 75.9914 GB/s (n=9 min=71.4256 max=76.0697 sd=1.62)
+  INFO memcpy_crt_256KB.sd_pct = 2.16
+  PERF memcpy_crt_32MB = 14.0102 GB/s (n=9 min=13.6173 max=14.1735 sd=0.187)
+  INFO memcpy_crt_32MB.sd_pct = 1.34
+PERF  memcpy_crt (65.1 ms)
 RUN   memcpy_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_sse2_32KB = 65.8855 GB/s (n=9 min=64.4921 max=65.9904 sd=0.631)
-  INFO memcpy_sse2_32KB.sd_pct = 0.96
-  PERF memcpy_sse2_256KB = 74.7785 GB/s (n=9 min=72.7984 max=75.647 sd=1.01)
-  INFO memcpy_sse2_256KB.sd_pct = 1.36
-  PERF memcpy_sse2_32MB = 12.9274 GB/s (n=9 min=11.8979 max=13.4757 sd=0.449)
-  INFO memcpy_sse2_32MB.sd_pct = 3.47
-PERF  memcpy_sse2 (67.1 ms)
+  PERF memcpy_sse2_32KB = 66.1344 GB/s (n=9 min=65.8505 max=66.2481 sd=0.121)
+  INFO memcpy_sse2_32KB.sd_pct = 0.18
+  PERF memcpy_sse2_256KB = 75.5866 GB/s (n=9 min=75.4773 max=75.8268 sd=0.096)
+  INFO memcpy_sse2_256KB.sd_pct = 0.13
+  PERF memcpy_sse2_32MB = 13.8232 GB/s (n=9 min=13.624 max=14.0466 sd=0.119)
+  INFO memcpy_sse2_32MB.sd_pct = 0.86
+PERF  memcpy_sse2 (65.2 ms)
 RUN   memcpy_sse2_nt
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_sse2_movntdq_32KB = 51.6573 GB/s (n=9 min=49.4327 max=52.3056 sd=1.17)
-  INFO memcpy_sse2_movntdq_32KB.sd_pct = 2.28
-  PERF memcpy_sse2_movntdq_256KB = 48.4419 GB/s (n=9 min=47.0729 max=48.7101 sd=0.518)
-  INFO memcpy_sse2_movntdq_256KB.sd_pct = 1.07
-  PERF memcpy_sse2_movntdq_32MB = 20.277 GB/s (n=9 min=19.2499 max=21.4474 sd=0.725)
-  INFO memcpy_sse2_movntdq_32MB.sd_pct = 3.55
-PERF  memcpy_sse2_nt (57.0 ms)
+  PERF memcpy_sse2_movntdq_32KB = 53.0954 GB/s (n=9 min=53.0369 max=53.1172 sd=0.0265)
+  INFO memcpy_sse2_movntdq_32KB.sd_pct = 0.05
+  PERF memcpy_sse2_movntdq_256KB = 49.5632 GB/s (n=9 min=48.7937 max=50.6643 sd=0.748)
+  INFO memcpy_sse2_movntdq_256KB.sd_pct = 1.51
+  PERF memcpy_sse2_movntdq_32MB = 23.6074 GB/s (n=9 min=20.4863 max=25.0416 sd=1.63)
+  INFO memcpy_sse2_movntdq_32MB.sd_pct = 7.00
+PERF  memcpy_sse2_nt (63.7 ms)
 RUN   memcpy_avx
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_avx_ymm_32KB = 65.8549 GB/s (n=9 min=65.7369 max=66.0384 sd=0.0872)
-  INFO memcpy_avx_ymm_32KB.sd_pct = 0.13
-  PERF memcpy_avx_ymm_256KB = 69.1645 GB/s (n=9 min=68.1686 max=69.2792 sd=0.357)
-  INFO memcpy_avx_ymm_256KB.sd_pct = 0.52
-  PERF memcpy_avx_ymm_32MB = 14.3936 GB/s (n=9 min=14.2246 max=14.5579 sd=0.118)
-  INFO memcpy_avx_ymm_32MB.sd_pct = 0.82
-PERF  memcpy_avx (64.3 ms)
+  PERF memcpy_avx_ymm_32KB = 65.916 GB/s (n=9 min=64.9855 max=66.0166 sd=0.321)
+  INFO memcpy_avx_ymm_32KB.sd_pct = 0.49
+  PERF memcpy_avx_ymm_256KB = 69.1876 GB/s (n=9 min=68.9256 max=69.3207 sd=0.14)
+  INFO memcpy_avx_ymm_256KB.sd_pct = 0.20
+  PERF memcpy_avx_ymm_32MB = 15.0861 GB/s (n=9 min=14.6067 max=15.5763 sd=0.335)
+  INFO memcpy_avx_ymm_32MB.sd_pct = 2.22
+PERF  memcpy_avx (62.5 ms)
 RUN   memcpy_avx512
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  memcpy_avx512 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   memcpy_rep_movsb
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_rep_movsb_32KB = 68.507 GB/s (n=9 min=67.2438 max=68.607 sd=0.453)
-  INFO memcpy_rep_movsb_32KB.sd_pct = 0.66
-  PERF memcpy_rep_movsb_256KB = 75.0779 GB/s (n=9 min=74.8933 max=75.1624 sd=0.0885)
-  INFO memcpy_rep_movsb_256KB.sd_pct = 0.12
-  PERF memcpy_rep_movsb_32MB = 10.0046 GB/s (n=9 min=8.94093 max=12.5124 sd=1.53)
-  INFO memcpy_rep_movsb_32MB.sd_pct = 14.45
-PERF  memcpy_rep_movsb (74.9 ms)
+  PERF memcpy_rep_movsb_32KB = 68.5461 GB/s (n=9 min=67.4449 max=68.5898 sd=0.506)
+  INFO memcpy_rep_movsb_32KB.sd_pct = 0.74
+  PERF memcpy_rep_movsb_256KB = 75.0979 GB/s (n=9 min=75.0629 max=75.1574 sd=0.0323)
+  INFO memcpy_rep_movsb_256KB.sd_pct = 0.04
+  PERF memcpy_rep_movsb_32MB = 15.0085 GB/s (n=9 min=13.9132 max=15.7186 sd=0.527)
+  INFO memcpy_rep_movsb_32MB.sd_pct = 3.50
+PERF  memcpy_rep_movsb (62.0 ms)
 RUN   memcpy_rep_movs_word
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_rep_movsq_32KB = 67.8862 GB/s (n=9 min=67.6196 max=68.1747 sd=0.193)
-  INFO memcpy_rep_movsq_32KB.sd_pct = 0.28
-  PERF memcpy_rep_movsq_256KB = 74.6237 GB/s (n=9 min=72.9924 max=75.0929 sd=0.659)
+  PERF memcpy_rep_movsq_32KB = 68.122 GB/s (n=9 min=66.7415 max=68.1966 sd=0.479)
+  INFO memcpy_rep_movsq_32KB.sd_pct = 0.71
+  PERF memcpy_rep_movsq_256KB = 75.0079 GB/s (n=9 min=73.0648 max=75.0729 sd=0.655)
   INFO memcpy_rep_movsq_256KB.sd_pct = 0.88
-  PERF memcpy_rep_movsq_32MB = 13.225 GB/s (n=9 min=11.6517 max=13.8936 sd=0.848)
-  INFO memcpy_rep_movsq_32MB.sd_pct = 6.56
-PERF  memcpy_rep_movs_word (68.5 ms)
+  PERF memcpy_rep_movsq_32MB = 15.1851 GB/s (n=9 min=13.6406 max=15.8943 sd=0.62)
+  INFO memcpy_rep_movsq_32MB.sd_pct = 4.10
+PERF  memcpy_rep_movs_word (62.2 ms)
 RUN   memset_crt
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_crt_32KB = 133.191 GB/s (n=9 min=131.404 max=134.624 sd=1.04)
-  INFO memset_crt_32KB.sd_pct = 0.78
-  PERF memset_crt_256KB = 81.5544 GB/s (n=9 min=80.6167 max=81.9473 sd=0.43)
-  INFO memset_crt_256KB.sd_pct = 0.53
-  PERF memset_crt_32MB = 34.3813 GB/s (n=9 min=28.8367 max=35.0018 sd=1.93)
-  INFO memset_crt_32MB.sd_pct = 5.75
-PERF  memset_crt (65.2 ms)
+  PERF memset_crt_32KB = 133.663 GB/s (n=9 min=133.16 max=134.471 sd=0.458)
+  INFO memset_crt_32KB.sd_pct = 0.34
+  PERF memset_crt_256KB = 81.8055 GB/s (n=9 min=81.4784 max=82.3727 sd=0.257)
+  INFO memset_crt_256KB.sd_pct = 0.31
+  PERF memset_crt_32MB = 37.0706 GB/s (n=9 min=33.6032 max=38.6105 sd=1.5)
+  INFO memset_crt_32MB.sd_pct = 4.10
+PERF  memset_crt (62.4 ms)
 RUN   memset_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_sse2_32KB = 134.174 GB/s (n=9 min=133.366 max=134.589 sd=0.381)
-  INFO memset_sse2_32KB.sd_pct = 0.28
-  PERF memset_sse2_256KB = 81.5978 GB/s (n=9 min=81.3255 max=81.7344 sd=0.131)
-  INFO memset_sse2_256KB.sd_pct = 0.16
-  PERF memset_sse2_32MB = 36.1266 GB/s (n=9 min=33.9792 max=36.776 sd=1.08)
-  INFO memset_sse2_32MB.sd_pct = 3.04
-PERF  memset_sse2 (63.8 ms)
+  PERF memset_sse2_32KB = 134.655 GB/s (n=9 min=133.213 max=134.939 sd=0.53)
+  INFO memset_sse2_32KB.sd_pct = 0.39
+  PERF memset_sse2_256KB = 80.6973 GB/s (n=9 min=80.6114 max=81.3255 sd=0.301)
+  INFO memset_sse2_256KB.sd_pct = 0.37
+  PERF memset_sse2_32MB = 35.0109 GB/s (n=9 min=30.025 max=36.232 sd=2.36)
+  INFO memset_sse2_32MB.sd_pct = 7.01
+PERF  memset_sse2 (64.1 ms)
 RUN   memset_sse2_nt
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_sse2_movntdq_32KB = 52.1815 GB/s (n=9 min=51.486 max=52.324 sd=0.277)
-  INFO memset_sse2_movntdq_32KB.sd_pct = 0.53
-  PERF memset_sse2_movntdq_256KB = 53.9729 GB/s (n=9 min=53.4774 max=54.7295 sd=0.362)
-  INFO memset_sse2_movntdq_256KB.sd_pct = 0.67
-  PERF memset_sse2_movntdq_32MB = 51.5007 GB/s (n=9 min=48.4354 max=51.9767 sd=1.27)
-  INFO memset_sse2_movntdq_32MB.sd_pct = 2.49
-PERF  memset_sse2_nt (62.4 ms)
+  PERF memset_sse2_movntdq_32KB = 53.0186 GB/s (n=9 min=52.9573 max=53.0629 sd=0.0367)
+  INFO memset_sse2_movntdq_32KB.sd_pct = 0.07
+  PERF memset_sse2_movntdq_256KB = 55.0562 GB/s (n=9 min=54.6716 max=55.1662 sd=0.188)
+  INFO memset_sse2_movntdq_256KB.sd_pct = 0.34
+  PERF memset_sse2_movntdq_32MB = 55.6397 GB/s (n=9 min=53.2977 max=56.0767 sd=0.951)
+  INFO memset_sse2_movntdq_32MB.sd_pct = 1.72
+PERF  memset_sse2_nt (60.3 ms)
 RUN   memset_avx
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_avx_ymm_32KB = 217.995 GB/s (n=9 min=215.708 max=218.781 sd=1.03)
-  INFO memset_avx_ymm_32KB.sd_pct = 0.47
-  PERF memset_avx_ymm_256KB = 85.9031 GB/s (n=9 min=85.7913 max=86.0146 sd=0.0799)
+  PERF memset_avx_ymm_32KB = 218.235 GB/s (n=9 min=218.016 max=218.65 sd=0.233)
+  INFO memset_avx_ymm_32KB.sd_pct = 0.11
+  PERF memset_avx_ymm_256KB = 85.9088 GB/s (n=9 min=85.7913 max=86.0318 sd=0.0759)
   INFO memset_avx_ymm_256KB.sd_pct = 0.09
-  PERF memset_avx_ymm_32MB = 38.0457 GB/s (n=9 min=36.5796 max=39.6578 sd=0.974)
-  INFO memset_avx_ymm_32MB.sd_pct = 2.56
-PERF  memset_avx (62.9 ms)
+  PERF memset_avx_ymm_32MB = 38.513 GB/s (n=9 min=34.3338 max=38.8182 sd=1.43)
+  INFO memset_avx_ymm_32MB.sd_pct = 3.78
+PERF  memset_avx (61.8 ms)
 RUN   memset_avx512
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  memset_avx512 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   memset_rep_stosb
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_rep_stosb_32KB = 225.32 GB/s (n=9 min=224.461 max=226.077 sd=0.485)
-  INFO memset_rep_stosb_32KB.sd_pct = 0.22
-  PERF memset_rep_stosb_256KB = 88.2375 GB/s (n=9 min=88.12 max=88.318 sd=0.0681)
-  INFO memset_rep_stosb_256KB.sd_pct = 0.08
-  PERF memset_rep_stosb_32MB = 37.1198 GB/s (n=9 min=35.2111 max=38.4028 sd=0.932)
-  INFO memset_rep_stosb_32MB.sd_pct = 2.50
-PERF  memset_rep_stosb (62.4 ms)
+  PERF memset_rep_stosb_32KB = 225.531 GB/s (n=9 min=225.269 max=225.75 sd=0.183)
+  INFO memset_rep_stosb_32KB.sd_pct = 0.08
+  PERF memset_rep_stosb_256KB = 88.2199 GB/s (n=9 min=88.1552 max=88.3004 sd=0.0581)
+  INFO memset_rep_stosb_256KB.sd_pct = 0.07
+  PERF memset_rep_stosb_32MB = 36.1558 GB/s (n=9 min=32.1187 max=37.2786 sd=1.65)
+  INFO memset_rep_stosb_32MB.sd_pct = 4.61
+PERF  memset_rep_stosb (63.2 ms)
 RUN   strlen_kernels_correctness
 PASS  strlen_kernels_correctness (4.7 ms)
 RUN   strlen_crt
   INFO pinned_cpu = 15 (performance core)
-  PERF strlen_crt_64KB = 9.40583 GB/s (n=9 min=9.35296 max=9.47898 sd=0.0401)
-  INFO strlen_crt_64KB.sd_pct = 0.43
+  PERF strlen_crt_64KB = 9.46825 GB/s (n=9 min=9.42274 max=9.50492 sd=0.0261)
+  INFO strlen_crt_64KB.sd_pct = 0.28
 PERF  strlen_crt (13.9 ms)
 RUN   strlen_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF strlen_sse2_64KB = 80.053 GB/s (n=9 min=79.8452 max=80.167 sd=0.0992)
-  INFO strlen_sse2_64KB.sd_pct = 0.12
+  PERF strlen_sse2_64KB = 80.479 GB/s (n=9 min=80.4292 max=80.5495 sd=0.0392)
+  INFO strlen_sse2_64KB.sd_pct = 0.05
 PERF  strlen_sse2 (13.9 ms)
 RUN   strlen_sse42_pcmpistri
   INFO pinned_cpu = 15 (performance core)
-  PERF strlen_sse42_pcmpistri_64KB = 28.3951 GB/s (n=9 min=28.3687 max=28.4237 sd=0.0201)
-  INFO strlen_sse42_pcmpistri_64KB.sd_pct = 0.07
+  PERF strlen_sse42_pcmpistri_64KB = 28.4104 GB/s (n=9 min=28.3895 max=28.4331 sd=0.0141)
+  INFO strlen_sse42_pcmpistri_64KB.sd_pct = 0.05
 PERF  strlen_sse42_pcmpistri (13.9 ms)
 RUN   strlen_avx2
   INFO pinned_cpu = 15 (performance core)
-  PERF strlen_avx2_64KB = 122.5 GB/s (n=9 min=120.721 max=123.156 sd=0.731)
-  INFO strlen_avx2_64KB.sd_pct = 0.60
+  PERF strlen_avx2_64KB = 122.703 GB/s (n=9 min=121.285 max=122.858 sd=0.514)
+  INFO strlen_avx2_64KB.sd_pct = 0.42
 PERF  strlen_avx2 (13.9 ms)
 RUN   crc32c_known_answers
 PASS  crc32c_known_answers (15.0 ms)
 RUN   crc32c_sw_bytewise
   INFO pinned_cpu = 15 (performance core)
-  PERF crc32c_sw_table_16KB = 675.27 MB/s (n=9 min=669.396 max=681.945 sd=4.81)
-  INFO crc32c_sw_table_16KB.sd_pct = 0.71
-  PERF crc32c_sw_table_4MB = 679.647 MB/s (n=9 min=671.647 max=681.181 sd=2.79)
-  INFO crc32c_sw_table_4MB.sd_pct = 0.41
-PERF  crc32c_sw_bytewise (89.9 ms)
+  PERF crc32c_sw_table_16KB = 681.72 MB/s (n=9 min=681.09 max=682.035 sd=0.344)
+  INFO crc32c_sw_table_16KB.sd_pct = 0.05
+  PERF crc32c_sw_table_4MB = 679.878 MB/s (n=9 min=674.824 max=681.923 sd=2.52)
+  INFO crc32c_sw_table_4MB.sd_pct = 0.37
+PERF  crc32c_sw_bytewise (89.6 ms)
 RUN   crc32c_sw_slice8
   INFO pinned_cpu = 15 (performance core)
-  PERF crc32c_sw_slice8_16KB = 3587.58 MB/s (n=9 min=3567.43 max=3597.76 sd=9.8)
-  INFO crc32c_sw_slice8_16KB.sd_pct = 0.27
-  PERF crc32c_sw_slice8_4MB = 3632.06 MB/s (n=9 min=3571.14 max=3639.15 sd=21.5)
-  INFO crc32c_sw_slice8_4MB.sd_pct = 0.59
+  PERF crc32c_sw_slice8_16KB = 3588.53 MB/s (n=9 min=3576.44 max=3596.81 sd=5.61)
+  INFO crc32c_sw_slice8_16KB.sd_pct = 0.16
+  PERF crc32c_sw_slice8_4MB = 3639.15 MB/s (n=9 min=3538.45 max=3642.15 sd=33.6)
+  INFO crc32c_sw_slice8_4MB.sd_pct = 0.93
 PERF  crc32c_sw_slice8 (39.6 ms)
 RUN   crc32c_sse42_u8
   INFO pinned_cpu = 15 (performance core)
-  PERF crc32c_sse42_crc32b_16KB = 1815.85 MB/s (n=9 min=1810.39 max=1817.54 sd=2.22)
-  INFO crc32c_sse42_crc32b_16KB.sd_pct = 0.12
-  PERF crc32c_sse42_crc32b_4MB = 1822.42 MB/s (n=9 min=1775.44 max=1826.79 sd=18.6)
-  INFO crc32c_sse42_crc32b_4MB.sd_pct = 1.03
-PERF  crc32c_sse42_u8 (43.2 ms)
+  PERF crc32c_sse42_crc32b_16KB = 1816.09 MB/s (n=9 min=1815.61 max=1817.3 sd=0.729)
+  INFO crc32c_sse42_crc32b_16KB.sd_pct = 0.04
+  PERF crc32c_sse42_crc32b_4MB = 1826.71 MB/s (n=9 min=1825.28 max=1827.03 sd=0.677)
+  INFO crc32c_sse42_crc32b_4MB.sd_pct = 0.04
+PERF  crc32c_sse42_u8 (43.0 ms)
 RUN   crc32c_sse42_wide
   INFO pinned_cpu = 15 (performance core)
-  PERF crc32c_sse42_crc32q_16KB = 13958.2 MB/s (n=9 min=13934.5 max=13974.5 sd=14.6)
-  INFO crc32c_sse42_crc32q_16KB.sd_pct = 0.10
-  PERF crc32c_sse42_crc32q_4MB = 14589.7 MB/s (n=9 min=14349.3 max=14610.1 sd=87.3)
-  INFO crc32c_sse42_crc32q_4MB.sd_pct = 0.60
-PERF  crc32c_sse42_wide (31.8 ms)
+  PERF crc32c_sse42_crc32q_16KB = 13957.3 MB/s (n=9 min=13943.6 max=13974.5 sd=9.71)
+  INFO crc32c_sse42_crc32q_16KB.sd_pct = 0.07
+  PERF crc32c_sse42_crc32q_4MB = 14605.8 MB/s (n=9 min=14550.9 max=14619.4 sd=20.7)
+  INFO crc32c_sse42_crc32q_4MB.sd_pct = 0.14
+PERF  crc32c_sse42_wide (31.7 ms)
 RUN   crc32c_sse42_3way
   INFO pinned_cpu = 15 (performance core)
-  PERF crc32c_sse42_3way_crc32q_16KB = 36263.3 MB/s (n=9 min=36125 max=36618.8 sd=183)
-  INFO crc32c_sse42_3way_crc32q_16KB.sd_pct = 0.50
-  PERF crc32c_sse42_3way_crc32q_4MB = 43736.2 MB/s (n=9 min=43268.1 max=43796.2 sd=165)
-  INFO crc32c_sse42_3way_crc32q_4MB.sd_pct = 0.38
+  PERF crc32c_sse42_3way_crc32q_16KB = 36345.8 MB/s (n=9 min=36075.2 max=36405.2 sd=96.6)
+  INFO crc32c_sse42_3way_crc32q_16KB.sd_pct = 0.27
+  PERF crc32c_sse42_3way_crc32q_4MB = 43543.3 MB/s (n=9 min=43439 max=43799 sd=155)
+  INFO crc32c_sse42_3way_crc32q_4MB.sd_pct = 0.36
 PERF  crc32c_sse42_3way (29.6 ms)
 RUN   aes_known_answers
 PASS  aes_known_answers (0.2 ms)
 RUN   aes_sw_bytewise_ecb
   INFO pinned_cpu = 15 (performance core)
-  PERF aes128_sw_bytewise_ecb_16KB = 110.798 MB/s (n=9 min=108.525 max=113.306 sd=1.45)
-  INFO aes128_sw_bytewise_ecb_16KB.sd_pct = 1.31
-PERF  aes_sw_bytewise_ecb (15.5 ms)
+  PERF aes128_sw_bytewise_ecb_16KB = 94.2331 MB/s (n=9 min=92.1082 max=96.6734 sd=1.48)
+  INFO aes128_sw_bytewise_ecb_16KB.sd_pct = 1.57
+PERF  aes_sw_bytewise_ecb (15.2 ms)
 RUN   aes_sw_ttable_ecb
   INFO pinned_cpu = 15 (performance core)
-  PERF aes128_sw_ttable_ecb_16KB = 206.443 MB/s (n=9 min=205.734 max=206.635 sd=0.283)
-  INFO aes128_sw_ttable_ecb_16KB.sd_pct = 0.14
-PERF  aes_sw_ttable_ecb (14.3 ms)
+  PERF aes128_sw_ttable_ecb_16KB = 205.843 MB/s (n=9 min=205.11 max=206.32 sd=0.381)
+  INFO aes128_sw_ttable_ecb_16KB.sd_pct = 0.19
+PERF  aes_sw_ttable_ecb (14.4 ms)
 RUN   aes_sw_ttable_cbc
   INFO pinned_cpu = 15 (performance core)
-  PERF aes128_sw_ttable_cbc_enc_16KB = 195.203 MB/s (n=9 min=194.893 max=195.384 sd=0.175)
-  INFO aes128_sw_ttable_cbc_enc_16KB.sd_pct = 0.09
+  PERF aes128_sw_ttable_cbc_enc_16KB = 194.584 MB/s (n=9 min=194.123 max=195.5 sd=0.579)
+  INFO aes128_sw_ttable_cbc_enc_16KB.sd_pct = 0.30
 PERF  aes_sw_ttable_cbc (14.4 ms)
 RUN   aesni_ecb_1way
   INFO pinned_cpu = 15 (performance core)
-  PERF aes128_ni_ecb_1way_16KB = 14455.8 MB/s (n=9 min=14048.1 max=14972 sd=336)
-  INFO aes128_ni_ecb_1way_16KB.sd_pct = 2.31
-PERF  aesni_ecb_1way (14.0 ms)
+  PERF aes128_ni_ecb_1way_16KB = 14996.8 MB/s (n=9 min=14924.3 max=15012.7 sd=27)
+  INFO aes128_ni_ecb_1way_16KB.sd_pct = 0.18
+PERF  aesni_ecb_1way (13.9 ms)
 RUN   aesni_ecb_8way
   INFO pinned_cpu = 15 (performance core)
-  PERF aes128_ni_ecb_8way_16KB = 16529.2 MB/s (n=9 min=16222.4 max=16548.8 sd=120)
-  INFO aes128_ni_ecb_8way_16KB.sd_pct = 0.73
+  PERF aes128_ni_ecb_8way_16KB = 16520.5 MB/s (n=9 min=16446.2 max=16542.3 sd=38.5)
+  INFO aes128_ni_ecb_8way_16KB.sd_pct = 0.23
 PERF  aesni_ecb_8way (14.0 ms)
 RUN   aesni_ecb_dec_8way
   INFO pinned_cpu = 15 (performance core)
-  PERF aes128_ni_ecb_dec_8way_16KB = 16496.5 MB/s (n=9 min=16491 max=16533.6 sd=15.6)
-  INFO aes128_ni_ecb_dec_8way_16KB.sd_pct = 0.09
+  PERF aes128_ni_ecb_dec_8way_16KB = 16500.8 MB/s (n=9 min=16476.8 max=16547.8 sd=24.9)
+  INFO aes128_ni_ecb_dec_8way_16KB.sd_pct = 0.15
 PERF  aesni_ecb_dec_8way (14.0 ms)
 RUN   aesni_cbc_enc
   INFO pinned_cpu = 15 (performance core)
-  PERF aes128_ni_cbc_enc_16KB = 2558.13 MB/s (n=9 min=2553.18 max=2558.98 sd=2.07)
-  INFO aes128_ni_cbc_enc_16KB.sd_pct = 0.08
+  PERF aes128_ni_cbc_enc_16KB = 2558.3 MB/s (n=9 min=2556.77 max=2559.32 sd=0.943)
+  INFO aes128_ni_cbc_enc_16KB.sd_pct = 0.04
 PERF  aesni_cbc_enc (14.0 ms)
 RUN   vaes_ecb_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF aes128_vaes_ymm_ecb_16KB = 30511.8 MB/s (n=9 min=28553.3 max=30815.5 sd=827)
-  INFO aes128_vaes_ymm_ecb_16KB.sd_pct = 2.75
+  PERF aes128_vaes_ymm_ecb_16KB = 30171.3 MB/s (n=9 min=30060.1 max=30282.5 sd=76.7)
+  INFO aes128_vaes_ymm_ecb_16KB.sd_pct = 0.25
 PERF  vaes_ecb_ymm (14.0 ms)
 RUN   vaes_ecb_zmm
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
@@ -670,201 +670,208 @@ RUN   clmul_known_answers
 PASS  clmul_known_answers (0.2 ms)
 RUN   clmul_sw_shift_xor
   INFO pinned_cpu = 15 (performance core)
-  PERF clmul64_sw = 6.51814 Mclmul/s (n=9 min=6.48717 max=6.54188 sd=0.0166)
+  PERF clmul64_sw = 6.52811 Mclmul/s (n=9 min=6.51027 max=6.5641 sd=0.0164)
   INFO clmul64_sw.sd_pct = 0.25
 PERF  clmul_sw_shift_xor (15.2 ms)
 RUN   clmul_pclmulqdq
   INFO pinned_cpu = 15 (performance core)
-  PERF clmul64_pclmulqdq = 4149.25 Mclmul/s (n=9 min=4128.77 max=4206.59 sd=30.7)
-  INFO clmul64_pclmulqdq.sd_pct = 0.74
-PERF  clmul_pclmulqdq (14.0 ms)
+  PERF clmul64_pclmulqdq = 4239.76 Mclmul/s (n=9 min=4223.66 max=4248.92 sd=7.98)
+  INFO clmul64_pclmulqdq.sd_pct = 0.19
+PERF  clmul_pclmulqdq (14.1 ms)
 RUN   yuv_known_values
 PASS  yuv_known_values (0.0 ms)
 RUN   yuv_exhaustive_simd_vs_scalar
   INFO roundtrip_max_abs_error = 2
-PASS  yuv_exhaustive_simd_vs_scalar (141.1 ms)
+PASS  yuv_exhaustive_simd_vs_scalar (139.1 ms)
 RUN   yuv_rgb2yuv_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF rgb2ycbcr_scalar_1080p = 727.273 MPix/s (n=9 min=708.608 max=739.12 sd=9.57)
-  INFO rgb2ycbcr_scalar_1080p.sd_pct = 1.32
-PERF  yuv_rgb2yuv_scalar (43.3 ms)
+  PERF rgb2ycbcr_scalar_1080p = 759.421 MPix/s (n=9 min=739.673 max=765.11 sd=7.67)
+  INFO rgb2ycbcr_scalar_1080p.sd_pct = 1.01
+PERF  yuv_rgb2yuv_scalar (42.0 ms)
 RUN   yuv_rgb2yuv_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF rgb2ycbcr_sse2_1080p = 2943.5 MPix/s (n=9 min=2896.63 max=2983.6 sd=31.6)
-  INFO rgb2ycbcr_sse2_1080p.sd_pct = 1.07
-PERF  yuv_rgb2yuv_sse2 (30.1 ms)
+  PERF rgb2ycbcr_sse2_1080p = 2948.11 MPix/s (n=9 min=2883.74 max=2968.36 sd=29.5)
+  INFO rgb2ycbcr_sse2_1080p.sd_pct = 1.00
+PERF  yuv_rgb2yuv_sse2 (29.0 ms)
 RUN   yuv_rgb2yuv_avx2
   INFO pinned_cpu = 15 (performance core)
-  PERF rgb2ycbcr_avx2_1080p = 4391.59 MPix/s (n=9 min=4136.72 max=4567.15 sd=165)
-  INFO rgb2ycbcr_avx2_1080p.sd_pct = 3.78
-PERF  yuv_rgb2yuv_avx2 (26.6 ms)
+  PERF rgb2ycbcr_avx2_1080p = 4901.55 MPix/s (n=9 min=4757.87 max=4959.28 sd=71.6)
+  INFO rgb2ycbcr_avx2_1080p.sd_pct = 1.47
+PERF  yuv_rgb2yuv_avx2 (24.7 ms)
 RUN   yuv_yuv2rgb_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF ycbcr2rgb_scalar_1080p = 208.302 MPix/s (n=9 min=198.585 max=218.575 sd=6.8)
-  INFO ycbcr2rgb_scalar_1080p.sd_pct = 3.24
-PERF  yuv_yuv2rgb_scalar (134.3 ms)
+  PERF ycbcr2rgb_scalar_1080p = 220.798 MPix/s (n=9 min=220.277 max=221.799 sd=0.474)
+  INFO ycbcr2rgb_scalar_1080p.sd_pct = 0.21
+PERF  yuv_yuv2rgb_scalar (128.2 ms)
 RUN   yuv_yuv2rgb_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF ycbcr2rgb_sse2_1080p = 2765.66 MPix/s (n=9 min=2655.74 max=2980.02 sd=105)
-  INFO ycbcr2rgb_sse2_1080p.sd_pct = 3.76
+  PERF ycbcr2rgb_sse2_1080p = 3121.95 MPix/s (n=9 min=3116.48 max=3123.68 sd=2.23)
+  INFO ycbcr2rgb_sse2_1080p.sd_pct = 0.07
 PERF  yuv_yuv2rgb_sse2 (35.2 ms)
 RUN   yuv_yuv2rgb_avx2
   INFO pinned_cpu = 15 (performance core)
-  PERF ycbcr2rgb_avx2_1080p = 4794.73 MPix/s (n=9 min=4691.67 max=4981.92 sd=124)
-  INFO ycbcr2rgb_avx2_1080p.sd_pct = 2.56
-PERF  yuv_yuv2rgb_avx2 (32.4 ms)
+  PERF ycbcr2rgb_avx2_1080p = 5003.56 MPix/s (n=9 min=4988.51 max=5068.38 sd=31.5)
+  INFO ycbcr2rgb_avx2_1080p.sd_pct = 0.63
+PERF  yuv_yuv2rgb_avx2 (31.4 ms)
 RUN   transition_avx_sse_semantics
 PASS  transition_avx_sse_semantics (0.0 ms)
 RUN   transition_avx_sse_penalty
   INFO pinned_cpu = 15 (performance core)
-  PERF sse_vex128_addps = 0.104927 ns/op (n=9 min=0.100779 max=0.109988 sd=0.00307)
-  INFO sse_vex128_addps.sd_pct = 2.91
-  PERF sse_legacy_addps_clean_upper = 0.105119 ns/op (n=9 min=0.104927 max=0.106797 sd=0.0006)
-  INFO sse_legacy_addps_clean_upper.sd_pct = 0.57
-  PERF sse_legacy_addps_dirty_upper = 0.109302 ns/op (n=9 min=0.107402 max=0.110061 sd=0.00114)
-  INFO sse_legacy_addps_dirty_upper.sd_pct = 1.05
-  PERF avx256_then_legacy_no_vzeroupper = 77.7051 ns/op (n=9 min=77.5928 max=77.7686 sd=0.0652)
+  PERF sse_vex128_addps = 0.0947877 ns/op (n=9 min=0.0945793 max=0.0949302 sd=0.000133)
+  INFO sse_vex128_addps.sd_pct = 0.14
+  PERF sse_legacy_addps_clean_upper = 0.104365 ns/op (n=9 min=0.101177 max=0.104913 sd=0.00118)
+  INFO sse_legacy_addps_clean_upper.sd_pct = 1.13
+  PERF sse_legacy_addps_dirty_upper = 0.107697 ns/op (n=9 min=0.107626 max=0.107872 sd=9.65e-05)
+  INFO sse_legacy_addps_dirty_upper.sd_pct = 0.09
+  PERF avx256_then_legacy_no_vzeroupper = 73.2764 ns/op (n=9 min=73.2137 max=73.4131 sd=0.0617)
   INFO avx256_then_legacy_no_vzeroupper.sd_pct = 0.08
-  PERF avx256_vzeroupper_legacy = 0.428847 ns/op (n=9 min=0.419681 max=0.437791 sd=0.00733)
-  INFO avx256_vzeroupper_legacy.sd_pct = 1.71
-  INFO dirty_vs_clean_legacy_ratio = 1.04
-  INFO alternate_novzu_vs_vzu_ratio = 181.20
-PERF  transition_avx_sse_penalty (71.2 ms)
+  PERF avx256_vzeroupper_legacy = 0.396168 ns/op (n=9 min=0.395766 max=0.396596 sd=0.000275)
+  INFO avx256_vzeroupper_legacy.sd_pct = 0.07
+  INFO dirty_vs_clean_legacy_ratio = 1.03
+  INFO alternate_novzu_vs_vzu_ratio = 184.96
+PERF  transition_avx_sse_penalty (71.4 ms)
 RUN   transition_call_sse_routine
   INFO pinned_cpu = 15 (performance core)
-  PERF call_sse_routine_clean = 79.1181 ns/call (n=9 min=78.9141 max=81.7751 sd=1.1)
-  INFO call_sse_routine_clean.sd_pct = 1.38
-  PERF call_sse_routine_ymm_dirty = 161.9 ns/call (n=9 min=161.325 max=171.656 sd=3.47)
-  INFO call_sse_routine_ymm_dirty.sd_pct = 2.13
-PERF  transition_call_sse_routine (27.8 ms)
+  PERF call_sse_routine_clean = 81.4819 ns/call (n=9 min=75.2748 max=81.9493 sd=2.17)
+  INFO call_sse_routine_clean.sd_pct = 2.70
+  PERF call_sse_routine_ymm_dirty = 157.911 ns/call (n=9 min=156.816 max=163.203 sd=1.9)
+  INFO call_sse_routine_ymm_dirty.sd_pct = 1.20
+PERF  transition_call_sse_routine (27.7 ms)
 RUN   xsave_fxsave_fxrstor
   INFO pinned_cpu = 15 (performance core)
-  PERF fxsave_fxrstor_pair = 81.9314 ns/pair (n=9 min=81.6193 max=82.2549 sd=0.188)
-  INFO fxsave_fxrstor_pair.sd_pct = 0.23
-PERF  xsave_fxsave_fxrstor (13.9 ms)
+  PERF fxsave_fxrstor_pair = 79.3231 ns/pair (n=9 min=78.9224 max=80 sd=0.3)
+  INFO fxsave_fxrstor_pair.sd_pct = 0.38
+PERF  xsave_fxsave_fxrstor (14.0 ms)
 RUN   xsave_xsave_xrstor
   INFO rfbm = 0x207
   INFO area_size = 2696
   INFO xstate_bv = 0x203
   INFO pinned_cpu = 15 (performance core)
-  PERF xsave_xrstor_pair = 119.904 ns/pair (n=9 min=117.915 max=123.854 sd=2.36)
-  INFO xsave_xrstor_pair.sd_pct = 1.95
-PERF  xsave_xsave_xrstor (14.0 ms)
+  PERF xsave_xrstor_pair = 115.552 ns/pair (n=9 min=114.907 max=115.964 sd=0.317)
+  INFO xsave_xrstor_pair.sd_pct = 0.27
+PERF  xsave_xsave_xrstor (14.1 ms)
 RUN   xsave_xsaveopt_xrstor
   INFO rfbm = 0x207
   INFO area_size = 2696
   INFO xstate_bv = 0x203
   INFO pinned_cpu = 15 (performance core)
-  PERF xsaveopt_xrstor_pair = 114.025 ns/pair (n=9 min=113.147 max=118.194 sd=1.91)
-  INFO xsaveopt_xrstor_pair.sd_pct = 1.66
-PERF  xsave_xsaveopt_xrstor (14.0 ms)
+  PERF xsaveopt_xrstor_pair = 110.717 ns/pair (n=9 min=110.343 max=111.003 sd=0.241)
+  INFO xsaveopt_xrstor_pair.sd_pct = 0.22
+PERF  xsave_xsaveopt_xrstor (14.1 ms)
 RUN   xsave_xsavec_xrstor
   INFO rfbm = 0x207
   INFO area_size = 840
   INFO xstate_bv = 0x203
   INFO pinned_cpu = 15 (performance core)
-  PERF xsavec_xrstor_pair = 118.027 ns/pair (n=9 min=117.823 max=119.19 sd=0.411)
-  INFO xsavec_xrstor_pair.sd_pct = 0.35
+  PERF xsavec_xrstor_pair = 114.802 ns/pair (n=9 min=114.034 max=115.004 sd=0.357)
+  INFO xsavec_xrstor_pair.sd_pct = 0.31
 PERF  xsave_xsavec_xrstor (14.0 ms)
 RUN   ctx_rtlcapturecontext
   INFO context_flags = 0x10000f
   INFO pinned_cpu = 15 (performance core)
-  PERF rtlcapturecontext = 14.0867 Mcaptures/s (n=9 min=13.7247 max=14.1253 sd=0.15)
-  INFO rtlcapturecontext.sd_pct = 1.07
-PERF  ctx_rtlcapturecontext (13.9 ms)
+  PERF rtlcapturecontext = 14.662 Mcaptures/s (n=9 min=14.606 max=15.1513 sd=0.187)
+  INFO rtlcapturecontext.sd_pct = 1.27
+PERF  ctx_rtlcapturecontext (14.0 ms)
 RUN   ctx_rtlcapturecontext_nonvolatile_xmm
   INFO volatile_xmm0_5_differing = 0
 PASS  ctx_rtlcapturecontext_nonvolatile_xmm (0.1 ms)
 RUN   ctx_suspend_resume
   INFO pinned_cpu = 15 (performance core)
-  PERF suspend_resume_pair = 14.7235 us/pair (n=9 min=14.3362 max=30.158 sd=5.31)
-  INFO suspend_resume_pair.sd_pct = 31.24
-PERF  ctx_suspend_resume (15.4 ms)
+  PERF suspend_resume_pair = 14.3438 us/pair (n=9 min=13.9333 max=15.8695 sd=0.659)
+  INFO suspend_resume_pair.sd_pct = 4.56
+PERF  ctx_suspend_resume (15.6 ms)
 RUN   ctx_getthreadcontext_fp
   INFO pinned_cpu = 15 (performance core)
-  PERF getthreadcontext_full_fp = 11.0404 us/op (n=9 min=10.9435 max=11.4235 sd=0.159)
-  INFO getthreadcontext_full_fp.sd_pct = 1.43
+  PERF getthreadcontext_full_fp = 10.5662 us/op (n=9 min=10.066 max=10.6359 sd=0.176)
+  INFO getthreadcontext_full_fp.sd_pct = 1.67
 PERF  ctx_getthreadcontext_fp (15.2 ms)
 RUN   ctx_getthreadcontext_xstate_avx
   INFO enabled_xstate_features = 0x7
   INFO pinned_cpu = 15 (performance core)
-  PERF getthreadcontext_xstate_avx = 11.0316 us/op (n=9 min=10.9261 max=11.3644 sd=0.14)
-  INFO getthreadcontext_xstate_avx.sd_pct = 1.26
+  PERF getthreadcontext_xstate_avx = 10.4181 us/op (n=9 min=10.2694 max=10.6345 sd=0.113)
+  INFO getthreadcontext_xstate_avx.sd_pct = 1.08
 PERF  ctx_getthreadcontext_xstate_avx (15.3 ms)
 RUN   ctx_getthreadcontext_xstate_avx512
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
 SKIP  ctx_getthreadcontext_xstate_avx512 (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   ctx_setthreadcontext_fp_roundtrip
   INFO pinned_cpu = 15 (performance core)
-  PERF get_set_threadcontext_full_fp = 13.8211 us/op (n=9 min=13.7073 max=13.9046 sd=0.0702)
-  INFO get_set_threadcontext_full_fp.sd_pct = 0.51
+  PERF get_set_threadcontext_full_fp = 13.2491 us/op (n=9 min=13.2079 max=13.285 sd=0.0275)
+  INFO get_set_threadcontext_full_fp.sd_pct = 0.21
 PERF  ctx_setthreadcontext_fp_roundtrip (15.2 ms)
 RUN   ctx_setthreadcontext_xstate_roundtrip
   INFO enabled_xstate_features = 0x7
   INFO pinned_cpu = 15 (performance core)
-  PERF get_set_threadcontext_xstate_avx = 14.0056 us/op (n=9 min=13.6491 max=14.7324 sd=0.44)
-  INFO get_set_threadcontext_xstate_avx.sd_pct = 3.12
+  PERF get_set_threadcontext_xstate_avx = 13.2588 us/op (n=9 min=13.2263 max=14.1168 sd=0.287)
+  INFO get_set_threadcontext_xstate_avx.sd_pct = 2.15
 PERF  ctx_setthreadcontext_xstate_roundtrip (15.3 ms)
 RUN   ctx_getthreadcontext_control
   INFO pinned_cpu = 15 (performance core)
-  PERF getthreadcontext_control = 10.9898 us/op (n=9 min=10.7571 max=11.3689 sd=0.19)
-  INFO getthreadcontext_control.sd_pct = 1.72
+  PERF getthreadcontext_control = 10.3572 us/op (n=9 min=9.83529 max=15.1899 sd=1.75)
+  INFO getthreadcontext_control.sd_pct = 16.05
 PERF  ctx_getthreadcontext_control (15.2 ms)
 RUN   ctx_initializecontext_xstate
   INFO xstate_context_length = 1647
   INFO pinned_cpu = 15 (performance core)
-  PERF initializecontext_setmask_locate = 76.1576 ns/op (n=9 min=72.1883 max=79.5756 sd=2.8)
-  INFO initializecontext_setmask_locate.sd_pct = 3.70
+  PERF initializecontext_setmask_locate = 69.8747 ns/op (n=9 min=69.4637 max=70.4291 sd=0.324)
+  INFO initializecontext_setmask_locate.sd_pct = 0.46
 PERF  ctx_initializecontext_xstate (14.0 ms)
 RUN   ctx_copycontext_xstate
   INFO pinned_cpu = 15 (performance core)
-  PERF copycontext_xstate_avx = 197.408 ns/op (n=9 min=191.889 max=207.097 sd=4.89)
-  INFO copycontext_xstate_avx.sd_pct = 2.46
+  PERF copycontext_xstate_avx = 184.514 ns/op (n=9 min=181.906 max=185.345 sd=1.16)
+  INFO copycontext_xstate_avx.sd_pct = 0.63
 PERF  ctx_copycontext_xstate (15.1 ms)
 RUN   ctx_rtlcapturecontext2_xstate
-  SKIP ntdll!RtlCaptureContext2 not exported (before Windows 10 2004)
-SKIP  ctx_rtlcapturecontext2_xstate (0.1 ms): ntdll!RtlCaptureContext2 not exported (before Windows 10 2004)
+  SKIP ntdll!RtlCaptureContext2 not exported (needs Windows 10 version 2004, build 19041, or later; x64); ctx_capture2_reference_selfcheck runs the same checks on the reference
+SKIP  ctx_rtlcapturecontext2_xstate (0.3 ms): ntdll!RtlCaptureContext2 not exported (needs Windows 10 version 2004, build 19041, or later; x64); ctx_capture2_reference_selfcheck runs the same checks on the reference
+RUN   ctx_capture2_reference_selfcheck
+  INFO context_flags_after = 0x10004f
+  INFO volatile_xmm0_5_differing = 0
+  INFO pinned_cpu = 15 (performance core)
+  PERF reference_capture2_xstate = 14.8653 Mcaptures/s (n=9 min=14.818 max=14.9207 sd=0.0438)
+  INFO reference_capture2_xstate.sd_pct = 0.29
+PERF  ctx_capture2_reference_selfcheck (14.1 ms)
 RUN   sched_sleep0_rate
   INFO pinned_cpu = 15 (performance core)
-  PERF sleep0_alone = 2.15914 Mcalls/s (n=9 min=2.12455 max=2.19091 sd=0.028)
-  INFO sleep0_alone.sd_pct = 1.30
+  PERF sleep0_alone = 2.25397 Mcalls/s (n=9 min=2.23241 max=2.26837 sd=0.0102)
+  INFO sleep0_alone.sd_pct = 0.45
 PERF  sched_sleep0_rate (13.9 ms)
 RUN   sched_switchtothread_rate
   INFO pinned_cpu = 15 (performance core)
-  PERF switchtothread_alone = 2.16776 Mcalls/s (n=9 min=2.15438 max=2.21601 sd=0.0236)
-  INFO switchtothread_alone.sd_pct = 1.08
-PERF  sched_switchtothread_rate (13.9 ms)
+  PERF switchtothread_alone = 2.31051 Mcalls/s (n=9 min=2.29574 max=2.32007 sd=0.00824)
+  INFO switchtothread_alone.sd_pct = 0.36
+PERF  sched_switchtothread_rate (14.0 ms)
 RUN   sched_event_pingpong_same_cpu
   INFO pinned_cpu = 15 (performance core)
-  PERF event_pingpong_same_cpu = 53.3622 k_roundtrips/s (n=9 min=52.0812 max=54.3663 sd=0.699)
-  INFO event_pingpong_same_cpu.sd_pct = 1.31
-PERF  sched_event_pingpong_same_cpu (24.8 ms)
+  PERF event_pingpong_same_cpu = 56.197 k_roundtrips/s (n=9 min=55.6352 max=56.6146 sd=0.298)
+  INFO event_pingpong_same_cpu.sd_pct = 0.53
+PERF  sched_event_pingpong_same_cpu (23.6 ms)
 RUN   sched_event_pingpong_cross_cpu
   INFO pinned_cpu = 15 (performance core)
-  PERF event_pingpong_cross_cpu = 42.1969 k_roundtrips/s (n=9 min=41.6396 max=42.5221 sd=0.288)
-  INFO event_pingpong_cross_cpu.sd_pct = 0.69
-PERF  sched_event_pingpong_cross_cpu (18.0 ms)
+  PERF event_pingpong_cross_cpu = 43.1165 k_roundtrips/s (n=9 min=34.5125 max=43.8657 sd=3.21)
+  INFO event_pingpong_cross_cpu.sd_pct = 7.78
+PERF  sched_event_pingpong_cross_cpu (27.3 ms)
 RUN   sched_switchtothread_pingpong
   INFO pinned_cpu = 15 (performance core)
-  PERF switchtothread_pingpong_same_cpu = 640.721 k_roundtrips/s (n=9 min=622.084 max=659.539 sd=12.5)
-  INFO switchtothread_pingpong_same_cpu.sd_pct = 1.95
-PERF  sched_switchtothread_pingpong (14.8 ms)
+  PERF switchtothread_pingpong_same_cpu = 658.733 k_roundtrips/s (n=9 min=656.916 max=662.312 sd=1.79)
+  INFO switchtothread_pingpong_same_cpu.sd_pct = 0.27
+PERF  sched_switchtothread_pingpong (15.1 ms)
 RUN   sched_pingpong_simd_live
   INFO pinned_cpu = 15 (performance core)
-  PERF event_pingpong_ymm_live_same_cpu = 46.9511 k_roundtrips/s (n=9 min=2.59366 max=53.5236 sd=20.4)
-  INFO event_pingpong_ymm_live_same_cpu.sd_pct = 51.86
-PERF  sched_pingpong_simd_live (29.4 ms)
+  PERF event_pingpong_ymm_live_same_cpu = 55.5427 k_roundtrips/s (n=9 min=4.80336 max=56.0126 sd=19.7)
+  INFO event_pingpong_ymm_live_same_cpu.sd_pct = 43.15
+PERF  sched_pingpong_simd_live (27.8 ms)
 RUN   sched_preempt_simd_verify
   INFO pinned_cpu = 15 (performance core)
-  PERF preempt_ymm_verify_iters = 338.086 Miter/s
+  PERF preempt_ymm_verify_iters = 340.125 Miter/s
   INFO threads = 4 on cpu 15, 4 made progress in 300 ms
   INFO registers_per_thread = 15 x 32 bytes
-PERF  sched_preempt_simd_verify (326.1 ms)
+PERF  sched_preempt_simd_verify (313.8 ms)
 RUN   sched_thread_create_rate
   INFO pinned_cpu = 15 (performance core)
-  PERF createthread_wait_close = 8.73253 kthreads/s (n=9 min=2.27998 max=9.07147 sd=2.63)
-  INFO createthread_wait_close.sd_pct = 35.45
+  PERF createthread_wait_close = 10.8585 kthreads/s (n=9 min=6.32547 max=10.9304 sd=1.51)
+  INFO createthread_wait_close.sd_pct = 14.59
   INFO new_thread_mxcsr = 0x1f80
   INFO new_thread_x87_cw = 0x027f
-PERF  sched_thread_create_rate (21.0 ms)
-SUMMARY exe=simd_bench arch=x64 total=154 pass=14 fail=0 crash=0 skip=17 xfail=0 perf=123 checks=961 checks_failed=0 exit=0
+PERF  sched_thread_create_rate (15.2 ms)
+SUMMARY exe=simd_bench arch=x64 total=155 pass=14 fail=0 crash=0 skip=17 xfail=0 perf=124 checks=966 checks_failed=0 exit=0

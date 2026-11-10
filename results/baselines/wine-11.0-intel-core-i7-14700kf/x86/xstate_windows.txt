@@ -26,7 +26,7 @@ RUN   api_exports_present
   INFO export.ntdll!RtlInitializeExtendedContext2 = present
   INFO export.GetThreadEnabledXStateFeatures = missing
   INFO export.EnableProcessOptionalXStateFeatures = missing
-PASS  api_exports_present (2.7 ms)
+PASS  api_exports_present (2.2 ms)
 RUN   api_enabled_features_legacy_bits
   INFO enabled_features = 0x7
 PASS  api_enabled_features_legacy_bits (0.1 ms)
@@ -53,17 +53,17 @@ PASS  init_size_query_null_buffer_nonzero_len (0.0 ms)
 RUN   init_size_query_xstate
   INFO len_plain = 743
   INFO len_xstate = 1123
-PASS  init_size_query_xstate (0.2 ms)
+PASS  init_size_query_xstate (0.1 ms)
 RUN   init_size_short_by_one
 PASS  init_size_short_by_one (0.0 ms)
 RUN   init_size_zero_len_with_buffer
 PASS  init_size_zero_len_with_buffer (0.0 ms)
 RUN   init_exact_size_guarded_plain
-PASS  init_exact_size_guarded_plain (1.7 ms)
+PASS  init_exact_size_guarded_plain (0.8 ms)
 RUN   init_exact_size_guarded_xstate
-PASS  init_exact_size_guarded_xstate (1.4 ms)
+PASS  init_exact_size_guarded_xstate (0.7 ms)
 RUN   init_exact_size_guarded_xstate_only
-PASS  init_exact_size_guarded_xstate_only (0.9 ms)
+PASS  init_exact_size_guarded_xstate_only (0.8 ms)
 RUN   init_larger_buffer_len_reported
 PASS  init_larger_buffer_len_reported (0.0 ms)
 RUN   init_length_independent_of_low_flags
@@ -85,7 +85,7 @@ PASS  init_invalid_flags_validated_before_size (0.0 ms)
 RUN   init_cross_arch_flags_info
   INFO cross_arch_query = ok=0 err=122 len=1271
   NOTE other-architecture context flags 0x100001: error 122, length 1271 (informational: not a documented contract)
-PASS  init_cross_arch_flags_info (0.4 ms)
+PASS  init_cross_arch_flags_info (0.3 ms)
 RUN   init_context_all_and_full
 PASS  init_context_all_and_full (0.1 ms)
 RUN   init_xstate_stripped_without_os_xstate
@@ -104,7 +104,7 @@ PASS  ctxex_layout_xstate (0.0 ms)
 RUN   ctxex_xstate_header_initial
   INFO xcomp_bv = 0x8000000000000007
   NOTE context uses the compacted XSAVE format (XCOMP_BV=0x8000000000000007)
-PASS  ctxex_xstate_header_initial (0.3 ms)
+PASS  ctxex_xstate_header_initial (0.2 ms)
 RUN   ctxex_xstate_length_matches_cpuid
   INFO xstate_chunk_length = 320
 PASS  ctxex_xstate_length_matches_cpuid (0.1 ms)
@@ -127,7 +127,7 @@ RUN   init2_small_mask
 PASS  init2_small_mask (0.2 ms)
 RUN   init2_locate_feature_outside_mask
   NOTE feature 2: NULL returned but *Length written (256) - Windows 19041 leaves it untouched
-PASS  init2_locate_feature_outside_mask (0.3 ms)
+PASS  init2_locate_feature_outside_mask (0.2 ms)
 RUN   init2_mask_unsupported_bits
 PASS  init2_mask_unsupported_bits (0.0 ms)
 RUN   init2_rtl_length2_matches
@@ -151,7 +151,7 @@ RUN   locate_unsupported_features_null
 PASS  locate_unsupported_features_null (0.4 ms)
 RUN   locate_feature63_compaction_bit
   EXPECT-FAIL known Wine gap: LocateXStateFeature(63) treats the XCOMP_BV compaction bit as a feature
-  FAIL xstate_windows.c:1149: p == NULL (feature 63 located at 016a1000 (buffer [016a0b9d,+1123)))
+  FAIL xstate_windows.c:1160: p == NULL (feature 63 located at 016a1000 (buffer [016a0b9d,+1123)))
 XFAIL locate_feature63_compaction_bit (0.4 ms): known Wine gap: LocateXStateFeature(63) treats the XCOMP_BV compaction bit as a feature
 RUN   locate_enabled_features_offsets
   INFO located_features = 1
@@ -174,7 +174,7 @@ RUN   getmask_no_arch_flags
 PASS  getmask_no_arch_flags (0.0 ms)
 RUN   getmask_no_arch_flags_error_code
   EXPECT-FAIL known Wine gap: GetXStateFeaturesMask fails without SetLastError
-  FAIL xstate_windows.c:1315: err == ERROR_NOT_SUPPORTED (error 3735928559 want ERROR_NOT_SUPPORTED (50, STATUS_NOT_SUPPORTED))
+  FAIL xstate_windows.c:1326: err == ERROR_NOT_SUPPORTED (error 3735928559 want ERROR_NOT_SUPPORTED (50, STATUS_NOT_SUPPORTED))
 XFAIL getmask_no_arch_flags_error_code (0.4 ms): known Wine gap: GetXStateFeaturesMask fails without SetLastError
 RUN   setmask_avx_roundtrip
 PASS  setmask_avx_roundtrip (0.0 ms)
@@ -182,8 +182,8 @@ RUN   setmask_legacy_sets_fp_flag
 PASS  setmask_legacy_sets_fp_flag (0.0 ms)
 RUN   setmask_x86_legacy_length_grows
   EXPECT-FAIL known Wine gap: SetXStateFeaturesMask does not grow the i386 CONTEXT_EX.Legacy.Length
-  FAIL xstate_windows.c:1368: xex(x.ctx)->Legacy.Length == 0x2CC (Legacy.Length 0xcc want 0x2CC after legacy bits were set)
-XFAIL setmask_x86_legacy_length_grows (0.5 ms): known Wine gap: SetXStateFeaturesMask does not grow the i386 CONTEXT_EX.Legacy.Length
+  FAIL xstate_windows.c:1379: xex(x.ctx)->Legacy.Length == 0x2CC (Legacy.Length 0xcc want 0x2CC after legacy bits were set)
+XFAIL setmask_x86_legacy_length_grows (0.4 ms): known Wine gap: SetXStateFeaturesMask does not grow the i386 CONTEXT_EX.Legacy.Length
 RUN   setmask_zero_keeps_fp_flag
 PASS  setmask_zero_keeps_fp_flag (0.0 ms)
 RUN   setmask_unsupported_bits_dropped
@@ -192,13 +192,13 @@ RUN   setmask_extended_on_plain_context
 PASS  setmask_extended_on_plain_context (0.0 ms)
 RUN   setmask_extended_on_plain_context_error_code
   EXPECT-FAIL known Wine gap: SetXStateFeaturesMask fails without SetLastError
-  FAIL xstate_windows.c:1416: GetLastError() == ERROR_INVALID_PARAMETER (error 3735928559 want 87 (STATUS_INVALID_PARAMETER))
+  FAIL xstate_windows.c:1427: GetLastError() == ERROR_INVALID_PARAMETER (error 3735928559 want 87 (STATUS_INVALID_PARAMETER))
 XFAIL setmask_extended_on_plain_context_error_code (0.4 ms): known Wine gap: SetXStateFeaturesMask fails without SetLastError
 RUN   setmask_no_arch_flags
 PASS  setmask_no_arch_flags (0.0 ms)
 RUN   setmask_no_arch_flags_error_code
   EXPECT-FAIL known Wine gap: SetXStateFeaturesMask fails without SetLastError
-  FAIL xstate_windows.c:1437: GetLastError() == ERROR_NOT_SUPPORTED (error 3735928559 want 50 (STATUS_NOT_SUPPORTED))
+  FAIL xstate_windows.c:1448: GetLastError() == ERROR_NOT_SUPPORTED (error 3735928559 want 50 (STATUS_NOT_SUPPORTED))
 XFAIL setmask_no_arch_flags_error_code (0.4 ms): known Wine gap: SetXStateFeaturesMask fails without SetLastError
 RUN   setmask_preserves_header_and_data
 PASS  setmask_preserves_header_and_data (0.0 ms)
@@ -222,19 +222,19 @@ RUN   copy_invalid_flags
 PASS  copy_invalid_flags (0.0 ms)
 RUN   copy_invalid_flags_reserved_bits
   EXPECT-FAIL known Wine gap: CopyContext does not validate reserved ContextFlags bits
-  FAIL xstate_windows.c:1640: !ok (flags 0x10080 accepted)
-  FAIL xstate_windows.c:1641: GetLastError() == ERROR_INVALID_PARAMETER (flags 0x10080: error 3735928559 want 87)
-  FAIL xstate_windows.c:1640: !ok (flags 0x2001003f accepted)
-  FAIL xstate_windows.c:1641: GetLastError() == ERROR_INVALID_PARAMETER (flags 0x2001003f: error 3735928559 want 87)
-  FAIL xstate_windows.c:1645: !X.CopyContext(d.ctx, XA_ALL, s.ctx)
-  FAIL xstate_windows.c:1646: GetLastError() == ERROR_INVALID_PARAMETER (got 0xdeadbeef (3735928559) want 0x57 (87))
-XFAIL copy_invalid_flags_reserved_bits (1.3 ms): known Wine gap: CopyContext does not validate reserved ContextFlags bits
+  FAIL xstate_windows.c:1651: !ok (flags 0x10080 accepted)
+  FAIL xstate_windows.c:1652: GetLastError() == ERROR_INVALID_PARAMETER (flags 0x10080: error 3735928559 want 87)
+  FAIL xstate_windows.c:1651: !ok (flags 0x2001003f accepted)
+  FAIL xstate_windows.c:1652: GetLastError() == ERROR_INVALID_PARAMETER (flags 0x2001003f: error 3735928559 want 87)
+  FAIL xstate_windows.c:1656: !X.CopyContext(d.ctx, XA_ALL, s.ctx)
+  FAIL xstate_windows.c:1657: GetLastError() == ERROR_INVALID_PARAMETER (got 0xdeadbeef (3735928559) want 0x57 (87))
+XFAIL copy_invalid_flags_reserved_bits (1.4 ms): known Wine gap: CopyContext does not validate reserved ContextFlags bits
 RUN   copy_xstate_mask_filtered
 PASS  copy_xstate_mask_filtered (0.0 ms)
 RUN   copy_into_smaller_compacted_dest
   EXPECT-FAIL known Wine gap: CopyContext into a compacted destination without room for AVX succeeds
-  FAIL xstate_windows.c:1676: !ok (copying AVX state into a compacted context whose chunk has no AVX room must fail)
-  FAIL xstate_windows.c:1677: GetLastError() == ERROR_MORE_DATA (error 3735928559 want 234)
+  FAIL xstate_windows.c:1687: !ok (copying AVX state into a compacted context whose chunk has no AVX room must fail)
+  FAIL xstate_windows.c:1688: GetLastError() == ERROR_MORE_DATA (error 3735928559 want 234)
 XFAIL copy_into_smaller_compacted_dest (0.6 ms): known Wine gap: CopyContext into a compacted destination without room for AVX succeeds
 RUN   copy_xstate_only_request
 PASS  copy_xstate_only_request (0.0 ms)
@@ -242,46 +242,46 @@ RUN   copy_xstate_dest_header_rebuilt
 PASS  copy_xstate_dest_header_rebuilt (0.0 ms)
 RUN   copy_x86_legacy_length_grows
   EXPECT-FAIL known Wine gap: CopyContext does not grow the i386 destination CONTEXT_EX.Legacy.Length
-  FAIL xstate_windows.c:1736: xex(d.ctx)->Legacy.Length == 0x2CC (dest Legacy.Length 0xcc want 0x2CC)
+  FAIL xstate_windows.c:1747: xex(d.ctx)->Legacy.Length == 0x2CC (dest Legacy.Length 0xcc want 0x2CC)
 XFAIL copy_x86_legacy_length_grows (0.4 ms): known Wine gap: CopyContext does not grow the i386 destination CONTEXT_EX.Legacy.Length
 RUN   rtl_copy_extended_context_legacy_too_small
   EXPECT-FAIL known Wine gap: RtlCopyExtendedContext does not compare the Legacy chunks
-  FAIL xstate_windows.c:1748: (ULONG)X.RtlCopyExtendedContext(xex(d.ctx), XA_ALL | XA_XSTATE, xex(s.ctx)) == (ULONG)X_STATUS_INVALID_PARAMETER (got 0x0 (0) want 0xc000000d (3221225485))
+  FAIL xstate_windows.c:1759: (ULONG)X.RtlCopyExtendedContext(xex(d.ctx), XA_ALL | XA_XSTATE, xex(s.ctx)) == (ULONG)X_STATUS_INVALID_PARAMETER (got 0x0 (0) want 0xc000000d (3221225485))
 XFAIL rtl_copy_extended_context_legacy_too_small (0.6 ms): known Wine gap: RtlCopyExtendedContext does not compare the Legacy chunks
 RUN   rtl_copy_context_status
 PASS  rtl_copy_context_status (0.0 ms)
 RUN   rtl_copy_extended_context
 PASS  rtl_copy_extended_context (0.0 ms)
 RUN   thread_get_xstate_avx
-PASS  thread_get_xstate_avx (21.4 ms)
+PASS  thread_get_xstate_avx (22.0 ms)
 RUN   thread_get_mxcsr_x87cw
   INFO x86_new_thread_mxcsr = 0x1f80
   INFO x86_new_thread_fcw = 0x27f
 PASS  thread_get_mxcsr_x87cw (21.5 ms)
 RUN   thread_set_xstate_avx
-PASS  thread_set_xstate_avx (21.4 ms)
+PASS  thread_set_xstate_avx (21.5 ms)
 RUN   thread_set_xstate_avx_mask_cleared
   NOTE YMM uppers were initialized to 0 (AVX absent from the mask)
-PASS  thread_set_xstate_avx_mask_cleared (21.6 ms)
+PASS  thread_set_xstate_avx_mask_cleared (21.7 ms)
 RUN   thread_get_request_mask_zero_info
   INFO mask_after_get_request0 = 0x7
   NOTE GetThreadContext with XSTATE request mask 0 returned mask 0x7
-PASS  thread_get_request_mask_zero_info (21.7 ms)
+PASS  thread_get_request_mask_zero_info (21.8 ms)
 RUN   thread_plain_vs_xstate_legacy_equal
 PASS  thread_plain_vs_xstate_legacy_equal (21.4 ms)
 RUN   thread_copycontext_from_thread
-PASS  thread_copycontext_from_thread (21.4 ms)
+PASS  thread_copycontext_from_thread (21.5 ms)
 RUN   thread_get_plain_and_debug_only
-PASS  thread_get_plain_and_debug_only (21.6 ms)
+PASS  thread_get_plain_and_debug_only (21.5 ms)
 RUN   thread_get_into_init2_compact_context
   INFO init2_avx_xcomp_bv = 0x8000000000000007
-PASS  thread_get_into_init2_compact_context (21.8 ms)
+PASS  thread_get_into_init2_compact_context (21.5 ms)
 RUN   thread_get_compact_no_room
   INFO compact_no_room = ok=1 err=3735928559 bv=0x0
   NOTE GetThreadContext succeeded without AVX data (Windows 19041 returns ERROR_MORE_DATA)
-PASS  thread_get_compact_no_room (22.2 ms)
+PASS  thread_get_compact_no_room (21.7 ms)
 RUN   thread_bogus_context_ex_child
-PASS  thread_bogus_context_ex_child (40.8 ms)
+PASS  thread_bogus_context_ex_child (36.5 ms)
 RUN   thread_bogus_context_ex_rejected
   INFO V1_RET = 1
   INFO V1_ERR = 0
@@ -291,10 +291,10 @@ RUN   thread_bogus_context_ex_rejected
   INFO V3_RET = 0
   INFO V3_ERR = 87
   NOTE i386 (WOW64) bogus CONTEXT_EX results recorded only; the native x64 build pins them
-PASS  thread_bogus_context_ex_rejected (0.4 ms)
+PASS  thread_bogus_context_ex_rejected (0.8 ms)
 RUN   thread_set_garbage_header_child
   NOTE SetThreadContext with corrupted XSAVE header: 1 ERR=0
-PASS  thread_set_garbage_header_child (40.1 ms)
+PASS  thread_set_garbage_header_child (33.9 ms)
 RUN   exec_avx_matches_api
   INFO avx_api = 1
   INFO avx_usable = 1

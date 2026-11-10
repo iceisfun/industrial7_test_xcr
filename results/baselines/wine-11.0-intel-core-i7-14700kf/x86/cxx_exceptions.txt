@@ -5,22 +5,22 @@ ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size
 ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
 RUN   throw_1_asm_frame_xmm_saved
   SKIP x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
-SKIP  throw_1_asm_frame_xmm_saved (0.5 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
+SKIP  throw_1_asm_frame_xmm_saved (0.3 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
 RUN   throw_8_asm_frames_xmm_saved
   SKIP x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
-SKIP  throw_8_asm_frames_xmm_saved (0.5 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
+SKIP  throw_8_asm_frames_xmm_saved (0.3 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
 RUN   throw_64_asm_frames_xmm_saved
   SKIP x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
-SKIP  throw_64_asm_frames_xmm_saved (0.5 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
+SKIP  throw_64_asm_frames_xmm_saved (0.3 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
 RUN   throw_64_compiled_simd_frames
   SKIP x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
-SKIP  throw_64_compiled_simd_frames (0.5 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
+SKIP  throw_64_compiled_simd_frames (0.3 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
 RUN   throw_8_frames_ymm_uppers_volatile
   SKIP x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
-SKIP  throw_8_frames_ymm_uppers_volatile (0.5 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
+SKIP  throw_8_frames_ymm_uppers_volatile (0.3 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
 RUN   rethrow_same_object
   SKIP x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
-SKIP  rethrow_same_object (0.5 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
+SKIP  rethrow_same_object (0.3 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
 RUN   nested_try_in_catch
   SKIP x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)
 SKIP  nested_try_in_catch (0.3 ms): x86: GCC's i686 C++ uses DWARF/SJLJ unwinding, not the OS SEH unwinder (no SEH-based 32-bit C++ compiler)

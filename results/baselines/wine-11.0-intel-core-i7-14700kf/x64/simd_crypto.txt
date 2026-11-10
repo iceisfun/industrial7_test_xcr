@@ -101,7 +101,7 @@ PASS  pclmul_algebraic_properties (0.1 ms)
 RUN   pclmul_m128_memory_operand_form
 PASS  pclmul_m128_memory_operand_form (0.0 ms)
 RUN   pclmul_ghash_multiply_vs_bitwise
-PASS  pclmul_ghash_multiply_vs_bitwise (2.0 ms)
+PASS  pclmul_ghash_multiply_vs_bitwise (2.1 ms)
 RUN   pclmul_crc32c_folding_vs_table
 PASS  pclmul_crc32c_folding_vs_table (0.3 ms)
 RUN   pclmul_crc32_ieee_folding_vs_table
@@ -171,19 +171,19 @@ RUN   vaes_vpclmul_evex256_upper_registers_x64
 SKIP  vaes_vpclmul_evex256_upper_registers_x64 (0.1 ms): avx512vl not usable on this CPU (cpuid=0)
 RUN   aesni_legacy_misaligned_m128_faults_child
   INFO exception_code = 0xc0000005
-PASS  aesni_legacy_misaligned_m128_faults_child (17.1 ms)
+PASS  aesni_legacy_misaligned_m128_faults_child (17.3 ms)
 RUN   sha_legacy_misaligned_m128_faults_child
   INFO exception_code = 0xc0000005
-PASS  sha_legacy_misaligned_m128_faults_child (17.8 ms)
+PASS  sha_legacy_misaligned_m128_faults_child (14.4 ms)
 RUN   crypto_unadvertised_instruction_probe_child
   SKIP AES, PCLMULQDQ, SHA and GFNI are all advertised: nothing to probe
-SKIP  crypto_unadvertised_instruction_probe_child (0.1 ms): AES, PCLMULQDQ, SHA and GFNI are all advertised: nothing to probe
+SKIP  crypto_unadvertised_instruction_probe_child (0.2 ms): AES, PCLMULQDQ, SHA and GFNI are all advertised: nothing to probe
 RUN   crypto_threads_per_thread_key_isolation
   INFO threads = 8 threads x 40 iterations (AES-CTR + SHA-NI SHA-256)
-PASS  crypto_threads_per_thread_key_isolation (23.5 ms)
+PASS  crypto_threads_per_thread_key_isolation (21.7 ms)
 RUN   crypto_state_survives_suspend_getsetcontext
-  INFO suspend_rounds = 300 suspends, 300 GetThreadContext, 150 SetThreadContext, 458 iterations
-PASS  crypto_state_survives_suspend_getsetcontext (8.1 ms)
+  INFO suspend_rounds = 300 suspends, 300 GetThreadContext, 150 SetThreadContext, 549 iterations
+PASS  crypto_state_survives_suspend_getsetcontext (8.4 ms)
 RUN   crypto_results_independent_of_mxcsr
 PASS  crypto_results_independent_of_mxcsr (0.1 ms)
 RUN   legacy_sse_crypto_preserves_upper_ymm_vex128_zeroes_it
@@ -192,29 +192,29 @@ RUN   crypto_m128_operand_ending_at_guard_page_no_fault
 PASS  crypto_m128_operand_ending_at_guard_page_no_fault (0.0 ms)
 RUN   aesni_legacy_m128_in_noaccess_page_faults_child
   INFO av_address_minus_page_end = 0
-PASS  aesni_legacy_m128_in_noaccess_page_faults_child (13.5 ms)
+PASS  aesni_legacy_m128_in_noaccess_page_faults_child (10.8 ms)
 RUN   vaes128_m128_straddling_noaccess_page_faults_child
   INFO av_address_minus_page_end = 0
-PASS  vaes128_m128_straddling_noaccess_page_faults_child (11.1 ms)
+PASS  vaes128_m128_straddling_noaccess_page_faults_child (10.3 ms)
 RUN   aesni_pinned_registers_survive_preemption_and_context_roundtrips
-  INFO iterations_per_run = 4000000 (calibration: 20000 in 0.13 ms)
-  INFO workers = 56 threads on 28 CPUs, 4000000 iterations each; 204 suspends, 204 GetThreadContext, 102 SetThreadContext
-PASS  aesni_pinned_registers_survive_preemption_and_context_roundtrips (334.0 ms)
+  INFO iterations_per_run = 4000000 (calibration: 20000 in 0.12 ms)
+  INFO workers = 56 threads on 28 CPUs, 4000000 iterations each; 160 suspends, 160 GetThreadContext, 80 SetThreadContext
+PASS  aesni_pinned_registers_survive_preemption_and_context_roundtrips (282.3 ms)
 RUN   aesni_key_register_visible_and_settable_via_thread_context
 PASS  aesni_key_register_visible_and_settable_via_thread_context (1.2 ms)
 RUN   aesni_key_register_reported_by_get_thread_context
 PASS  aesni_key_register_reported_by_get_thread_context (1.2 ms)
 RUN   perf_aes128_ecb_software_vs_aesni
-  PERF aes128_ecb_sw_MBps = 51.2279 MB/s
-  PERF aes128_ecb_aesni_MBps = 9930.94 MB/s
-PERF  perf_aes128_ecb_software_vs_aesni (48.4 ms)
+  PERF aes128_ecb_sw_MBps = 53.7493 MB/s
+  PERF aes128_ecb_aesni_MBps = 10499.5 MB/s
+PERF  perf_aes128_ecb_software_vs_aesni (48.3 ms)
 RUN   perf_crc32c_table_vs_pclmul_vs_sse42
-  PERF crc32c_table_MBps = 661.693 MB/s
-  PERF crc32c_pclmul_fold4_MBps = 39512.3 MB/s
-  PERF crc32c_sse42_MBps = 13943.1 MB/s
-PERF  perf_crc32c_table_vs_pclmul_vs_sse42 (67.2 ms)
+  PERF crc32c_table_MBps = 681.956 MB/s
+  PERF crc32c_pclmul_fold4_MBps = 41308.1 MB/s
+  PERF crc32c_sse42_MBps = 14428.3 MB/s
+PERF  perf_crc32c_table_vs_pclmul_vs_sse42 (66.7 ms)
 RUN   perf_sha256_software_vs_shani
-  PERF sha256_sw_MBps = 177.998 MB/s
-  PERF sha256_shani_MBps = 2076.8 MB/s
-PERF  perf_sha256_software_vs_shani (38.6 ms)
+  PERF sha256_sw_MBps = 187.98 MB/s
+  PERF sha256_shani_MBps = 2174.69 MB/s
+PERF  perf_sha256_software_vs_shani (37.8 ms)
 SUMMARY exe=simd_crypto arch=x64 total=95 pass=84 fail=0 crash=0 skip=8 xfail=0 perf=3 checks=562 checks_failed=0 exit=0

@@ -8,8 +8,8 @@ RUN   mem_env_report
   INFO l1d_bytes = 49152
   INFO l2_bytes = 4194304
   INFO l3_bytes = 34603008
-  INFO cpuid_l1d_l2_l3_bytes = 32768 4194304 34603008
-  NOTE OS-reported and CPUID cache sizes differ (L1d 49152 vs 32768, L2 4194304 vs 4194304)
+  INFO cpuid_l1d_l2_l3_bytes = 49152 2097152 34603008
+  NOTE OS-reported and CPUID cache sizes differ (L1d 49152 vs 49152, L2 4194304 vs 2097152; CPUID describes the core this ran on)
   INFO page_size = 4096
   INFO large_page_minimum = 2097152
   INFO total_phys_mb = 128643
@@ -19,679 +19,715 @@ RUN   mem_env_report
   INFO mode = quick
   INFO bench_cpu = 15
   NOTE running under Wine 11.0: numbers describe the host + Wine, not Windows
-PASS  mem_env_report (24.6 ms)
+PASS  mem_env_report (3.1 ms)
 RUN   mem_scalar_kernels_correctness
-PASS  mem_scalar_kernels_correctness (6.2 ms)
+PASS  mem_scalar_kernels_correctness (6.3 ms)
 RUN   memcpy_sweep_scalar
   NOTE copies stop at 128 MB (source + destination stay within the 512 MB budget)
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_scalar_4KB_aligned = 13.1937 GB/s (n=9 min=4.14537 max=15.075 sd=5.03)
-  INFO memcpy_scalar_4KB_aligned.sd_pct = 52.11
+  PERF memcpy_scalar_4KB_aligned = 21.1394 GB/s (n=9 min=20.865 max=21.3114 sd=0.134)
+  INFO memcpy_scalar_4KB_aligned.sd_pct = 0.63
   INFO memcpy_scalar_4KB_aligned.level = L1
-  PERF memcpy_scalar_16KB_aligned = 8.70118 GB/s (n=9 min=4.69384 max=26.1799 sd=8.96)
-  INFO memcpy_scalar_16KB_aligned.sd_pct = 62.96
+  PERF memcpy_scalar_16KB_aligned = 26.3948 GB/s (n=9 min=25.2608 max=26.6752 sd=0.496)
+  INFO memcpy_scalar_16KB_aligned.sd_pct = 1.89
   INFO memcpy_scalar_16KB_aligned.level = L1
-  PERF memcpy_scalar_64KB_aligned = 16.0195 GB/s (n=9 min=4.22582 max=17.1039 sd=6.08)
-  INFO memcpy_scalar_64KB_aligned.sd_pct = 52.18
+  PERF memcpy_scalar_64KB_aligned = 17.6876 GB/s (n=9 min=16.3818 max=17.9449 sd=0.471)
+  INFO memcpy_scalar_64KB_aligned.sd_pct = 2.68
   INFO memcpy_scalar_64KB_aligned.level = L2
-  PERF memcpy_scalar_256KB_aligned = 5.66501 GB/s (n=9 min=4.06791 max=17.196 sd=6.23)
-  INFO memcpy_scalar_256KB_aligned.sd_pct = 59.16
+  PERF memcpy_scalar_256KB_aligned = 17.8506 GB/s (n=9 min=17.6855 max=17.9051 sd=0.0801)
+  INFO memcpy_scalar_256KB_aligned.sd_pct = 0.45
   INFO memcpy_scalar_256KB_aligned.level = L2
-  PERF memcpy_scalar_1MB_aligned = 14.6654 GB/s (n=9 min=2.77658 max=15.8136 sd=5.82)
-  INFO memcpy_scalar_1MB_aligned.sd_pct = 55.10
+  PERF memcpy_scalar_1MB_aligned = 16.8592 GB/s (n=9 min=16.665 max=16.9398 sd=0.0821)
+  INFO memcpy_scalar_1MB_aligned.sd_pct = 0.49
   INFO memcpy_scalar_1MB_aligned.level = L2
-  PERF memcpy_scalar_4MB_aligned = 12.2655 GB/s (n=9 min=1.23004 max=15.5537 sd=5.09)
-  INFO memcpy_scalar_4MB_aligned.sd_pct = 55.63
+  PERF memcpy_scalar_4MB_aligned = 16.101 GB/s (n=9 min=15.6728 max=16.1257 sd=0.181)
+  INFO memcpy_scalar_4MB_aligned.sd_pct = 1.13
   INFO memcpy_scalar_4MB_aligned.level = L3
-  PERF memcpy_scalar_16MB_aligned = 3.35223 GB/s (n=9 min=3.33536 max=8.24757 sd=2.29)
-  INFO memcpy_scalar_16MB_aligned.sd_pct = 47.04
+  PERF memcpy_scalar_16MB_aligned = 13.6483 GB/s (n=9 min=13.5349 max=13.8374 sd=0.0858)
+  INFO memcpy_scalar_16MB_aligned.sd_pct = 0.63
   INFO memcpy_scalar_16MB_aligned.level = L3
-  PERF memcpy_scalar_64MB_aligned = 3.90327 GB/s (n=9 min=3.81899 max=4.77222 sd=0.373)
-  INFO memcpy_scalar_64MB_aligned.sd_pct = 9.15
+  PERF memcpy_scalar_64MB_aligned = 9.40862 GB/s (n=9 min=8.24849 max=9.79034 sd=0.456)
+  INFO memcpy_scalar_64MB_aligned.sd_pct = 4.90
   INFO memcpy_scalar_64MB_aligned.level = DRAM
-  PERF memcpy_scalar_4KB_misaligned = 15.0204 GB/s (n=9 min=3.84339 max=15.1914 sd=5.62)
-  INFO memcpy_scalar_4KB_misaligned.sd_pct = 54.01
+  PERF memcpy_scalar_128MB_aligned = 9.45022 GB/s (n=9 min=9.10426 max=9.49199 sd=0.118)
+  INFO memcpy_scalar_128MB_aligned.sd_pct = 1.25
+  INFO memcpy_scalar_128MB_aligned.level = DRAM
+  PERF memcpy_scalar_4KB_misaligned = 18.6711 GB/s (n=9 min=18.5248 max=18.6969 sd=0.0617)
+  INFO memcpy_scalar_4KB_misaligned.sd_pct = 0.33
   INFO memcpy_scalar_4KB_misaligned.level = L1
-  PERF memcpy_scalar_16KB_misaligned = 6.01244 GB/s (n=9 min=4.44854 max=18.2311 sd=6.59)
-  INFO memcpy_scalar_16KB_misaligned.sd_pct = 58.76
+  PERF memcpy_scalar_16KB_misaligned = 22.3666 GB/s (n=9 min=22.1621 max=22.4073 sd=0.0755)
+  INFO memcpy_scalar_16KB_misaligned.sd_pct = 0.34
   INFO memcpy_scalar_16KB_misaligned.level = L1
-  PERF memcpy_scalar_64KB_misaligned = 12.5989 GB/s (n=9 min=3.11167 max=12.9408 sd=4.65)
-  INFO memcpy_scalar_64KB_misaligned.sd_pct = 52.56
+  PERF memcpy_scalar_64KB_misaligned = 15.6693 GB/s (n=9 min=15.5809 max=15.6983 sd=0.0362)
+  INFO memcpy_scalar_64KB_misaligned.sd_pct = 0.23
   INFO memcpy_scalar_64KB_misaligned.level = L2
-  PERF memcpy_scalar_256KB_misaligned = 6.4583 GB/s (n=9 min=0.131612 max=12.6807 sd=4.9)
-  INFO memcpy_scalar_256KB_misaligned.sd_pct = 63.66
+  PERF memcpy_scalar_256KB_misaligned = 15.859 GB/s (n=9 min=15.772 max=15.8822 sd=0.0329)
+  INFO memcpy_scalar_256KB_misaligned.sd_pct = 0.21
   INFO memcpy_scalar_256KB_misaligned.level = L2
-  PERF memcpy_scalar_1MB_misaligned = 11.1314 GB/s (n=9 min=1.22917 max=11.7437 sd=4.25)
-  INFO memcpy_scalar_1MB_misaligned.sd_pct = 51.78
+  PERF memcpy_scalar_1MB_misaligned = 14.9051 GB/s (n=9 min=14.6352 max=15.1479 sd=0.158)
+  INFO memcpy_scalar_1MB_misaligned.sd_pct = 1.06
   INFO memcpy_scalar_1MB_misaligned.level = L2
-  PERF memcpy_scalar_4MB_misaligned = 5.98844 GB/s (n=9 min=1.08757 max=10.6651 sd=4.04)
-  INFO memcpy_scalar_4MB_misaligned.sd_pct = 62.96
+  PERF memcpy_scalar_4MB_misaligned = 14.4556 GB/s (n=9 min=14.3682 max=14.4973 sd=0.0374)
+  INFO memcpy_scalar_4MB_misaligned.sd_pct = 0.26
   INFO memcpy_scalar_4MB_misaligned.level = L3
-  PERF memcpy_scalar_16MB_misaligned = 3.28727 GB/s (n=9 min=2.49346 max=8.13204 sd=2.34)
-  INFO memcpy_scalar_16MB_misaligned.sd_pct = 47.67
+  PERF memcpy_scalar_16MB_misaligned = 12.6344 GB/s (n=9 min=11.9705 max=12.7259 sd=0.228)
+  INFO memcpy_scalar_16MB_misaligned.sd_pct = 1.82
   INFO memcpy_scalar_16MB_misaligned.level = L3
-  PERF memcpy_scalar_64MB_misaligned = 3.64038 GB/s (n=9 min=3.03807 max=4.35517 sd=0.347)
-  INFO memcpy_scalar_64MB_misaligned.sd_pct = 9.55
+  PERF memcpy_scalar_64MB_misaligned = 9.33234 GB/s (n=9 min=9.07686 max=9.51656 sd=0.191)
+  INFO memcpy_scalar_64MB_misaligned.sd_pct = 2.05
   INFO memcpy_scalar_64MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.296
-PERF  memcpy_sweep_scalar (1163.6 ms)
+  PERF memcpy_scalar_128MB_misaligned = 9.16306 GB/s (n=9 min=9.06093 max=9.18614 sd=0.0421)
+  INFO memcpy_scalar_128MB_misaligned.sd_pct = 0.46
+  INFO memcpy_scalar_128MB_misaligned.level = DRAM
+  INFO largest_vs_4KB_aligned = 0.447
+PERF  memcpy_sweep_scalar (980.1 ms)
 RUN   memcpy_sweep_crt
   NOTE copies stop at 128 MB (source + destination stay within the 512 MB budget)
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_crt_4KB_aligned = 25.3269 GB/s (n=9 min=8.62618 max=35.7526 sd=10.5)
-  INFO memcpy_crt_4KB_aligned.sd_pct = 52.42
+  PERF memcpy_crt_4KB_aligned = 50.0204 GB/s (n=9 min=49.4988 max=52.9968 sd=1.09)
+  INFO memcpy_crt_4KB_aligned.sd_pct = 2.16
   INFO memcpy_crt_4KB_aligned.level = L1
-  PERF memcpy_crt_16KB_aligned = 28.9185 GB/s (n=9 min=15.3399 max=86.726 sd=32.5)
-  INFO memcpy_crt_16KB_aligned.sd_pct = 66.26
+  PERF memcpy_crt_16KB_aligned = 107.253 GB/s (n=9 min=104.84 max=107.392 sd=0.93)
+  INFO memcpy_crt_16KB_aligned.sd_pct = 0.87
   INFO memcpy_crt_16KB_aligned.level = L1
-  PERF memcpy_crt_64KB_aligned = 30.0484 GB/s (n=9 min=14.0299 max=57.3391 sd=18.7)
-  INFO memcpy_crt_64KB_aligned.sd_pct = 52.16
+  PERF memcpy_crt_64KB_aligned = 70.6196 GB/s (n=9 min=69.4589 max=70.7116 sd=0.397)
+  INFO memcpy_crt_64KB_aligned.sd_pct = 0.56
   INFO memcpy_crt_64KB_aligned.level = L2
-  PERF memcpy_crt_256KB_aligned = 47.1231 GB/s (n=9 min=3.04646 max=59.2968 sd=23.5)
-  INFO memcpy_crt_256KB_aligned.sd_pct = 65.35
+  PERF memcpy_crt_256KB_aligned = 61.9046 GB/s (n=9 min=58.6226 max=75.5061 sd=7.17)
+  INFO memcpy_crt_256KB_aligned.sd_pct = 10.86
   INFO memcpy_crt_256KB_aligned.level = L2
-  PERF memcpy_crt_1MB_aligned = 27.7511 GB/s (n=9 min=6.73261 max=38.4824 sd=13.1)
-  INFO memcpy_crt_1MB_aligned.sd_pct = 57.08
+  PERF memcpy_crt_1MB_aligned = 43.0998 GB/s (n=9 min=42.9801 max=43.1656 sd=0.0544)
+  INFO memcpy_crt_1MB_aligned.sd_pct = 0.13
   INFO memcpy_crt_1MB_aligned.level = L2
-  PERF memcpy_crt_4MB_aligned = 16.0098 GB/s (n=9 min=1.24964 max=21.2855 sd=7.27)
-  INFO memcpy_crt_4MB_aligned.sd_pct = 59.00
+  PERF memcpy_crt_4MB_aligned = 30.7106 GB/s (n=9 min=30.4919 max=30.9657 sd=0.168)
+  INFO memcpy_crt_4MB_aligned.sd_pct = 0.55
   INFO memcpy_crt_4MB_aligned.level = L3
-  PERF memcpy_crt_16MB_aligned = 3.57251 GB/s (n=9 min=3.45338 max=10.5002 sd=3.3)
-  INFO memcpy_crt_16MB_aligned.sd_pct = 52.56
+  PERF memcpy_crt_16MB_aligned = 18.2958 GB/s (n=9 min=17.7649 max=18.4914 sd=0.253)
+  INFO memcpy_crt_16MB_aligned.sd_pct = 1.38
   INFO memcpy_crt_16MB_aligned.level = L3
-  PERF memcpy_crt_64MB_aligned = 5.30622 GB/s (n=9 min=2.69931 max=5.52969 sd=0.952)
-  INFO memcpy_crt_64MB_aligned.sd_pct = 19.86
+  PERF memcpy_crt_64MB_aligned = 12.0841 GB/s (n=9 min=11.9996 max=12.6925 sd=0.233)
+  INFO memcpy_crt_64MB_aligned.sd_pct = 1.92
   INFO memcpy_crt_64MB_aligned.level = DRAM
-  PERF memcpy_crt_4KB_misaligned = 46.5333 GB/s (n=9 min=7.37326 max=48.0433 sd=18.2)
-  INFO memcpy_crt_4KB_misaligned.sd_pct = 55.95
+  PERF memcpy_crt_128MB_aligned = 12.4012 GB/s (n=9 min=12.1647 max=12.536 sd=0.109)
+  INFO memcpy_crt_128MB_aligned.sd_pct = 0.88
+  INFO memcpy_crt_128MB_aligned.level = DRAM
+  PERF memcpy_crt_4KB_misaligned = 47.2132 GB/s (n=9 min=46.3449 max=48.4229 sd=0.722)
+  INFO memcpy_crt_4KB_misaligned.sd_pct = 1.52
   INFO memcpy_crt_4KB_misaligned.level = L1
-  PERF memcpy_crt_16KB_misaligned = 33.3695 GB/s (n=9 min=26.6057 max=99.0031 sd=35.3)
-  INFO memcpy_crt_16KB_misaligned.sd_pct = 57.25
+  PERF memcpy_crt_16KB_misaligned = 99.9903 GB/s (n=9 min=95.6653 max=101.734 sd=1.93)
+  INFO memcpy_crt_16KB_misaligned.sd_pct = 1.94
   INFO memcpy_crt_16KB_misaligned.level = L1
-  PERF memcpy_crt_64KB_misaligned = 57.231 GB/s (n=9 min=9.93036 max=68.9876 sd=25.5)
-  INFO memcpy_crt_64KB_misaligned.sd_pct = 56.57
+  PERF memcpy_crt_64KB_misaligned = 70.0221 GB/s (n=9 min=69.9004 max=70.0798 sd=0.0541)
+  INFO memcpy_crt_64KB_misaligned.sd_pct = 0.08
   INFO memcpy_crt_64KB_misaligned.level = L2
-  PERF memcpy_crt_256KB_misaligned = 67.8922 GB/s (n=9 min=16.8244 max=70.42 sd=23.3)
-  INFO memcpy_crt_256KB_misaligned.sd_pct = 45.44
+  PERF memcpy_crt_256KB_misaligned = 74.6392 GB/s (n=9 min=74.0578 max=74.669 sd=0.194)
+  INFO memcpy_crt_256KB_misaligned.sd_pct = 0.26
   INFO memcpy_crt_256KB_misaligned.level = L2
-  PERF memcpy_crt_1MB_misaligned = 46.4924 GB/s (n=9 min=7.7132 max=47.9024 sd=17.2)
-  INFO memcpy_crt_1MB_misaligned.sd_pct = 48.06
+  PERF memcpy_crt_1MB_misaligned = 42.6586 GB/s (n=9 min=41.7454 max=43.0855 sd=0.428)
+  INFO memcpy_crt_1MB_misaligned.sd_pct = 1.00
   INFO memcpy_crt_1MB_misaligned.level = L2
-  PERF memcpy_crt_4MB_misaligned = 18.1825 GB/s (n=9 min=0.996769 max=29.0263 sd=10.9)
-  INFO memcpy_crt_4MB_misaligned.sd_pct = 61.31
+  PERF memcpy_crt_4MB_misaligned = 30.8726 GB/s (n=9 min=30.6438 max=30.9581 sd=0.0878)
+  INFO memcpy_crt_4MB_misaligned.sd_pct = 0.28
   INFO memcpy_crt_4MB_misaligned.level = L3
-  PERF memcpy_crt_16MB_misaligned = 5.84104 GB/s (n=9 min=3.75254 max=11.1093 sd=3)
-  INFO memcpy_crt_16MB_misaligned.sd_pct = 42.22
+  PERF memcpy_crt_16MB_misaligned = 22.4595 GB/s (n=9 min=18.4395 max=22.8759 sd=1.75)
+  INFO memcpy_crt_16MB_misaligned.sd_pct = 8.10
   INFO memcpy_crt_16MB_misaligned.level = L3
-  PERF memcpy_crt_64MB_misaligned = 5.64771 GB/s (n=9 min=5.11302 max=7.18264 sd=0.572)
-  INFO memcpy_crt_64MB_misaligned.sd_pct = 9.92
+  PERF memcpy_crt_64MB_misaligned = 12.4858 GB/s (n=9 min=12.003 max=12.5924 sd=0.236)
+  INFO memcpy_crt_64MB_misaligned.sd_pct = 1.91
   INFO memcpy_crt_64MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.210
-PERF  memcpy_sweep_crt (821.6 ms)
+  PERF memcpy_crt_128MB_misaligned = 12.5262 GB/s (n=9 min=12.324 max=12.5689 sd=0.0933)
+  INFO memcpy_crt_128MB_misaligned.sd_pct = 0.75
+  INFO memcpy_crt_128MB_misaligned.level = DRAM
+  INFO largest_vs_4KB_aligned = 0.248
+PERF  memcpy_sweep_crt (716.0 ms)
 RUN   memcpy_sweep_sse2
   NOTE copies stop at 128 MB (source + destination stay within the 512 MB budget)
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_sse2_4KB_aligned = 50.5692 GB/s (n=9 min=16.2471 max=56.077 sd=18.6)
-  INFO memcpy_sse2_4KB_aligned.sd_pct = 50.72
+  PERF memcpy_sse2_4KB_aligned = 54.9383 GB/s (n=9 min=49.1575 max=55.5472 sd=2.04)
+  INFO memcpy_sse2_4KB_aligned.sd_pct = 3.78
   INFO memcpy_sse2_4KB_aligned.level = L1
-  PERF memcpy_sse2_16KB_aligned = 35.6535 GB/s (n=9 min=27.9448 max=108.659 sd=38.5)
-  INFO memcpy_sse2_16KB_aligned.sd_pct = 57.97
+  PERF memcpy_sse2_16KB_aligned = 108.691 GB/s (n=9 min=108.298 max=108.932 sd=0.184)
+  INFO memcpy_sse2_16KB_aligned.sd_pct = 0.17
   INFO memcpy_sse2_16KB_aligned.level = L1
-  PERF memcpy_sse2_64KB_aligned = 68.7462 GB/s (n=9 min=18.0048 max=70.2452 sd=25.3)
-  INFO memcpy_sse2_64KB_aligned.sd_pct = 52.25
+  PERF memcpy_sse2_64KB_aligned = 70.7352 GB/s (n=9 min=70.0035 max=70.8178 sd=0.249)
+  INFO memcpy_sse2_64KB_aligned.sd_pct = 0.35
   INFO memcpy_sse2_64KB_aligned.level = L2
-  PERF memcpy_sse2_256KB_aligned = 24.2856 GB/s (n=9 min=18.507 max=74.7436 sd=26.6)
-  INFO memcpy_sse2_256KB_aligned.sd_pct = 59.11
+  PERF memcpy_sse2_256KB_aligned = 75.7662 GB/s (n=9 min=75.5514 max=75.7965 sd=0.0748)
+  INFO memcpy_sse2_256KB_aligned.sd_pct = 0.10
   INFO memcpy_sse2_256KB_aligned.level = L2
-  PERF memcpy_sse2_1MB_aligned = 47.0338 GB/s (n=9 min=1.705 max=49.3235 sd=17.2)
-  INFO memcpy_sse2_1MB_aligned.sd_pct = 48.05
+  PERF memcpy_sse2_1MB_aligned = 42.9631 GB/s (n=9 min=41.7843 max=43.2863 sd=0.513)
+  INFO memcpy_sse2_1MB_aligned.sd_pct = 1.20
   INFO memcpy_sse2_1MB_aligned.level = L2
-  PERF memcpy_sse2_4MB_aligned = 10.1479 GB/s (n=9 min=8.03776 max=28.1806 sd=9.54)
-  INFO memcpy_sse2_4MB_aligned.sd_pct = 54.72
+  PERF memcpy_sse2_4MB_aligned = 30.9105 GB/s (n=9 min=30.7111 max=30.9809 sd=0.0998)
+  INFO memcpy_sse2_4MB_aligned.sd_pct = 0.32
   INFO memcpy_sse2_4MB_aligned.level = L3
-  PERF memcpy_sse2_16MB_aligned = 5.89605 GB/s (n=9 min=3.85214 max=12.4534 sd=2.39)
-  INFO memcpy_sse2_16MB_aligned.sd_pct = 36.61
+  PERF memcpy_sse2_16MB_aligned = 22.1745 GB/s (n=9 min=20.4078 max=22.7488 sd=0.718)
+  INFO memcpy_sse2_16MB_aligned.sd_pct = 3.27
   INFO memcpy_sse2_16MB_aligned.level = L3
-  PERF memcpy_sse2_64MB_aligned = 5.7359 GB/s (n=9 min=5.67594 max=7.735 sd=0.67)
-  INFO memcpy_sse2_64MB_aligned.sd_pct = 11.26
+  PERF memcpy_sse2_64MB_aligned = 12.8813 GB/s (n=9 min=12.5543 max=12.9822 sd=0.123)
+  INFO memcpy_sse2_64MB_aligned.sd_pct = 0.96
   INFO memcpy_sse2_64MB_aligned.level = DRAM
-  PERF memcpy_sse2_4KB_misaligned = 38.7181 GB/s (n=9 min=12.4209 max=39.5073 sd=13.9)
-  INFO memcpy_sse2_4KB_misaligned.sd_pct = 50.58
+  PERF memcpy_sse2_128MB_aligned = 12.4847 GB/s (n=9 min=12.291 max=12.5402 sd=0.0737)
+  INFO memcpy_sse2_128MB_aligned.sd_pct = 0.59
+  INFO memcpy_sse2_128MB_aligned.level = DRAM
+  PERF memcpy_sse2_4KB_misaligned = 39.3899 GB/s (n=9 min=38.8437 max=39.5237 sd=0.211)
+  INFO memcpy_sse2_4KB_misaligned.sd_pct = 0.54
   INFO memcpy_sse2_4KB_misaligned.level = L1
-  PERF memcpy_sse2_16KB_misaligned = 61.0714 GB/s (n=9 min=16.5392 max=61.7786 sd=21.3)
-  INFO memcpy_sse2_16KB_misaligned.sd_pct = 48.54
+  PERF memcpy_sse2_16KB_misaligned = 61.7963 GB/s (n=9 min=61.5847 max=61.8468 sd=0.0796)
+  INFO memcpy_sse2_16KB_misaligned.sd_pct = 0.13
   INFO memcpy_sse2_16KB_misaligned.level = L1
-  PERF memcpy_sse2_64KB_misaligned = 23.1021 GB/s (n=9 min=4.80826 max=50.2409 sd=18.6)
-  INFO memcpy_sse2_64KB_misaligned.sd_pct = 60.43
+  PERF memcpy_sse2_64KB_misaligned = 50.7686 GB/s (n=9 min=50.6944 max=50.8657 sd=0.0489)
+  INFO memcpy_sse2_64KB_misaligned.sd_pct = 0.10
   INFO memcpy_sse2_64KB_misaligned.level = L2
-  PERF memcpy_sse2_256KB_misaligned = 50.8578 GB/s (n=9 min=13.9725 max=52.3276 sd=17.8)
-  INFO memcpy_sse2_256KB_misaligned.sd_pct = 48.14
+  PERF memcpy_sse2_256KB_misaligned = 52.6835 GB/s (n=9 min=52.5405 max=52.701 sd=0.0506)
+  INFO memcpy_sse2_256KB_misaligned.sd_pct = 0.10
   INFO memcpy_sse2_256KB_misaligned.level = L2
-  PERF memcpy_sse2_1MB_misaligned = 38.4401 GB/s (n=9 min=3.43289 max=42.2171 sd=15.9)
-  INFO memcpy_sse2_1MB_misaligned.sd_pct = 57.94
+  PERF memcpy_sse2_1MB_misaligned = 38.6394 GB/s (n=9 min=38.1477 max=38.8054 sd=0.221)
+  INFO memcpy_sse2_1MB_misaligned.sd_pct = 0.57
   INFO memcpy_sse2_1MB_misaligned.level = L2
-  PERF memcpy_sse2_4MB_misaligned = 28.8485 GB/s (n=9 min=2.72783 max=30.1551 sd=11.8)
-  INFO memcpy_sse2_4MB_misaligned.sd_pct = 59.35
+  PERF memcpy_sse2_4MB_misaligned = 30.3975 GB/s (n=9 min=30.1512 max=30.5282 sd=0.121)
+  INFO memcpy_sse2_4MB_misaligned.sd_pct = 0.40
   INFO memcpy_sse2_4MB_misaligned.level = L3
-  PERF memcpy_sse2_16MB_misaligned = 5.87026 GB/s (n=9 min=2.73798 max=13.4057 sd=3.78)
-  INFO memcpy_sse2_16MB_misaligned.sd_pct = 48.41
+  PERF memcpy_sse2_16MB_misaligned = 22.1642 GB/s (n=9 min=21.0175 max=22.6954 sd=0.625)
+  INFO memcpy_sse2_16MB_misaligned.sd_pct = 2.84
   INFO memcpy_sse2_16MB_misaligned.level = L3
-  PERF memcpy_sse2_64MB_misaligned = 5.67435 GB/s (n=9 min=5.33639 max=7.98582 sd=0.805)
-  INFO memcpy_sse2_64MB_misaligned.sd_pct = 13.72
+  PERF memcpy_sse2_64MB_misaligned = 12.81 GB/s (n=9 min=12.752 max=12.9651 sd=0.073)
+  INFO memcpy_sse2_64MB_misaligned.sd_pct = 0.57
   INFO memcpy_sse2_64MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.113
-PERF  memcpy_sweep_sse2 (801.8 ms)
-RUN   memcpy_sweep_sse2_nt
+  PERF memcpy_sse2_128MB_misaligned = 12.415 GB/s (n=9 min=12.1802 max=12.5299 sd=0.0983)
+  INFO memcpy_sse2_128MB_misaligned.sd_pct = 0.79
+  INFO memcpy_sse2_128MB_misaligned.level = DRAM
+  INFO largest_vs_4KB_aligned = 0.227
+PERF  memcpy_sweep_sse2 (703.8 ms)
+RUN   memcpy_sweep_nt_sse2
   NOTE copies stop at 128 MB (source + destination stay within the 512 MB budget)
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_sse2_nt_4KB_aligned = 28.0748 GB/s (n=9 min=9.22291 max=29.1889 sd=10.1)
-  INFO memcpy_sse2_nt_4KB_aligned.sd_pct = 50.46
+  PERF memcpy_sse2_nt_4KB_aligned = 29.2618 GB/s (n=9 min=28.9778 max=29.3028 sd=0.0993)
+  INFO memcpy_sse2_nt_4KB_aligned.sd_pct = 0.34
   INFO memcpy_sse2_nt_4KB_aligned.level = L1
-  PERF memcpy_sse2_nt_16KB_aligned = 14.5757 GB/s (n=9 min=11.1724 max=42.7447 sd=15.2)
-  INFO memcpy_sse2_nt_16KB_aligned.sd_pct = 58.16
+  PERF memcpy_sse2_nt_16KB_aligned = 45.4601 GB/s (n=9 min=45.1016 max=45.5961 sd=0.151)
+  INFO memcpy_sse2_nt_16KB_aligned.sd_pct = 0.33
   INFO memcpy_sse2_nt_16KB_aligned.level = L1
-  PERF memcpy_sse2_nt_64KB_aligned = 36.9887 GB/s (n=9 min=6.69421 max=40.1579 sd=14.4)
-  INFO memcpy_sse2_nt_64KB_aligned.sd_pct = 52.10
+  PERF memcpy_sse2_nt_64KB_aligned = 46.7303 GB/s (n=9 min=45.262 max=46.933 sd=0.64)
+  INFO memcpy_sse2_nt_64KB_aligned.sd_pct = 1.38
   INFO memcpy_sse2_nt_64KB_aligned.level = L2
-  PERF memcpy_sse2_nt_256KB_aligned = 36.5539 GB/s (n=9 min=6.36258 max=40.0592 sd=14.1)
-  INFO memcpy_sse2_nt_256KB_aligned.sd_pct = 52.71
+  PERF memcpy_sse2_nt_256KB_aligned = 48.3158 GB/s (n=9 min=47.5707 max=48.8716 sd=0.48)
+  INFO memcpy_sse2_nt_256KB_aligned.sd_pct = 0.99
   INFO memcpy_sse2_nt_256KB_aligned.level = L2
-  PERF memcpy_sse2_nt_1MB_aligned = 35.9931 GB/s (n=9 min=9.07073 max=42.3513 sd=14.7)
-  INFO memcpy_sse2_nt_1MB_aligned.sd_pct = 54.38
+  PERF memcpy_sse2_nt_1MB_aligned = 48.9795 GB/s (n=9 min=38.7081 max=49.2908 sd=3.43)
+  INFO memcpy_sse2_nt_1MB_aligned.sd_pct = 7.18
   INFO memcpy_sse2_nt_1MB_aligned.level = L2
-  PERF memcpy_sse2_nt_4MB_aligned = 36.8452 GB/s (n=9 min=10.6337 max=38.3592 sd=13.4)
-  INFO memcpy_sse2_nt_4MB_aligned.sd_pct = 51.14
+  PERF memcpy_sse2_nt_4MB_aligned = 38.7184 GB/s (n=9 min=37.7865 max=38.8516 sd=0.369)
+  INFO memcpy_sse2_nt_4MB_aligned.sd_pct = 0.96
   INFO memcpy_sse2_nt_4MB_aligned.level = L3
-  PERF memcpy_sse2_nt_16MB_aligned = 15.7873 GB/s (n=9 min=4.23646 max=19.0067 sd=6.43)
-  INFO memcpy_sse2_nt_16MB_aligned.sd_pct = 51.67
+  PERF memcpy_sse2_nt_16MB_aligned = 40.5909 GB/s (n=9 min=39.991 max=40.8279 sd=0.305)
+  INFO memcpy_sse2_nt_16MB_aligned.sd_pct = 0.75
   INFO memcpy_sse2_nt_16MB_aligned.level = L3
-  PERF memcpy_sse2_nt_64MB_aligned = 8.8235 GB/s (n=9 min=6.3275 max=9.35055 sd=1.45)
-  INFO memcpy_sse2_nt_64MB_aligned.sd_pct = 18.31
+  PERF memcpy_sse2_nt_64MB_aligned = 17.2689 GB/s (n=9 min=17.0453 max=17.7476 sd=0.237)
+  INFO memcpy_sse2_nt_64MB_aligned.sd_pct = 1.37
   INFO memcpy_sse2_nt_64MB_aligned.level = DRAM
-  PERF memcpy_sse2_nt_4KB_misaligned = 16.0116 GB/s (n=9 min=2.86319 max=16.2289 sd=6.04)
-  INFO memcpy_sse2_nt_4KB_misaligned.sd_pct = 54.55
+  PERF memcpy_sse2_nt_128MB_aligned = 17.1402 GB/s (n=9 min=16.5427 max=17.3374 sd=0.223)
+  INFO memcpy_sse2_nt_128MB_aligned.sd_pct = 1.31
+  INFO memcpy_sse2_nt_128MB_aligned.level = DRAM
+  PERF memcpy_sse2_nt_4KB_misaligned = 15.9771 GB/s (n=9 min=15.8488 max=16.1109 sd=0.0978)
+  INFO memcpy_sse2_nt_4KB_misaligned.sd_pct = 0.61
   INFO memcpy_sse2_nt_4KB_misaligned.level = L1
-  PERF memcpy_sse2_nt_16KB_misaligned = 10.4043 GB/s (n=9 min=8.10045 max=31.4136 sd=11.3)
-  INFO memcpy_sse2_nt_16KB_misaligned.sd_pct = 58.16
+  PERF memcpy_sse2_nt_16KB_misaligned = 32.4142 GB/s (n=9 min=32.1542 max=32.5212 sd=0.11)
+  INFO memcpy_sse2_nt_16KB_misaligned.sd_pct = 0.34
   INFO memcpy_sse2_nt_16KB_misaligned.level = L1
-  PERF memcpy_sse2_nt_64KB_misaligned = 32.9601 GB/s (n=9 min=3.29721 max=41.5907 sd=15)
-  INFO memcpy_sse2_nt_64KB_misaligned.sd_pct = 55.26
+  PERF memcpy_sse2_nt_64KB_misaligned = 40.9655 GB/s (n=9 min=37.151 max=42.2489 sd=1.78)
+  INFO memcpy_sse2_nt_64KB_misaligned.sd_pct = 4.39
   INFO memcpy_sse2_nt_64KB_misaligned.level = L2
-  PERF memcpy_sse2_nt_256KB_misaligned = 30.7459 GB/s (n=9 min=10.9774 max=44.4076 sd=14.2)
-  INFO memcpy_sse2_nt_256KB_misaligned.sd_pct = 47.60
+  PERF memcpy_sse2_nt_256KB_misaligned = 47.6721 GB/s (n=9 min=46.1889 max=47.7195 sd=0.51)
+  INFO memcpy_sse2_nt_256KB_misaligned.sd_pct = 1.08
   INFO memcpy_sse2_nt_256KB_misaligned.level = L2
-  PERF memcpy_sse2_nt_1MB_misaligned = 44.864 GB/s (n=9 min=1.55525 max=45.8348 sd=18.2)
-  INFO memcpy_sse2_nt_1MB_misaligned.sd_pct = 60.01
+  PERF memcpy_sse2_nt_1MB_misaligned = 48.9409 GB/s (n=9 min=48.4715 max=48.9957 sd=0.196)
+  INFO memcpy_sse2_nt_1MB_misaligned.sd_pct = 0.40
   INFO memcpy_sse2_nt_1MB_misaligned.level = L2
-  PERF memcpy_sse2_nt_4MB_misaligned = 36.7139 GB/s (n=9 min=4.45615 max=41.9011 sd=15.3)
-  INFO memcpy_sse2_nt_4MB_misaligned.sd_pct = 57.03
+  PERF memcpy_sse2_nt_4MB_misaligned = 36.9705 GB/s (n=9 min=32.7531 max=37.1977 sd=1.41)
+  INFO memcpy_sse2_nt_4MB_misaligned.sd_pct = 3.87
   INFO memcpy_sse2_nt_4MB_misaligned.level = L3
-  PERF memcpy_sse2_nt_16MB_misaligned = 26.4153 GB/s (n=9 min=8.21828 max=36.4287 sd=11.5)
-  INFO memcpy_sse2_nt_16MB_misaligned.sd_pct = 55.56
+  PERF memcpy_sse2_nt_16MB_misaligned = 39.4063 GB/s (n=9 min=38.1604 max=41.6799 sd=1.26)
+  INFO memcpy_sse2_nt_16MB_misaligned.sd_pct = 3.15
   INFO memcpy_sse2_nt_16MB_misaligned.level = L3
-  PERF memcpy_sse2_nt_64MB_misaligned = 8.84501 GB/s (n=9 min=5.97612 max=16.2107 sd=3.07)
-  INFO memcpy_sse2_nt_64MB_misaligned.sd_pct = 34.98
+  PERF memcpy_sse2_nt_64MB_misaligned = 17.3372 GB/s (n=9 min=16.8205 max=17.4078 sd=0.192)
+  INFO memcpy_sse2_nt_64MB_misaligned.sd_pct = 1.11
   INFO memcpy_sse2_nt_64MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.314
-PERF  memcpy_sweep_sse2_nt (688.7 ms)
-RUN   memcpy_sweep_avx
+  PERF memcpy_sse2_nt_128MB_misaligned = 16.8463 GB/s (n=9 min=16.6596 max=17.0254 sd=0.0979)
+  INFO memcpy_sse2_nt_128MB_misaligned.sd_pct = 0.58
+  INFO memcpy_sse2_nt_128MB_misaligned.level = DRAM
+  INFO largest_vs_4KB_aligned = 0.586
+PERF  memcpy_sweep_nt_sse2 (603.6 ms)
+RUN   memcpy_sweep_avx_ymm
   NOTE copies stop at 128 MB (source + destination stay within the 512 MB budget)
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_avx_4KB_aligned = 62.8381 GB/s (n=9 min=20.586 max=63.8566 sd=22.1)
-  INFO memcpy_avx_4KB_aligned.sd_pct = 49.66
+  PERF memcpy_avx_4KB_aligned = 65.6698 GB/s (n=9 min=64.2335 max=66.5027 sd=0.689)
+  INFO memcpy_avx_4KB_aligned.sd_pct = 1.05
   INFO memcpy_avx_4KB_aligned.level = L1
-  PERF memcpy_avx_16KB_aligned = 55.3103 GB/s (n=9 min=44.9908 max=166.319 sd=58.4)
-  INFO memcpy_avx_16KB_aligned.sd_pct = 57.30
+  PERF memcpy_avx_16KB_aligned = 166.199 GB/s (n=9 min=160.552 max=167.39 sd=2.2)
+  INFO memcpy_avx_16KB_aligned.sd_pct = 1.33
   INFO memcpy_avx_16KB_aligned.level = L1
-  PERF memcpy_avx_64KB_aligned = 65.1561 GB/s (n=9 min=17.9472 max=67.2086 sd=23.9)
-  INFO memcpy_avx_64KB_aligned.sd_pct = 51.63
+  PERF memcpy_avx_64KB_aligned = 67.4224 GB/s (n=9 min=67.1257 max=67.5534 sd=0.17)
+  INFO memcpy_avx_64KB_aligned.sd_pct = 0.25
   INFO memcpy_avx_64KB_aligned.level = L2
-  PERF memcpy_avx_256KB_aligned = 22.7282 GB/s (n=9 min=18.1523 max=67.9374 sd=24.2)
-  INFO memcpy_avx_256KB_aligned.sd_pct = 57.60
+  PERF memcpy_avx_256KB_aligned = 68.6726 GB/s (n=9 min=68.3839 max=69.0449 sd=0.236)
+  INFO memcpy_avx_256KB_aligned.sd_pct = 0.34
   INFO memcpy_avx_256KB_aligned.level = L2
-  PERF memcpy_avx_1MB_aligned = 48.3438 GB/s (n=9 min=1.60785 max=50.1511 sd=18.7)
-  INFO memcpy_avx_1MB_aligned.sd_pct = 52.95
+  PERF memcpy_avx_1MB_aligned = 43.7427 GB/s (n=9 min=43.4865 max=43.8124 sd=0.124)
+  INFO memcpy_avx_1MB_aligned.sd_pct = 0.28
   INFO memcpy_avx_1MB_aligned.level = L2
-  PERF memcpy_avx_4MB_aligned = 17.2584 GB/s (n=9 min=1.03062 max=30.8027 sd=11.5)
-  INFO memcpy_avx_4MB_aligned.sd_pct = 62.01
+  PERF memcpy_avx_4MB_aligned = 31.2774 GB/s (n=9 min=30.9943 max=31.3964 sd=0.12)
+  INFO memcpy_avx_4MB_aligned.sd_pct = 0.38
   INFO memcpy_avx_4MB_aligned.level = L3
-  PERF memcpy_avx_16MB_aligned = 6.17138 GB/s (n=9 min=3.74358 max=13.7795 sd=3.82)
-  INFO memcpy_avx_16MB_aligned.sd_pct = 49.46
+  PERF memcpy_avx_16MB_aligned = 24.5054 GB/s (n=9 min=23.0024 max=25.3585 sd=0.758)
+  INFO memcpy_avx_16MB_aligned.sd_pct = 3.11
   INFO memcpy_avx_16MB_aligned.level = L3
-  PERF memcpy_avx_64MB_aligned = 5.72323 GB/s (n=9 min=5.70261 max=7.7334 sd=0.67)
-  INFO memcpy_avx_64MB_aligned.sd_pct = 11.26
+  PERF memcpy_avx_64MB_aligned = 12.8178 GB/s (n=9 min=12.663 max=13.0233 sd=0.12)
+  INFO memcpy_avx_64MB_aligned.sd_pct = 0.94
   INFO memcpy_avx_64MB_aligned.level = DRAM
-  PERF memcpy_avx_4KB_misaligned = 16.8189 GB/s (n=9 min=14.8037 max=49.0155 sd=16.8)
-  INFO memcpy_avx_4KB_misaligned.sd_pct = 55.21
+  PERF memcpy_avx_128MB_aligned = 12.5146 GB/s (n=9 min=12.4496 max=12.5511 sd=0.0376)
+  INFO memcpy_avx_128MB_aligned.sd_pct = 0.30
+  INFO memcpy_avx_128MB_aligned.level = DRAM
+  PERF memcpy_avx_4KB_misaligned = 50.2825 GB/s (n=9 min=49.1411 max=50.4463 sd=0.435)
+  INFO memcpy_avx_4KB_misaligned.sd_pct = 0.87
   INFO memcpy_avx_4KB_misaligned.level = L1
-  PERF memcpy_avx_16KB_misaligned = 74.2741 GB/s (n=9 min=21.0401 max=77.4745 sd=27.3)
-  INFO memcpy_avx_16KB_misaligned.sd_pct = 51.03
+  PERF memcpy_avx_16KB_misaligned = 78.3488 GB/s (n=9 min=76.3604 max=79.2496 sd=0.971)
+  INFO memcpy_avx_16KB_misaligned.sd_pct = 1.24
   INFO memcpy_avx_16KB_misaligned.level = L1
-  PERF memcpy_avx_64KB_misaligned = 12.5938 GB/s (n=9 min=10.125 max=37.9083 sd=13.2)
-  INFO memcpy_avx_64KB_misaligned.sd_pct = 56.97
+  PERF memcpy_avx_64KB_misaligned = 37.8369 GB/s (n=9 min=37.8159 max=37.9184 sd=0.0315)
+  INFO memcpy_avx_64KB_misaligned.sd_pct = 0.08
   INFO memcpy_avx_64KB_misaligned.level = L2
-  PERF memcpy_avx_256KB_misaligned = 38.002 GB/s (n=9 min=10.0705 max=39.5577 sd=14)
-  INFO memcpy_avx_256KB_misaligned.sd_pct = 51.80
+  PERF memcpy_avx_256KB_misaligned = 39.373 GB/s (n=9 min=38.3532 max=39.613 sd=0.472)
+  INFO memcpy_avx_256KB_misaligned.sd_pct = 1.21
   INFO memcpy_avx_256KB_misaligned.level = L2
-  PERF memcpy_avx_1MB_misaligned = 11.4148 GB/s (n=9 min=7.76227 max=34.4179 sd=12.3)
-  INFO memcpy_avx_1MB_misaligned.sd_pct = 58.93
+  PERF memcpy_avx_1MB_misaligned = 32.2554 GB/s (n=9 min=31.6603 max=32.338 sd=0.23)
+  INFO memcpy_avx_1MB_misaligned.sd_pct = 0.72
   INFO memcpy_avx_1MB_misaligned.level = L2
-  PERF memcpy_avx_4MB_misaligned = 9.27964 GB/s (n=9 min=8.64389 max=27.5651 sd=9.6)
-  INFO memcpy_avx_4MB_misaligned.sd_pct = 56.12
+  PERF memcpy_avx_4MB_misaligned = 27.8469 GB/s (n=9 min=27.645 max=27.8802 sd=0.0857)
+  INFO memcpy_avx_4MB_misaligned.sd_pct = 0.31
   INFO memcpy_avx_4MB_misaligned.level = L3
-  PERF memcpy_avx_16MB_misaligned = 15.6132 GB/s (n=9 min=4.19053 max=17.6324 sd=6.5)
-  INFO memcpy_avx_16MB_misaligned.sd_pct = 58.94
+  PERF memcpy_avx_16MB_misaligned = 24.1191 GB/s (n=9 min=23.6788 max=24.3172 sd=0.189)
+  INFO memcpy_avx_16MB_misaligned.sd_pct = 0.79
   INFO memcpy_avx_16MB_misaligned.level = L3
-  PERF memcpy_avx_64MB_misaligned = 5.6508 GB/s (n=9 min=5.2603 max=7.06476 sd=0.516)
-  INFO memcpy_avx_64MB_misaligned.sd_pct = 8.96
+  PERF memcpy_avx_64MB_misaligned = 13.0033 GB/s (n=9 min=12.8298 max=13.1082 sd=0.0871)
+  INFO memcpy_avx_64MB_misaligned.sd_pct = 0.67
   INFO memcpy_avx_64MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.091
-PERF  memcpy_sweep_avx (777.0 ms)
-RUN   memcpy_sweep_avx512
+  PERF memcpy_avx_128MB_misaligned = 12.4953 GB/s (n=9 min=12.3991 max=12.6096 sd=0.0725)
+  INFO memcpy_avx_128MB_misaligned.sd_pct = 0.58
+  INFO memcpy_avx_128MB_misaligned.level = DRAM
+  INFO largest_vs_4KB_aligned = 0.191
+PERF  memcpy_sweep_avx_ymm (709.5 ms)
+RUN   memcpy_sweep_avx512_zmm
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
-SKIP  memcpy_sweep_avx512 (0.2 ms): AVX512F not usable (CPUID bit 0, gate zmm)
+SKIP  memcpy_sweep_avx512_zmm (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   memcpy_sweep_rep_movsb
   NOTE copies stop at 128 MB (source + destination stay within the 512 MB budget)
   INFO pinned_cpu = 15 (performance core)
-  PERF memcpy_rep_movsb_4KB_aligned = 61.6257 GB/s (n=9 min=19.3682 max=62.7835 sd=22)
-  INFO memcpy_rep_movsb_4KB_aligned.sd_pct = 50.53
+  PERF memcpy_rep_movsb_4KB_aligned = 63.3706 GB/s (n=9 min=61.8387 max=63.6819 sd=0.675)
+  INFO memcpy_rep_movsb_4KB_aligned.sd_pct = 1.07
   INFO memcpy_rep_movsb_4KB_aligned.level = L1
-  PERF memcpy_rep_movsb_16KB_aligned = 153.835 GB/s (n=9 min=11.7383 max=157.221 sd=62.2)
-  INFO memcpy_rep_movsb_16KB_aligned.sd_pct = 59.58
+  PERF memcpy_rep_movsb_16KB_aligned = 159.526 GB/s (n=9 min=155.266 max=160.345 sd=1.69)
+  INFO memcpy_rep_movsb_16KB_aligned.sd_pct = 1.06
   INFO memcpy_rep_movsb_16KB_aligned.level = L1
-  PERF memcpy_rep_movsb_64KB_aligned = 69.9208 GB/s (n=9 min=18.9311 max=71.0852 sd=24.3)
-  INFO memcpy_rep_movsb_64KB_aligned.sd_pct = 48.45
+  PERF memcpy_rep_movsb_64KB_aligned = 71.3668 GB/s (n=9 min=69.9394 max=71.4684 sd=0.627)
+  INFO memcpy_rep_movsb_64KB_aligned.sd_pct = 0.88
   INFO memcpy_rep_movsb_64KB_aligned.level = L2
-  PERF memcpy_rep_movsb_256KB_aligned = 74.664 GB/s (n=9 min=10.3344 max=74.9532 sd=28.6)
-  INFO memcpy_rep_movsb_256KB_aligned.sd_pct = 56.09
+  PERF memcpy_rep_movsb_256KB_aligned = 74.9382 GB/s (n=9 min=74.6889 max=75.0079 sd=0.097)
+  INFO memcpy_rep_movsb_256KB_aligned.sd_pct = 0.13
   INFO memcpy_rep_movsb_256KB_aligned.level = L2
-  PERF memcpy_rep_movsb_1MB_aligned = 53.4533 GB/s (n=9 min=1.17927 max=54.334 sd=21.8)
-  INFO memcpy_rep_movsb_1MB_aligned.sd_pct = 60.44
+  PERF memcpy_rep_movsb_1MB_aligned = 44.2291 GB/s (n=9 min=43.415 max=44.2817 sd=0.274)
+  INFO memcpy_rep_movsb_1MB_aligned.sd_pct = 0.62
   INFO memcpy_rep_movsb_1MB_aligned.level = L2
-  PERF memcpy_rep_movsb_4MB_aligned = 30.799 GB/s (n=9 min=4.74952 max=30.8859 sd=11.9)
-  INFO memcpy_rep_movsb_4MB_aligned.sd_pct = 57.12
+  PERF memcpy_rep_movsb_4MB_aligned = 30.9087 GB/s (n=9 min=30.0334 max=30.9391 sd=0.295)
+  INFO memcpy_rep_movsb_4MB_aligned.sd_pct = 0.96
   INFO memcpy_rep_movsb_4MB_aligned.level = L3
-  PERF memcpy_rep_movsb_16MB_aligned = 14.369 GB/s (n=9 min=4.10452 max=18.3257 sd=6.23)
-  INFO memcpy_rep_movsb_16MB_aligned.sd_pct = 53.84
+  PERF memcpy_rep_movsb_16MB_aligned = 25.1986 GB/s (n=9 min=23.089 max=25.6689 sd=0.789)
+  INFO memcpy_rep_movsb_16MB_aligned.sd_pct = 3.16
   INFO memcpy_rep_movsb_16MB_aligned.level = L3
-  PERF memcpy_rep_movsb_64MB_aligned = 5.80331 GB/s (n=9 min=5.35082 max=7.85312 sd=0.802)
-  INFO memcpy_rep_movsb_64MB_aligned.sd_pct = 13.13
+  PERF memcpy_rep_movsb_64MB_aligned = 13.3579 GB/s (n=9 min=12.8318 max=13.6099 sd=0.323)
+  INFO memcpy_rep_movsb_64MB_aligned.sd_pct = 2.43
   INFO memcpy_rep_movsb_64MB_aligned.level = DRAM
-  PERF memcpy_rep_movsb_4KB_misaligned = 18.6483 GB/s (n=9 min=11.0173 max=56.2463 sd=20.2)
-  INFO memcpy_rep_movsb_4KB_misaligned.sd_pct = 59.64
+  PERF memcpy_rep_movsb_128MB_aligned = 12.6895 GB/s (n=9 min=12.5969 max=12.7715 sd=0.0607)
+  INFO memcpy_rep_movsb_128MB_aligned.sd_pct = 0.48
+  INFO memcpy_rep_movsb_128MB_aligned.level = DRAM
+  PERF memcpy_rep_movsb_4KB_misaligned = 55.4844 GB/s (n=9 min=54.5178 max=56.3746 sd=0.548)
+  INFO memcpy_rep_movsb_4KB_misaligned.sd_pct = 0.99
   INFO memcpy_rep_movsb_4KB_misaligned.level = L1
-  PERF memcpy_rep_movsb_16KB_misaligned = 91.1416 GB/s (n=9 min=8.4651 max=121.572 sd=45.2)
-  INFO memcpy_rep_movsb_16KB_misaligned.sd_pct = 59.89
+  PERF memcpy_rep_movsb_16KB_misaligned = 118.292 GB/s (n=9 min=117.094 max=120.706 sd=1.01)
+  INFO memcpy_rep_movsb_16KB_misaligned.sd_pct = 0.85
   INFO memcpy_rep_movsb_16KB_misaligned.level = L1
-  PERF memcpy_rep_movsb_64KB_misaligned = 66.1168 GB/s (n=9 min=15.6948 max=67.3094 sd=22.6)
-  INFO memcpy_rep_movsb_64KB_misaligned.sd_pct = 45.81
+  PERF memcpy_rep_movsb_64KB_misaligned = 67.3228 GB/s (n=9 min=65.1211 max=67.4102 sd=0.869)
+  INFO memcpy_rep_movsb_64KB_misaligned.sd_pct = 1.30
   INFO memcpy_rep_movsb_64KB_misaligned.level = L2
-  PERF memcpy_rep_movsb_256KB_misaligned = 65.0953 GB/s (n=9 min=2.20901 max=67.847 sd=26.6)
-  INFO memcpy_rep_movsb_256KB_misaligned.sd_pct = 59.40
+  PERF memcpy_rep_movsb_256KB_misaligned = 68.9577 GB/s (n=9 min=67.9555 max=69.1277 sd=0.349)
+  INFO memcpy_rep_movsb_256KB_misaligned.sd_pct = 0.51
   INFO memcpy_rep_movsb_256KB_misaligned.level = L2
-  PERF memcpy_rep_movsb_1MB_misaligned = 17.0714 GB/s (n=9 min=11.1588 max=49.5929 sd=17.6)
-  INFO memcpy_rep_movsb_1MB_misaligned.sd_pct = 57.73
+  PERF memcpy_rep_movsb_1MB_misaligned = 42.7765 GB/s (n=9 min=42.3261 max=43.2978 sd=0.382)
+  INFO memcpy_rep_movsb_1MB_misaligned.sd_pct = 0.89
   INFO memcpy_rep_movsb_1MB_misaligned.level = L2
-  PERF memcpy_rep_movsb_4MB_misaligned = 10.1801 GB/s (n=9 min=9.55139 max=30.0706 sd=10.5)
-  INFO memcpy_rep_movsb_4MB_misaligned.sd_pct = 56.17
+  PERF memcpy_rep_movsb_4MB_misaligned = 30.6011 GB/s (n=9 min=29.7949 max=30.9219 sd=0.337)
+  INFO memcpy_rep_movsb_4MB_misaligned.sd_pct = 1.10
   INFO memcpy_rep_movsb_4MB_misaligned.level = L3
-  PERF memcpy_rep_movsb_16MB_misaligned = 7.26302 GB/s (n=9 min=4.18322 max=20.2795 sd=6.66)
-  INFO memcpy_rep_movsb_16MB_misaligned.sd_pct = 62.03
+  PERF memcpy_rep_movsb_16MB_misaligned = 24.0695 GB/s (n=9 min=23.1858 max=25.0531 sd=0.608)
+  INFO memcpy_rep_movsb_16MB_misaligned.sd_pct = 2.53
   INFO memcpy_rep_movsb_16MB_misaligned.level = L3
-  PERF memcpy_rep_movsb_64MB_misaligned = 5.6431 GB/s (n=9 min=5.48177 max=5.81089 sd=0.117)
-  INFO memcpy_rep_movsb_64MB_misaligned.sd_pct = 2.06
+  PERF memcpy_rep_movsb_64MB_misaligned = 12.9857 GB/s (n=9 min=12.754 max=13.1344 sd=0.106)
+  INFO memcpy_rep_movsb_64MB_misaligned.sd_pct = 0.82
   INFO memcpy_rep_movsb_64MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.094
-PERF  memcpy_sweep_rep_movsb (750.0 ms)
+  PERF memcpy_rep_movsb_128MB_misaligned = 12.5717 GB/s (n=9 min=12.5106 max=12.6302 sd=0.0386)
+  INFO memcpy_rep_movsb_128MB_misaligned.sd_pct = 0.31
+  INFO memcpy_rep_movsb_128MB_misaligned.level = DRAM
+  INFO largest_vs_4KB_aligned = 0.200
+PERF  memcpy_sweep_rep_movsb (703.7 ms)
 RUN   memset_sweep_scalar
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_scalar_4KB_aligned = 26.8516 GB/s (n=9 min=8.79808 max=27.8173 sd=9.65)
-  INFO memset_scalar_4KB_aligned.sd_pct = 50.01
+  PERF memset_scalar_4KB_aligned = 27.6589 GB/s (n=9 min=27.5834 max=27.7827 sd=0.0654)
+  INFO memset_scalar_4KB_aligned.sd_pct = 0.24
   INFO memset_scalar_4KB_aligned.level = L1
-  PERF memset_scalar_16KB_aligned = 12.7569 GB/s (n=9 min=10.4325 max=38.3495 sd=13.4)
-  INFO memset_scalar_16KB_aligned.sd_pct = 56.85
+  PERF memset_scalar_16KB_aligned = 38.2839 GB/s (n=9 min=38.1478 max=38.3225 sd=0.0554)
+  INFO memset_scalar_16KB_aligned.sd_pct = 0.14
   INFO memset_scalar_16KB_aligned.level = L1
-  PERF memset_scalar_64KB_aligned = 36.3143 GB/s (n=9 min=9.75554 max=37.5589 sd=13.3)
-  INFO memset_scalar_64KB_aligned.sd_pct = 51.60
+  PERF memset_scalar_64KB_aligned = 37.5464 GB/s (n=9 min=34.3317 max=37.5876 sd=1.07)
+  INFO memset_scalar_64KB_aligned.sd_pct = 2.87
   INFO memset_scalar_64KB_aligned.level = L2
-  PERF memset_scalar_256KB_aligned = 19.3725 GB/s (n=9 min=8.80098 max=38.5917 sd=13.2)
-  INFO memset_scalar_256KB_aligned.sd_pct = 54.62
+  PERF memset_scalar_256KB_aligned = 38.6097 GB/s (n=9 min=38.4119 max=38.6376 sd=0.0691)
+  INFO memset_scalar_256KB_aligned.sd_pct = 0.18
   INFO memset_scalar_256KB_aligned.level = L2
-  PERF memset_scalar_1MB_aligned = 37.0151 GB/s (n=9 min=7.29659 max=38.8541 sd=14.2)
-  INFO memset_scalar_1MB_aligned.sd_pct = 54.41
+  PERF memset_scalar_1MB_aligned = 36.1027 GB/s (n=9 min=35.9741 max=36.1386 sd=0.056)
+  INFO memset_scalar_1MB_aligned.sd_pct = 0.16
   INFO memset_scalar_1MB_aligned.level = L2
-  PERF memset_scalar_4MB_aligned = 34.1813 GB/s (n=9 min=7.61829 max=34.7211 sd=12.8)
-  INFO memset_scalar_4MB_aligned.sd_pct = 54.19
+  PERF memset_scalar_4MB_aligned = 35.0649 GB/s (n=9 min=34.8542 max=35.135 sd=0.0868)
+  INFO memset_scalar_4MB_aligned.sd_pct = 0.25
   INFO memset_scalar_4MB_aligned.level = L2
-  PERF memset_scalar_16MB_aligned = 28.733 GB/s (n=9 min=4.71813 max=31.759 sd=11.6)
-  INFO memset_scalar_16MB_aligned.sd_pct = 55.94
+  PERF memset_scalar_16MB_aligned = 33.4008 GB/s (n=9 min=31.3945 max=33.5645 sd=0.699)
+  INFO memset_scalar_16MB_aligned.sd_pct = 2.11
   INFO memset_scalar_16MB_aligned.level = L3
-  PERF memset_scalar_64MB_aligned = 8.89366 GB/s (n=9 min=5.71202 max=9.1857 sd=1.51)
-  INFO memset_scalar_64MB_aligned.sd_pct = 19.28
+  PERF memset_scalar_64MB_aligned = 20.9899 GB/s (n=9 min=19.7054 max=21.4433 sd=0.574)
+  INFO memset_scalar_64MB_aligned.sd_pct = 2.76
   INFO memset_scalar_64MB_aligned.level = DRAM
-  PERF memset_scalar_256MB_aligned = 7.48115 GB/s (n=9 min=6.82479 max=8.15472 sd=0.342)
-  INFO memset_scalar_256MB_aligned.sd_pct = 4.58
+  PERF memset_scalar_256MB_aligned = 15.2216 GB/s (n=9 min=14.9666 max=15.3062 sd=0.128)
+  INFO memset_scalar_256MB_aligned.sd_pct = 0.84
   INFO memset_scalar_256MB_aligned.level = DRAM
-  PERF memset_scalar_4KB_misaligned = 7.92436 GB/s (n=9 min=2.65061 max=23.8098 sd=8.95)
-  INFO memset_scalar_4KB_misaligned.sd_pct = 62.70
+  PERF memset_scalar_4KB_misaligned = 23.6405 GB/s (n=9 min=23.504 max=23.8469 sd=0.136)
+  INFO memset_scalar_4KB_misaligned.sd_pct = 0.57
   INFO memset_scalar_4KB_misaligned.level = L1
-  PERF memset_scalar_16KB_misaligned = 29.8844 GB/s (n=9 min=7.95516 max=30.6736 sd=10.8)
-  INFO memset_scalar_16KB_misaligned.sd_pct = 51.54
+  PERF memset_scalar_16KB_misaligned = 30.5903 GB/s (n=9 min=30.4176 max=30.6845 sd=0.0793)
+  INFO memset_scalar_16KB_misaligned.sd_pct = 0.26
   INFO memset_scalar_16KB_misaligned.level = L1
-  PERF memset_scalar_64KB_misaligned = 9.93301 GB/s (n=9 min=7.85199 max=29.4755 sd=10.3)
-  INFO memset_scalar_64KB_misaligned.sd_pct = 56.84
+  PERF memset_scalar_64KB_misaligned = 29.7533 GB/s (n=9 min=29.5191 max=29.8982 sd=0.125)
+  INFO memset_scalar_64KB_misaligned.sd_pct = 0.42
   INFO memset_scalar_64KB_misaligned.level = L2
-  PERF memset_scalar_256KB_misaligned = 29.8565 GB/s (n=9 min=7.35225 max=30.3642 sd=11)
-  INFO memset_scalar_256KB_misaligned.sd_pct = 52.43
+  PERF memset_scalar_256KB_misaligned = 30.3561 GB/s (n=9 min=30.2219 max=30.557 sd=0.134)
+  INFO memset_scalar_256KB_misaligned.sd_pct = 0.44
   INFO memset_scalar_256KB_misaligned.level = L2
-  PERF memset_scalar_1MB_misaligned = 10.1468 GB/s (n=9 min=5.67534 max=30.1 sd=11)
-  INFO memset_scalar_1MB_misaligned.sd_pct = 59.99
+  PERF memset_scalar_1MB_misaligned = 28.492 GB/s (n=9 min=28.3324 max=28.6344 sd=0.109)
+  INFO memset_scalar_1MB_misaligned.sd_pct = 0.38
   INFO memset_scalar_1MB_misaligned.level = L2
-  PERF memset_scalar_4MB_misaligned = 9.31322 GB/s (n=9 min=6.44319 max=28.0948 sd=10.2)
-  INFO memset_scalar_4MB_misaligned.sd_pct = 59.87
+  PERF memset_scalar_4MB_misaligned = 28.0011 GB/s (n=9 min=27.8932 max=28.1428 sd=0.0812)
+  INFO memset_scalar_4MB_misaligned.sd_pct = 0.29
   INFO memset_scalar_4MB_misaligned.level = L2
-  PERF memset_scalar_16MB_misaligned = 10.4511 GB/s (n=9 min=4.65245 max=27.9341 sd=10.5)
-  INFO memset_scalar_16MB_misaligned.sd_pct = 63.01
+  PERF memset_scalar_16MB_misaligned = 28.0884 GB/s (n=9 min=27.7631 max=28.1576 sd=0.12)
+  INFO memset_scalar_16MB_misaligned.sd_pct = 0.43
   INFO memset_scalar_16MB_misaligned.level = L3
-  PERF memset_scalar_64MB_misaligned = 6.40297 GB/s (n=9 min=6.22549 max=8.98824 sd=1.34)
-  INFO memset_scalar_64MB_misaligned.sd_pct = 17.96
+  PERF memset_scalar_64MB_misaligned = 19.7856 GB/s (n=9 min=17.2872 max=20.1142 sd=0.9)
+  INFO memset_scalar_64MB_misaligned.sd_pct = 4.62
   INFO memset_scalar_64MB_misaligned.level = DRAM
-  PERF memset_scalar_256MB_misaligned = 7.33984 GB/s (n=9 min=6.77941 max=7.58466 sd=0.237)
-  INFO memset_scalar_256MB_misaligned.sd_pct = 3.26
+  PERF memset_scalar_256MB_misaligned = 14.6039 GB/s (n=9 min=14.5355 max=14.8398 sd=0.1)
+  INFO memset_scalar_256MB_misaligned.sd_pct = 0.68
   INFO memset_scalar_256MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.279
-PERF  memset_sweep_scalar (2109.2 ms)
+  INFO largest_vs_4KB_aligned = 0.550
+PERF  memset_sweep_scalar (1035.3 ms)
 RUN   memset_sweep_crt
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_crt_4KB_aligned = 48.8762 GB/s (n=9 min=11.7282 max=50.0122 sd=17.5)
-  INFO memset_crt_4KB_aligned.sd_pct = 46.09
+  PERF memset_crt_4KB_aligned = 49.9849 GB/s (n=9 min=49.3786 max=50.3863 sd=0.286)
+  INFO memset_crt_4KB_aligned.sd_pct = 0.57
   INFO memset_crt_4KB_aligned.level = L1
-  PERF memset_crt_16KB_aligned = 105.284 GB/s (n=9 min=18.0245 max=106.66 sd=39.8)
-  INFO memset_crt_16KB_aligned.sd_pct = 54.82
+  PERF memset_crt_16KB_aligned = 107.636 GB/s (n=9 min=100.205 max=108.051 sd=2.58)
+  INFO memset_crt_16KB_aligned.sd_pct = 2.42
   INFO memset_crt_16KB_aligned.level = L1
-  PERF memset_crt_64KB_aligned = 26.2354 GB/s (n=9 min=21.1072 max=79.3211 sd=28.1)
-  INFO memset_crt_64KB_aligned.sd_pct = 57.64
+  PERF memset_crt_64KB_aligned = 79.0364 GB/s (n=9 min=78.7043 max=79.5779 sd=0.285)
+  INFO memset_crt_64KB_aligned.sd_pct = 0.36
   INFO memset_crt_64KB_aligned.level = L2
-  PERF memset_crt_256KB_aligned = 80.4958 GB/s (n=9 min=10.9759 max=82.0345 sd=32.8)
-  INFO memset_crt_256KB_aligned.sd_pct = 60.83
+  PERF memset_crt_256KB_aligned = 82.0291 GB/s (n=9 min=81.8982 max=82.1763 sd=0.107)
+  INFO memset_crt_256KB_aligned.sd_pct = 0.13
   INFO memset_crt_256KB_aligned.level = L2
-  PERF memset_crt_1MB_aligned = 78.9769 GB/s (n=9 min=16.57 max=82.0123 sd=30.2)
-  INFO memset_crt_1MB_aligned.sd_pct = 54.27
+  PERF memset_crt_1MB_aligned = 59.9067 GB/s (n=9 min=59.356 max=59.9944 sd=0.25)
+  INFO memset_crt_1MB_aligned.sd_pct = 0.42
   INFO memset_crt_1MB_aligned.level = L2
-  PERF memset_crt_4MB_aligned = 49.2321 GB/s (n=9 min=12.4964 max=51.4805 sd=18.3)
-  INFO memset_crt_4MB_aligned.sd_pct = 52.66
+  PERF memset_crt_4MB_aligned = 52.8495 GB/s (n=9 min=52.5949 max=53.0995 sd=0.212)
+  INFO memset_crt_4MB_aligned.sd_pct = 0.40
   INFO memset_crt_4MB_aligned.level = L2
-  PERF memset_crt_16MB_aligned = 29.1339 GB/s (n=9 min=7.97756 max=38.1365 sd=13.2)
-  INFO memset_crt_16MB_aligned.sd_pct = 57.14
+  PERF memset_crt_16MB_aligned = 50.0126 GB/s (n=9 min=48.5059 max=51.2657 sd=0.957)
+  INFO memset_crt_16MB_aligned.sd_pct = 1.91
   INFO memset_crt_16MB_aligned.level = L3
-  PERF memset_crt_64MB_aligned = 9.38677 GB/s (n=9 min=6.52474 max=14.6478 sd=2.5)
-  INFO memset_crt_64MB_aligned.sd_pct = 27.66
+  PERF memset_crt_64MB_aligned = 22.3057 GB/s (n=9 min=20.4994 max=23.326 sd=0.905)
+  INFO memset_crt_64MB_aligned.sd_pct = 4.05
   INFO memset_crt_64MB_aligned.level = DRAM
-  PERF memset_crt_256MB_aligned = 7.67474 GB/s (n=9 min=7.32482 max=8.59307 sd=0.444)
-  INFO memset_crt_256MB_aligned.sd_pct = 5.64
+  PERF memset_crt_256MB_aligned = 16.1335 GB/s (n=9 min=15.78 max=16.2553 sd=0.173)
+  INFO memset_crt_256MB_aligned.sd_pct = 1.07
   INFO memset_crt_256MB_aligned.level = DRAM
-  PERF memset_crt_4KB_misaligned = 47.9614 GB/s (n=9 min=15.8792 max=48.5731 sd=16.8)
-  INFO memset_crt_4KB_misaligned.sd_pct = 49.49
+  PERF memset_crt_4KB_misaligned = 49.1493 GB/s (n=9 min=48.6496 max=49.5206 sd=0.253)
+  INFO memset_crt_4KB_misaligned.sd_pct = 0.52
   INFO memset_crt_4KB_misaligned.level = L1
-  PERF memset_crt_16KB_misaligned = 35.5689 GB/s (n=9 min=28.6836 max=106.412 sd=37.5)
-  INFO memset_crt_16KB_misaligned.sd_pct = 57.09
+  PERF memset_crt_16KB_misaligned = 106.631 GB/s (n=9 min=104.796 max=107.024 sd=0.832)
+  INFO memset_crt_16KB_misaligned.sd_pct = 0.78
   INFO memset_crt_16KB_misaligned.level = L1
-  PERF memset_crt_64KB_misaligned = 75.8806 GB/s (n=9 min=20.2206 max=78.4912 sd=27.7)
-  INFO memset_crt_64KB_misaligned.sd_pct = 51.63
+  PERF memset_crt_64KB_misaligned = 78.0492 GB/s (n=9 min=77.4763 max=78.3602 sd=0.272)
+  INFO memset_crt_64KB_misaligned.sd_pct = 0.35
   INFO memset_crt_64KB_misaligned.level = L2
-  PERF memset_crt_256KB_misaligned = 27.1854 GB/s (n=9 min=20.755 max=80.9765 sd=28.7)
-  INFO memset_crt_256KB_misaligned.sd_pct = 57.37
+  PERF memset_crt_256KB_misaligned = 81.9854 GB/s (n=9 min=81.7181 max=82.1435 sd=0.148)
+  INFO memset_crt_256KB_misaligned.sd_pct = 0.18
   INFO memset_crt_256KB_misaligned.level = L2
-  PERF memset_crt_1MB_misaligned = 78.3606 GB/s (n=9 min=16.3879 max=82.7457 sd=29.9)
-  INFO memset_crt_1MB_misaligned.sd_pct = 53.88
+  PERF memset_crt_1MB_misaligned = 59.5979 GB/s (n=9 min=59.531 max=59.6412 sd=0.0463)
+  INFO memset_crt_1MB_misaligned.sd_pct = 0.08
   INFO memset_crt_1MB_misaligned.level = L2
-  PERF memset_crt_4MB_misaligned = 50.0049 GB/s (n=9 min=13.2435 max=51.5404 sd=18.6)
-  INFO memset_crt_4MB_misaligned.sd_pct = 52.53
+  PERF memset_crt_4MB_misaligned = 52.7516 GB/s (n=9 min=50.2512 max=52.811 sd=0.829)
+  INFO memset_crt_4MB_misaligned.sd_pct = 1.58
   INFO memset_crt_4MB_misaligned.level = L2
-  PERF memset_crt_16MB_misaligned = 17.4825 GB/s (n=9 min=8.81133 max=46.8297 sd=16.8)
-  INFO memset_crt_16MB_misaligned.sd_pct = 61.60
+  PERF memset_crt_16MB_misaligned = 50.8246 GB/s (n=9 min=49.1108 max=51.486 sd=0.904)
+  INFO memset_crt_16MB_misaligned.sd_pct = 1.79
   INFO memset_crt_16MB_misaligned.level = L3
-  PERF memset_crt_64MB_misaligned = 9.57221 GB/s (n=9 min=6.67491 max=9.64374 sd=1.44)
-  INFO memset_crt_64MB_misaligned.sd_pct = 16.65
+  PERF memset_crt_64MB_misaligned = 22.6972 GB/s (n=9 min=21.1887 max=23.1866 sd=0.677)
+  INFO memset_crt_64MB_misaligned.sd_pct = 3.01
   INFO memset_crt_64MB_misaligned.level = DRAM
-  PERF memset_crt_256MB_misaligned = 7.76377 GB/s (n=9 min=7.38661 max=8.4673 sd=0.371)
-  INFO memset_crt_256MB_misaligned.sd_pct = 4.72
+  PERF memset_crt_256MB_misaligned = 16.2797 GB/s (n=9 min=16.1702 max=16.395 sd=0.0654)
+  INFO memset_crt_256MB_misaligned.sd_pct = 0.40
   INFO memset_crt_256MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.157
-PERF  memset_sweep_crt (2018.5 ms)
+  INFO largest_vs_4KB_aligned = 0.323
+PERF  memset_sweep_crt (995.0 ms)
 RUN   memset_sweep_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_sse2_4KB_aligned = 50.7221 GB/s (n=9 min=16.6807 max=52.6554 sd=18.2)
-  INFO memset_sse2_4KB_aligned.sd_pct = 50.02
+  PERF memset_sse2_4KB_aligned = 56.2381 GB/s (n=9 min=52.4698 max=56.7269 sd=1.3)
+  INFO memset_sse2_4KB_aligned.sd_pct = 2.33
   INFO memset_sse2_4KB_aligned.level = L1
-  PERF memset_sse2_16KB_aligned = 36.8617 GB/s (n=9 min=30.2483 max=109.62 sd=38.6)
-  INFO memset_sse2_16KB_aligned.sd_pct = 56.76
+  PERF memset_sse2_16KB_aligned = 110.472 GB/s (n=9 min=110.286 max=110.69 sd=0.11)
+  INFO memset_sse2_16KB_aligned.sd_pct = 0.10
   INFO memset_sse2_16KB_aligned.level = L1
-  PERF memset_sse2_64KB_aligned = 75.2976 GB/s (n=9 min=20.9964 max=78.5628 sd=27.7)
-  INFO memset_sse2_64KB_aligned.sd_pct = 51.35
+  PERF memset_sse2_64KB_aligned = 79.0101 GB/s (n=9 min=77.4532 max=79.4243 sd=0.707)
+  INFO memset_sse2_64KB_aligned.sd_pct = 0.90
   INFO memset_sse2_64KB_aligned.level = L2
-  PERF memset_sse2_256KB_aligned = 27.0551 GB/s (n=9 min=20.9307 max=81.4394 sd=28.6)
-  INFO memset_sse2_256KB_aligned.sd_pct = 57.46
+  PERF memset_sse2_256KB_aligned = 81.4621 GB/s (n=9 min=71.5049 max=81.8437 sd=3.36)
+  INFO memset_sse2_256KB_aligned.sd_pct = 4.17
   INFO memset_sse2_256KB_aligned.level = L2
-  PERF memset_sse2_1MB_aligned = 80.0865 GB/s (n=9 min=16.0748 max=82.5705 sd=30.2)
-  INFO memset_sse2_1MB_aligned.sd_pct = 54.24
+  PERF memset_sse2_1MB_aligned = 59.6294 GB/s (n=9 min=59.476 max=59.6689 sd=0.0603)
+  INFO memset_sse2_1MB_aligned.sd_pct = 0.10
   INFO memset_sse2_1MB_aligned.level = L2
-  PERF memset_sse2_4MB_aligned = 50.4922 GB/s (n=9 min=13.4271 max=51.6373 sd=18.7)
-  INFO memset_sse2_4MB_aligned.sd_pct = 52.92
+  PERF memset_sse2_4MB_aligned = 52.783 GB/s (n=9 min=52.5602 max=52.86 sd=0.0855)
+  INFO memset_sse2_4MB_aligned.sd_pct = 0.16
   INFO memset_sse2_4MB_aligned.level = L2
-  PERF memset_sse2_16MB_aligned = 17.3857 GB/s (n=9 min=9.07956 max=47.0768 sd=17.6)
-  INFO memset_sse2_16MB_aligned.sd_pct = 64.20
+  PERF memset_sse2_16MB_aligned = 51.3819 GB/s (n=9 min=49.3593 max=51.5144 sd=0.924)
+  INFO memset_sse2_16MB_aligned.sd_pct = 1.82
   INFO memset_sse2_16MB_aligned.level = L3
-  PERF memset_sse2_64MB_aligned = 9.8604 GB/s (n=9 min=6.76521 max=9.94014 sd=1.33)
-  INFO memset_sse2_64MB_aligned.sd_pct = 14.67
+  PERF memset_sse2_64MB_aligned = 21.6704 GB/s (n=9 min=19.0618 max=22.0181 sd=1.09)
+  INFO memset_sse2_64MB_aligned.sd_pct = 5.16
   INFO memset_sse2_64MB_aligned.level = DRAM
-  PERF memset_sse2_256MB_aligned = 7.85754 GB/s (n=9 min=7.50898 max=8.44971 sd=0.368)
-  INFO memset_sse2_256MB_aligned.sd_pct = 4.59
+  PERF memset_sse2_256MB_aligned = 16.0512 GB/s (n=9 min=15.903 max=16.1445 sd=0.0831)
+  INFO memset_sse2_256MB_aligned.sd_pct = 0.52
   INFO memset_sse2_256MB_aligned.level = DRAM
-  PERF memset_sse2_4KB_misaligned = 39.7121 GB/s (n=9 min=14.3512 max=44.802 sd=15.1)
-  INFO memset_sse2_4KB_misaligned.sd_pct = 49.09
+  PERF memset_sse2_4KB_misaligned = 40.0452 GB/s (n=9 min=39.8978 max=42.0932 sd=0.695)
+  INFO memset_sse2_4KB_misaligned.sd_pct = 1.73
   INFO memset_sse2_4KB_misaligned.level = L1
-  PERF memset_sse2_16KB_misaligned = 21.411 GB/s (n=9 min=17.2812 max=63.4935 sd=21.8)
-  INFO memset_sse2_16KB_misaligned.sd_pct = 56.33
+  PERF memset_sse2_16KB_misaligned = 64.3891 GB/s (n=9 min=64.2647 max=64.4722 sd=0.0609)
+  INFO memset_sse2_16KB_misaligned.sd_pct = 0.09
   INFO memset_sse2_16KB_misaligned.level = L1
-  PERF memset_sse2_64KB_misaligned = 51.1079 GB/s (n=9 min=13.5872 max=52.186 sd=18.5)
-  INFO memset_sse2_64KB_misaligned.sd_pct = 51.32
+  PERF memset_sse2_64KB_misaligned = 52.815 GB/s (n=9 min=52.2103 max=53.5433 sd=0.422)
+  INFO memset_sse2_64KB_misaligned.sd_pct = 0.80
   INFO memset_sse2_64KB_misaligned.level = L2
-  PERF memset_sse2_256KB_misaligned = 38.915 GB/s (n=9 min=0.820809 max=54.7623 sd=21)
-  INFO memset_sse2_256KB_misaligned.sd_pct = 60.52
+  PERF memset_sse2_256KB_misaligned = 55.3592 GB/s (n=9 min=54.3954 max=56.7109 sd=0.795)
+  INFO memset_sse2_256KB_misaligned.sd_pct = 1.43
   INFO memset_sse2_256KB_misaligned.level = L2
-  PERF memset_sse2_1MB_misaligned = 54.7722 GB/s (n=9 min=2.97912 max=56.319 sd=21.1)
-  INFO memset_sse2_1MB_misaligned.sd_pct = 53.85
+  PERF memset_sse2_1MB_misaligned = 49.8794 GB/s (n=9 min=49.4874 max=49.9785 sd=0.19)
+  INFO memset_sse2_1MB_misaligned.sd_pct = 0.38
   INFO memset_sse2_1MB_misaligned.level = L2
-  PERF memset_sse2_4MB_misaligned = 36.5719 GB/s (n=9 min=4.72161 max=47.4406 sd=17.7)
-  INFO memset_sse2_4MB_misaligned.sd_pct = 57.38
+  PERF memset_sse2_4MB_misaligned = 47.7711 GB/s (n=9 min=47.4153 max=47.8498 sd=0.144)
+  INFO memset_sse2_4MB_misaligned.sd_pct = 0.30
   INFO memset_sse2_4MB_misaligned.level = L2
-  PERF memset_sse2_16MB_misaligned = 45.1656 GB/s (n=9 min=8.95549 max=45.9071 sd=17.6)
-  INFO memset_sse2_16MB_misaligned.sd_pct = 52.58
+  PERF memset_sse2_16MB_misaligned = 46.259 GB/s (n=9 min=46.0255 max=46.3357 sd=0.0984)
+  INFO memset_sse2_16MB_misaligned.sd_pct = 0.21
   INFO memset_sse2_16MB_misaligned.level = L3
-  PERF memset_sse2_64MB_misaligned = 8.52598 GB/s (n=9 min=6.60637 max=9.58137 sd=1.31)
-  INFO memset_sse2_64MB_misaligned.sd_pct = 15.87
+  PERF memset_sse2_64MB_misaligned = 21.9045 GB/s (n=9 min=20.0164 max=22.3957 sd=0.793)
+  INFO memset_sse2_64MB_misaligned.sd_pct = 3.67
   INFO memset_sse2_64MB_misaligned.level = DRAM
-  PERF memset_sse2_256MB_misaligned = 8.12677 GB/s (n=9 min=7.42755 max=9.05619 sd=0.549)
-  INFO memset_sse2_256MB_misaligned.sd_pct = 6.68
+  PERF memset_sse2_256MB_misaligned = 16.2635 GB/s (n=9 min=16.1496 max=16.3092 sd=0.0506)
+  INFO memset_sse2_256MB_misaligned.sd_pct = 0.31
   INFO memset_sse2_256MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.155
-PERF  memset_sweep_sse2 (2004.5 ms)
-RUN   memset_sweep_sse2_nt
+  INFO largest_vs_4KB_aligned = 0.285
+PERF  memset_sweep_sse2 (995.0 ms)
+RUN   memset_sweep_nt_sse2
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_sse2_nt_4KB_aligned = 29.2536 GB/s (n=9 min=2.48029 max=29.3964 sd=12.1)
-  INFO memset_sse2_nt_4KB_aligned.sd_pct = 56.56
+  PERF memset_sse2_nt_4KB_aligned = 29.0133 GB/s (n=9 min=28.6018 max=29.3855 sd=0.271)
+  INFO memset_sse2_nt_4KB_aligned.sd_pct = 0.93
   INFO memset_sse2_nt_4KB_aligned.level = L1
-  PERF memset_sse2_nt_16KB_aligned = 15.2342 GB/s (n=9 min=12.2554 max=45.1622 sd=16)
-  INFO memset_sse2_nt_16KB_aligned.sd_pct = 57.03
+  PERF memset_sse2_nt_16KB_aligned = 45.8612 GB/s (n=9 min=42.7347 max=46.3793 sd=1.13)
+  INFO memset_sse2_nt_16KB_aligned.sd_pct = 2.47
   INFO memset_sse2_nt_16KB_aligned.level = L1
-  PERF memset_sse2_nt_64KB_aligned = 44.8613 GB/s (n=9 min=11.9954 max=45.4638 sd=16.3)
-  INFO memset_sse2_nt_64KB_aligned.sd_pct = 51.81
+  PERF memset_sse2_nt_64KB_aligned = 53.7037 GB/s (n=9 min=52.186 max=54.0273 sd=0.67)
+  INFO memset_sse2_nt_64KB_aligned.sd_pct = 1.25
   INFO memset_sse2_nt_64KB_aligned.level = L2
-  PERF memset_sse2_nt_256KB_aligned = 45.7329 GB/s (n=9 min=6.51857 max=47.2976 sd=18.4)
-  INFO memset_sse2_nt_256KB_aligned.sd_pct = 58.21
+  PERF memset_sse2_nt_256KB_aligned = 53.698 GB/s (n=9 min=52.7291 max=53.8473 sd=0.373)
+  INFO memset_sse2_nt_256KB_aligned.sd_pct = 0.70
   INFO memset_sse2_nt_256KB_aligned.level = L2
-  PERF memset_sse2_nt_1MB_aligned = 35.3056 GB/s (n=9 min=2.95466 max=46.8976 sd=16.9)
-  INFO memset_sse2_nt_1MB_aligned.sd_pct = 58.02
+  PERF memset_sse2_nt_1MB_aligned = 54.2331 GB/s (n=9 min=53.9861 max=54.3846 sd=0.112)
+  INFO memset_sse2_nt_1MB_aligned.sd_pct = 0.21
   INFO memset_sse2_nt_1MB_aligned.level = L2
-  PERF memset_sse2_nt_4MB_aligned = 41.196 GB/s (n=9 min=3.80735 max=47.9258 sd=16.4)
-  INFO memset_sse2_nt_4MB_aligned.sd_pct = 52.87
+  PERF memset_sse2_nt_4MB_aligned = 53.3016 GB/s (n=9 min=49.2996 max=54.0712 sd=1.51)
+  INFO memset_sse2_nt_4MB_aligned.sd_pct = 2.84
   INFO memset_sse2_nt_4MB_aligned.level = L2
-  PERF memset_sse2_nt_16MB_aligned = 14.8042 GB/s (n=9 min=11.774 max=44.8445 sd=15.5)
-  INFO memset_sse2_nt_16MB_aligned.sd_pct = 59.43
+  PERF memset_sse2_nt_16MB_aligned = 49.3854 GB/s (n=9 min=47.2757 max=50.5734 sd=1.19)
+  INFO memset_sse2_nt_16MB_aligned.sd_pct = 2.43
   INFO memset_sse2_nt_16MB_aligned.level = L3
-  PERF memset_sse2_nt_64MB_aligned = 23.2416 GB/s (n=9 min=15.3332 max=49.191 sd=9.35)
-  INFO memset_sse2_nt_64MB_aligned.sd_pct = 37.03
+  PERF memset_sse2_nt_64MB_aligned = 49.4885 GB/s (n=9 min=49.294 max=49.5433 sd=0.0888)
+  INFO memset_sse2_nt_64MB_aligned.sd_pct = 0.18
   INFO memset_sse2_nt_64MB_aligned.level = DRAM
-  PERF memset_sse2_nt_256MB_aligned = 22.2097 GB/s (n=9 min=17.6344 max=23.3845 sd=1.72)
-  INFO memset_sse2_nt_256MB_aligned.sd_pct = 7.88
+  PERF memset_sse2_nt_256MB_aligned = 46.6471 GB/s (n=9 min=44.6462 max=46.9416 sd=0.704)
+  INFO memset_sse2_nt_256MB_aligned.sd_pct = 1.52
   INFO memset_sse2_nt_256MB_aligned.level = DRAM
-  PERF memset_sse2_nt_4KB_misaligned = 15.8133 GB/s (n=9 min=4.62554 max=16.301 sd=5.76)
-  INFO memset_sse2_nt_4KB_misaligned.sd_pct = 51.10
+  PERF memset_sse2_nt_4KB_misaligned = 15.7375 GB/s (n=9 min=15.69 max=15.957 sd=0.0844)
+  INFO memset_sse2_nt_4KB_misaligned.sd_pct = 0.54
   INFO memset_sse2_nt_4KB_misaligned.level = L1
-  PERF memset_sse2_nt_16KB_misaligned = 10.6114 GB/s (n=9 min=8.26013 max=31.438 sd=11.2)
-  INFO memset_sse2_nt_16KB_misaligned.sd_pct = 57.46
+  PERF memset_sse2_nt_16KB_misaligned = 32.1499 GB/s (n=9 min=32.0735 max=32.1893 sd=0.0421)
+  INFO memset_sse2_nt_16KB_misaligned.sd_pct = 0.13
   INFO memset_sse2_nt_16KB_misaligned.level = L1
-  PERF memset_sse2_nt_64KB_misaligned = 38.7201 GB/s (n=9 min=10.3465 max=41.9671 sd=14.7)
-  INFO memset_sse2_nt_64KB_misaligned.sd_pct = 52.49
+  PERF memset_sse2_nt_64KB_misaligned = 46.4745 GB/s (n=9 min=46.3717 max=46.827 sd=0.149)
+  INFO memset_sse2_nt_64KB_misaligned.sd_pct = 0.32
   INFO memset_sse2_nt_64KB_misaligned.level = L2
-  PERF memset_sse2_nt_256KB_misaligned = 39.4964 GB/s (n=9 min=6.93947 max=45.1042 sd=16.2)
-  INFO memset_sse2_nt_256KB_misaligned.sd_pct = 56.46
+  PERF memset_sse2_nt_256KB_misaligned = 53.0006 GB/s (n=9 min=52.0943 max=53.0818 sd=0.308)
+  INFO memset_sse2_nt_256KB_misaligned.sd_pct = 0.58
   INFO memset_sse2_nt_256KB_misaligned.level = L2
-  PERF memset_sse2_nt_1MB_misaligned = 38.2311 GB/s (n=9 min=5.4757 max=48.5484 sd=16.8)
-  INFO memset_sse2_nt_1MB_misaligned.sd_pct = 59.69
+  PERF memset_sse2_nt_1MB_misaligned = 53.5484 GB/s (n=9 min=51.0035 max=53.8054 sd=0.95)
+  INFO memset_sse2_nt_1MB_misaligned.sd_pct = 1.79
   INFO memset_sse2_nt_1MB_misaligned.level = L2
-  PERF memset_sse2_nt_4MB_misaligned = 44.651 GB/s (n=9 min=6.77635 max=48.1213 sd=18)
-  INFO memset_sse2_nt_4MB_misaligned.sd_pct = 51.87
+  PERF memset_sse2_nt_4MB_misaligned = 52.9584 GB/s (n=9 min=51.6005 max=53.6699 sd=0.692)
+  INFO memset_sse2_nt_4MB_misaligned.sd_pct = 1.31
   INFO memset_sse2_nt_4MB_misaligned.level = L2
-  PERF memset_sse2_nt_16MB_misaligned = 36.5895 GB/s (n=9 min=4.00612 max=49.9173 sd=19.1)
-  INFO memset_sse2_nt_16MB_misaligned.sd_pct = 61.34
+  PERF memset_sse2_nt_16MB_misaligned = 50.3881 GB/s (n=9 min=50.1112 max=50.4821 sd=0.111)
+  INFO memset_sse2_nt_16MB_misaligned.sd_pct = 0.22
   INFO memset_sse2_nt_16MB_misaligned.level = L3
-  PERF memset_sse2_nt_64MB_misaligned = 22.9664 GB/s (n=9 min=15.1443 max=30.8589 sd=5.39)
-  INFO memset_sse2_nt_64MB_misaligned.sd_pct = 23.55
+  PERF memset_sse2_nt_64MB_misaligned = 49.2 GB/s (n=9 min=48.0619 max=49.3829 sd=0.542)
+  INFO memset_sse2_nt_64MB_misaligned.sd_pct = 1.11
   INFO memset_sse2_nt_64MB_misaligned.level = DRAM
-  PERF memset_sse2_nt_256MB_misaligned = 23.4298 GB/s (n=9 min=22.493 max=31.3388 sd=2.71)
-  INFO memset_sse2_nt_256MB_misaligned.sd_pct = 11.23
+  PERF memset_sse2_nt_256MB_misaligned = 46.6228 GB/s (n=9 min=45.1486 max=46.7861 sd=0.538)
+  INFO memset_sse2_nt_256MB_misaligned.sd_pct = 1.16
   INFO memset_sse2_nt_256MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.759
-PERF  memset_sweep_sse2_nt (1387.5 ms)
-RUN   memset_sweep_avx
+  INFO largest_vs_4KB_aligned = 1.608
+PERF  memset_sweep_nt_sse2 (716.1 ms)
+RUN   memset_sweep_avx_ymm
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_avx_4KB_aligned = 67.5239 GB/s (n=9 min=21.6793 max=68.6135 sd=24)
-  INFO memset_avx_4KB_aligned.sd_pct = 50.36
+  PERF memset_avx_4KB_aligned = 67.9226 GB/s (n=9 min=67.2454 max=68.4824 sd=0.449)
+  INFO memset_avx_4KB_aligned.sd_pct = 0.66
   INFO memset_avx_4KB_aligned.level = L1
-  PERF memset_avx_16KB_aligned = 53.4958 GB/s (n=9 min=43.9838 max=161.513 sd=57.6)
-  INFO memset_avx_16KB_aligned.sd_pct = 57.66
+  PERF memset_avx_16KB_aligned = 161.208 GB/s (n=9 min=159.438 max=161.535 sd=0.788)
+  INFO memset_avx_16KB_aligned.sd_pct = 0.49
   INFO memset_avx_16KB_aligned.level = L1
-  PERF memset_avx_64KB_aligned = 82.0347 GB/s (n=9 min=22.0288 max=82.264 sd=29.7)
-  INFO memset_avx_64KB_aligned.sd_pct = 51.88
+  PERF memset_avx_64KB_aligned = 82.2421 GB/s (n=9 min=82.1166 max=82.3622 sd=0.0738)
+  INFO memset_avx_64KB_aligned.sd_pct = 0.09
   INFO memset_avx_64KB_aligned.level = L2
-  PERF memset_avx_256KB_aligned = 28.3631 GB/s (n=9 min=21.982 max=85.823 sd=30.9)
-  INFO memset_avx_256KB_aligned.sd_pct = 58.23
+  PERF memset_avx_256KB_aligned = 85.9317 GB/s (n=9 min=85.7913 max=86.049 sd=0.0846)
+  INFO memset_avx_256KB_aligned.sd_pct = 0.10
   INFO memset_avx_256KB_aligned.level = L2
-  PERF memset_avx_1MB_aligned = 84.0918 GB/s (n=9 min=17.7363 max=86.8256 sd=31.8)
-  INFO memset_avx_1MB_aligned.sd_pct = 53.89
+  PERF memset_avx_1MB_aligned = 64.2099 GB/s (n=9 min=63.739 max=64.3808 sd=0.205)
+  INFO memset_avx_1MB_aligned.sd_pct = 0.32
   INFO memset_avx_1MB_aligned.level = L2
-  PERF memset_avx_4MB_aligned = 54.348 GB/s (n=9 min=14.4046 max=54.7559 sd=19.8)
-  INFO memset_avx_4MB_aligned.sd_pct = 52.34
+  PERF memset_avx_4MB_aligned = 56.321 GB/s (n=9 min=55.8793 max=56.4654 sd=0.188)
+  INFO memset_avx_4MB_aligned.sd_pct = 0.33
   INFO memset_avx_4MB_aligned.level = L2
-  PERF memset_avx_16MB_aligned = 15.6756 GB/s (n=9 min=4.965 max=52.1161 sd=19.6)
-  INFO memset_avx_16MB_aligned.sd_pct = 65.84
+  PERF memset_avx_16MB_aligned = 53.8837 GB/s (n=9 min=53.2847 max=54.3233 sd=0.326)
+  INFO memset_avx_16MB_aligned.sd_pct = 0.60
   INFO memset_avx_16MB_aligned.level = L3
-  PERF memset_avx_64MB_aligned = 9.67196 GB/s (n=9 min=6.73223 max=15.0307 sd=2.43)
-  INFO memset_avx_64MB_aligned.sd_pct = 25.64
+  PERF memset_avx_64MB_aligned = 21.2303 GB/s (n=9 min=20.5704 max=22.4655 sd=0.555)
+  INFO memset_avx_64MB_aligned.sd_pct = 2.62
   INFO memset_avx_64MB_aligned.level = DRAM
-  PERF memset_avx_256MB_aligned = 8.0905 GB/s (n=9 min=7.51926 max=9.08577 sd=0.526)
-  INFO memset_avx_256MB_aligned.sd_pct = 6.42
+  PERF memset_avx_256MB_aligned = 16.7286 GB/s (n=9 min=16.4812 max=16.8162 sd=0.108)
+  INFO memset_avx_256MB_aligned.sd_pct = 0.65
   INFO memset_avx_256MB_aligned.level = DRAM
-  PERF memset_avx_4KB_misaligned = 17.4639 GB/s (n=9 min=16.3504 max=52.5435 sd=18.1)
-  INFO memset_avx_4KB_misaligned.sd_pct = 55.75
+  PERF memset_avx_4KB_misaligned = 52.467 GB/s (n=9 min=52.295 max=52.6773 sd=0.124)
+  INFO memset_avx_4KB_misaligned.sd_pct = 0.24
   INFO memset_avx_4KB_misaligned.level = L1
-  PERF memset_avx_16KB_misaligned = 77.1474 GB/s (n=9 min=20.6003 max=78.9163 sd=28.3)
-  INFO memset_avx_16KB_misaligned.sd_pct = 51.89
+  PERF memset_avx_16KB_misaligned = 78.8289 GB/s (n=9 min=78.7363 max=78.9219 sd=0.059)
+  INFO memset_avx_16KB_misaligned.sd_pct = 0.07
   INFO memset_avx_16KB_misaligned.level = L1
-  PERF memset_avx_64KB_misaligned = 20.0629 GB/s (n=9 min=15.9976 max=60.0627 sd=21)
-  INFO memset_avx_64KB_misaligned.sd_pct = 57.02
+  PERF memset_avx_64KB_misaligned = 60.3765 GB/s (n=9 min=59.9156 max=61.4728 sd=0.493)
+  INFO memset_avx_64KB_misaligned.sd_pct = 0.82
   INFO memset_avx_64KB_misaligned.level = L2
-  PERF memset_avx_256KB_misaligned = 62.2575 GB/s (n=9 min=15.865 max=63.7416 sd=22.8)
-  INFO memset_avx_256KB_misaligned.sd_pct = 52.21
+  PERF memset_avx_256KB_misaligned = 63.4444 GB/s (n=9 min=63.3164 max=63.5712 sd=0.097)
+  INFO memset_avx_256KB_misaligned.sd_pct = 0.15
   INFO memset_avx_256KB_misaligned.level = L2
-  PERF memset_avx_1MB_misaligned = 20.9706 GB/s (n=9 min=12.9481 max=63.5416 sd=23.3)
-  INFO memset_avx_1MB_misaligned.sd_pct = 60.02
+  PERF memset_avx_1MB_misaligned = 53.5698 GB/s (n=9 min=53.2518 max=53.8652 sd=0.232)
+  INFO memset_avx_1MB_misaligned.sd_pct = 0.43
   INFO memset_avx_1MB_misaligned.level = L2
-  PERF memset_avx_4MB_misaligned = 15.9762 GB/s (n=9 min=13.2338 max=49.1424 sd=17)
-  INFO memset_avx_4MB_misaligned.sd_pct = 57.52
+  PERF memset_avx_4MB_misaligned = 49.7447 GB/s (n=9 min=49.0977 max=50.1544 sd=0.403)
+  INFO memset_avx_4MB_misaligned.sd_pct = 0.81
   INFO memset_avx_4MB_misaligned.level = L2
-  PERF memset_avx_16MB_misaligned = 41.6903 GB/s (n=9 min=4.89688 max=48.3076 sd=17.1)
-  INFO memset_avx_16MB_misaligned.sd_pct = 56.85
+  PERF memset_avx_16MB_misaligned = 48.6945 GB/s (n=9 min=48.5508 max=48.7766 sd=0.0782)
+  INFO memset_avx_16MB_misaligned.sd_pct = 0.16
   INFO memset_avx_16MB_misaligned.level = L3
-  PERF memset_avx_64MB_misaligned = 9.74824 GB/s (n=9 min=6.90392 max=9.99343 sd=1.01)
-  INFO memset_avx_64MB_misaligned.sd_pct = 10.81
+  PERF memset_avx_64MB_misaligned = 19.903 GB/s (n=9 min=19.1811 max=20.48 sd=0.397)
+  INFO memset_avx_64MB_misaligned.sd_pct = 1.99
   INFO memset_avx_64MB_misaligned.level = DRAM
-  PERF memset_avx_256MB_misaligned = 8.42674 GB/s (n=9 min=7.79597 max=8.81903 sd=0.395)
-  INFO memset_avx_256MB_misaligned.sd_pct = 4.76
+  PERF memset_avx_256MB_misaligned = 16.7468 GB/s (n=9 min=16.4755 max=16.884 sd=0.128)
+  INFO memset_avx_256MB_misaligned.sd_pct = 0.76
   INFO memset_avx_256MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.120
-PERF  memset_sweep_avx (1977.2 ms)
-RUN   memset_sweep_avx512
+  INFO largest_vs_4KB_aligned = 0.246
+PERF  memset_sweep_avx_ymm (982.3 ms)
+RUN   memset_sweep_avx512_zmm
   SKIP AVX512F not usable (CPUID bit 0, gate zmm)
-SKIP  memset_sweep_avx512 (0.2 ms): AVX512F not usable (CPUID bit 0, gate zmm)
+SKIP  memset_sweep_avx512_zmm (0.1 ms): AVX512F not usable (CPUID bit 0, gate zmm)
 RUN   memset_sweep_rep_stosb
   INFO pinned_cpu = 15 (performance core)
-  PERF memset_rep_stosb_4KB_aligned = 61.8223 GB/s (n=9 min=20.176 max=64.1324 sd=22.1)
-  INFO memset_rep_stosb_4KB_aligned.sd_pct = 50.09
+  PERF memset_rep_stosb_4KB_aligned = 63.589 GB/s (n=9 min=63.346 max=63.7884 sd=0.127)
+  INFO memset_rep_stosb_4KB_aligned.sd_pct = 0.20
   INFO memset_rep_stosb_4KB_aligned.level = L1
-  PERF memset_rep_stosb_16KB_aligned = 55.4351 GB/s (n=9 min=44.3135 max=166.789 sd=58.9)
-  INFO memset_rep_stosb_16KB_aligned.sd_pct = 57.35
+  PERF memset_rep_stosb_16KB_aligned = 166.505 GB/s (n=9 min=166.221 max=166.833 sd=0.254)
+  INFO memset_rep_stosb_16KB_aligned.sd_pct = 0.15
   INFO memset_rep_stosb_16KB_aligned.level = L1
-  PERF memset_rep_stosb_64KB_aligned = 81.434 GB/s (n=9 min=21.9692 max=84.1314 sd=29.7)
-  INFO memset_rep_stosb_64KB_aligned.sd_pct = 51.49
+  PERF memset_rep_stosb_64KB_aligned = 84.0496 GB/s (n=9 min=83.913 max=84.0989 sd=0.0643)
+  INFO memset_rep_stosb_64KB_aligned.sd_pct = 0.08
   INFO memset_rep_stosb_64KB_aligned.level = L2
-  PERF memset_rep_stosb_256KB_aligned = 28.9652 GB/s (n=9 min=22.1241 max=87.4162 sd=30.9)
-  INFO memset_rep_stosb_256KB_aligned.sd_pct = 57.72
+  PERF memset_rep_stosb_256KB_aligned = 87.7477 GB/s (n=9 min=87.5211 max=87.8412 sd=0.107)
+  INFO memset_rep_stosb_256KB_aligned.sd_pct = 0.12
   INFO memset_rep_stosb_256KB_aligned.level = L2
-  PERF memset_rep_stosb_1MB_aligned = 86.2567 GB/s (n=9 min=17.187 max=88.6494 sd=32.8)
-  INFO memset_rep_stosb_1MB_aligned.sd_pct = 54.75
+  PERF memset_rep_stosb_1MB_aligned = 66.8371 GB/s (n=9 min=66.5103 max=67.0865 sd=0.236)
+  INFO memset_rep_stosb_1MB_aligned.sd_pct = 0.35
   INFO memset_rep_stosb_1MB_aligned.level = L2
-  PERF memset_rep_stosb_4MB_aligned = 52.2021 GB/s (n=9 min=12.7235 max=54.8239 sd=19.9)
-  INFO memset_rep_stosb_4MB_aligned.sd_pct = 53.66
+  PERF memset_rep_stosb_4MB_aligned = 57.1802 GB/s (n=9 min=56.4112 max=57.4975 sd=0.305)
+  INFO memset_rep_stosb_4MB_aligned.sd_pct = 0.53
   INFO memset_rep_stosb_4MB_aligned.level = L2
-  PERF memset_rep_stosb_16MB_aligned = 21.4474 GB/s (n=9 min=11.8746 max=42.4525 sd=12.6)
-  INFO memset_rep_stosb_16MB_aligned.sd_pct = 51.13
+  PERF memset_rep_stosb_16MB_aligned = 54.5814 GB/s (n=9 min=51.2313 max=54.6667 sd=1.12)
+  INFO memset_rep_stosb_16MB_aligned.sd_pct = 2.07
   INFO memset_rep_stosb_16MB_aligned.level = L3
-  PERF memset_rep_stosb_64MB_aligned = 9.90449 GB/s (n=9 min=6.83334 max=11.7826 sd=1.6)
-  INFO memset_rep_stosb_64MB_aligned.sd_pct = 17.28
+  PERF memset_rep_stosb_64MB_aligned = 21.8539 GB/s (n=9 min=19.7431 max=22.3279 sd=0.787)
+  INFO memset_rep_stosb_64MB_aligned.sd_pct = 3.64
   INFO memset_rep_stosb_64MB_aligned.level = DRAM
-  PERF memset_rep_stosb_256MB_aligned = 17.2064 GB/s (n=9 min=16.7147 max=17.3877 sd=0.233)
-  INFO memset_rep_stosb_256MB_aligned.sd_pct = 1.36
+  PERF memset_rep_stosb_256MB_aligned = 18.0534 GB/s (n=9 min=17.7338 max=18.1724 sd=0.156)
+  INFO memset_rep_stosb_256MB_aligned.sd_pct = 0.87
   INFO memset_rep_stosb_256MB_aligned.level = DRAM
-  PERF memset_rep_stosb_4KB_misaligned = 59.5558 GB/s (n=9 min=55.8749 max=61.3472 sd=1.85)
-  INFO memset_rep_stosb_4KB_misaligned.sd_pct = 3.11
+  PERF memset_rep_stosb_4KB_misaligned = 62.4176 GB/s (n=9 min=61.9861 max=62.7562 sd=0.269)
+  INFO memset_rep_stosb_4KB_misaligned.sd_pct = 0.43
   INFO memset_rep_stosb_4KB_misaligned.level = L1
-  PERF memset_rep_stosb_16KB_misaligned = 158.761 GB/s (n=9 min=156.533 max=162.639 sd=2.25)
-  INFO memset_rep_stosb_16KB_misaligned.sd_pct = 1.42
+  PERF memset_rep_stosb_16KB_misaligned = 165.806 GB/s (n=9 min=165.282 max=166.112 sd=0.271)
+  INFO memset_rep_stosb_16KB_misaligned.sd_pct = 0.16
   INFO memset_rep_stosb_16KB_misaligned.level = L1
-  PERF memset_rep_stosb_64KB_misaligned = 82.324 GB/s (n=9 min=82.2748 max=82.3731 sd=0.0402)
-  INFO memset_rep_stosb_64KB_misaligned.sd_pct = 0.05
+  PERF memset_rep_stosb_64KB_misaligned = 83.9399 GB/s (n=9 min=83.8805 max=83.9892 sd=0.0346)
+  INFO memset_rep_stosb_64KB_misaligned.sd_pct = 0.04
   INFO memset_rep_stosb_64KB_misaligned.level = L2
-  PERF memset_rep_stosb_256KB_misaligned = 86.9564 GB/s (n=9 min=85.9832 max=87.7652 sd=0.8)
-  INFO memset_rep_stosb_256KB_misaligned.sd_pct = 0.92
+  PERF memset_rep_stosb_256KB_misaligned = 87.7652 GB/s (n=9 min=87.0916 max=87.8295 sd=0.232)
+  INFO memset_rep_stosb_256KB_misaligned.sd_pct = 0.26
   INFO memset_rep_stosb_256KB_misaligned.level = L2
-  PERF memset_rep_stosb_1MB_misaligned = 88.6435 GB/s (n=9 min=86.8544 max=88.786 sd=0.609)
-  INFO memset_rep_stosb_1MB_misaligned.sd_pct = 0.69
+  PERF memset_rep_stosb_1MB_misaligned = 66.7661 GB/s (n=9 min=66.2508 max=66.9705 sd=0.231)
+  INFO memset_rep_stosb_1MB_misaligned.sd_pct = 0.35
   INFO memset_rep_stosb_1MB_misaligned.level = L2
-  PERF memset_rep_stosb_4MB_misaligned = 52.9971 GB/s (n=9 min=52.4254 max=54.9388 sd=0.865)
-  INFO memset_rep_stosb_4MB_misaligned.sd_pct = 1.62
+  PERF memset_rep_stosb_4MB_misaligned = 57.1357 GB/s (n=9 min=57.0839 max=57.4263 sd=0.151)
+  INFO memset_rep_stosb_4MB_misaligned.sd_pct = 0.26
   INFO memset_rep_stosb_4MB_misaligned.level = L2
-  PERF memset_rep_stosb_16MB_misaligned = 48.703 GB/s (n=9 min=43.4137 max=50.3488 sd=2.13)
-  INFO memset_rep_stosb_16MB_misaligned.sd_pct = 4.41
+  PERF memset_rep_stosb_16MB_misaligned = 53.8249 GB/s (n=9 min=53.4511 max=54.681 sd=0.421)
+  INFO memset_rep_stosb_16MB_misaligned.sd_pct = 0.78
   INFO memset_rep_stosb_16MB_misaligned.level = L3
-  PERF memset_rep_stosb_64MB_misaligned = 16.9548 GB/s (n=9 min=15.7208 max=17.6593 sd=0.795)
-  INFO memset_rep_stosb_64MB_misaligned.sd_pct = 4.77
+  PERF memset_rep_stosb_64MB_misaligned = 20.4507 GB/s (n=9 min=18.4614 max=21.1773 sd=0.969)
+  INFO memset_rep_stosb_64MB_misaligned.sd_pct = 4.79
   INFO memset_rep_stosb_64MB_misaligned.level = DRAM
-  PERF memset_rep_stosb_256MB_misaligned = 16.0986 GB/s (n=9 min=15.7347 max=17.261 sd=0.535)
-  INFO memset_rep_stosb_256MB_misaligned.sd_pct = 3.28
+  PERF memset_rep_stosb_256MB_misaligned = 18.0696 GB/s (n=9 min=17.7273 max=18.1741 sd=0.154)
+  INFO memset_rep_stosb_256MB_misaligned.sd_pct = 0.86
   INFO memset_rep_stosb_256MB_misaligned.level = DRAM
-  INFO largest_vs_4KB_aligned = 0.278
-PERF  memset_sweep_rep_stosb (1216.2 ms)
-SUMMARY exe=memory_bench arch=x86 total=16 pass=2 fail=0 crash=0 skip=2 xfail=0 perf=12 checks=410 checks_failed=0 exit=0
+  INFO largest_vs_4KB_aligned = 0.284
+PERF  memset_sweep_rep_stosb (952.5 ms)
+SUMMARY exe=memory_bench arch=x86 total=16 pass=2 fail=0 crash=0 skip=2 xfail=0 perf=12 checks=434 checks_failed=0 exit=0

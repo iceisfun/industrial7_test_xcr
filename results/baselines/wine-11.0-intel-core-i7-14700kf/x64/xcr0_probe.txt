@@ -8,17 +8,17 @@ RUN   cpuid_osxsave_implies_xsave
   INFO xsave_osxsave_avx = 1/1/1
 PASS  cpuid_osxsave_implies_xsave (0.1 ms)
 RUN   xgetbv0_executes_when_osxsave
-PASS  xgetbv0_executes_when_osxsave (8.0 ms)
+PASS  xgetbv0_executes_when_osxsave (6.5 ms)
 RUN   xgetbv0_ud_without_osxsave
   SKIP OSXSAVE=1: XGETBV is legal here (the #UD rule cannot be exercised)
-SKIP  xgetbv0_ud_without_osxsave (0.3 ms): OSXSAVE=1: XGETBV is legal here (the #UD rule cannot be exercised)
+SKIP  xgetbv0_ud_without_osxsave (0.1 ms): OSXSAVE=1: XGETBV is legal here (the #UD rule cannot be exercised)
 RUN   xgetbv0_repeatable
-PASS  xgetbv0_repeatable (1.1 ms)
+PASS  xgetbv0_repeatable (0.3 ms)
 RUN   harness_cpu_info_matches_raw
 PASS  harness_cpu_info_matches_raw (0.0 ms)
 RUN   xcr0_x87_bit0_set
   INFO xcr0 = 0x207 (x87,sse,avx,pkru)
-PASS  xcr0_x87_bit0_set (0.2 ms)
+PASS  xcr0_x87_bit0_set (0.1 ms)
 RUN   xcr0_sse_bit1_set
 PASS  xcr0_sse_bit1_set (0.0 ms)
 RUN   xcr0_avx_requires_sse
@@ -39,7 +39,7 @@ RUN   xcr0_no_supervisor_components
 PASS  xcr0_no_supervisor_components (0.0 ms)
 RUN   xcr0_pkru_bit9
   INFO pkru = xcr0[9]=1 pku=1 ospke=1
-PASS  xcr0_pkru_bit9 (0.2 ms)
+PASS  xcr0_pkru_bit9 (0.1 ms)
 RUN   xcr0_bit63_and_unknown_bits
 PASS  xcr0_bit63_and_unknown_bits (0.0 ms)
 RUN   xcr0_subset_of_cpuid_supported
@@ -62,7 +62,7 @@ RUN   cpuid_d_supervisor_component_flags
 PASS  cpuid_d_supervisor_component_flags (0.0 ms)
 RUN   cpuid_d_component_sizes_architectural
   INFO avx_offset = 576
-PASS  cpuid_d_component_sizes_architectural (0.1 ms)
+PASS  cpuid_d_component_sizes_architectural (0.0 ms)
 RUN   cpuid_d_invalid_subleaves_zero
   INFO invalid_subleaves = 55
 PASS  cpuid_d_invalid_subleaves_zero (0.1 ms)
@@ -96,11 +96,11 @@ PASS  xrstor_rejects_xstate_bv_outside_xcr0 (10.7 ms)
 RUN   xrstor_compacted_rejects_xcomp_bv_outside_xcr0
   INFO probes = 59 (XCOMP_BV[62:0] bits clear in XCR0 (compacted form))
   INFO exception_code = 0xc0000005
-PASS  xrstor_compacted_rejects_xcomp_bv_outside_xcr0 (9.5 ms)
+PASS  xrstor_compacted_rejects_xcomp_bv_outside_xcr0 (10.3 ms)
 RUN   xrstor_rejects_reserved_header_bytes
   INFO probes = 4 (nonzero reserved XSAVE header bytes)
   INFO exception_code = 0xc0000005
-PASS  xrstor_rejects_reserved_header_bytes (8.9 ms)
+PASS  xrstor_rejects_reserved_header_bytes (9.9 ms)
 RUN   xgetbv1_subset_of_xcr0
   INFO xinuse_union = 0x203
 PASS  xgetbv1_subset_of_xcr0 (0.1 ms)
@@ -131,56 +131,60 @@ RUN   xgetbv_invalid_index_faults
   INFO exception_code = 0xc0000005
   INFO exception_params = n=2 [0x0, 0xffffffffffffffff]
   NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
-PASS  xgetbv_invalid_index_faults (9.2 ms)
+PASS  xgetbv_invalid_index_faults (8.9 ms)
 RUN   xgetbv_index2_info
   INFO xgetbv2 = faulted=1 code=0xc0000005 value=0xa5a5c0de5a5a1234
-PASS  xgetbv_index2_info (10.5 ms)
+PASS  xgetbv_index2_info (9.7 ms)
 RUN   xgetbv_lock_prefix_ud
   INFO exception_code = 0xc000001d
-PASS  xgetbv_lock_prefix_ud (8.2 ms)
+PASS  xgetbv_lock_prefix_ud (6.7 ms)
 RUN   xgetbv_64bit_operand_semantics
-PASS  xgetbv_64bit_operand_semantics (7.1 ms)
+PASS  xgetbv_64bit_operand_semantics (6.7 ms)
 RUN   xsetbv_same_value_faults
   INFO exception_code = 0xc0000005
   INFO exception_params = n=2 [0x0, 0xffffffffffffffff]
   NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
-PASS  xsetbv_same_value_faults (12.7 ms)
+PASS  xsetbv_same_value_faults (10.1 ms)
 RUN   xsetbv_invalid_value_faults
   INFO exception_code = 0xc0000005
   INFO exception_params = n=2 [0x0, 0xffffffffffffffff]
   NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
-PASS  xsetbv_invalid_value_faults (10.4 ms)
+PASS  xsetbv_invalid_value_faults (8.7 ms)
 RUN   xsetbv_xcr1_faults
   INFO exception_code = 0xc0000005
   INFO exception_params = n=2 [0x0, 0xffffffffffffffff]
   NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
-PASS  xsetbv_xcr1_faults (8.7 ms)
+PASS  xsetbv_xcr1_faults (8.6 ms)
 RUN   xcr0_unchanged_after_xsetbv_attempts
-PASS  xcr0_unchanged_after_xsetbv_attempts (18.4 ms)
+PASS  xcr0_unchanged_after_xsetbv_attempts (18.7 ms)
 RUN   xcr0_identical_on_every_cpu
   INFO cpus_checked = 28
-PASS  xcr0_identical_on_every_cpu (18.1 ms)
+PASS  xcr0_identical_on_every_cpu (2.6 ms)
 RUN   xcr0_constant_across_many_threads
   INFO threads = 128
-PASS  xcr0_constant_across_many_threads (11.2 ms)
+PASS  xcr0_constant_across_many_threads (25.5 ms)
 RUN   xcr0_constant_over_time
   INFO window_ms = 58
-PASS  xcr0_constant_over_time (57.7 ms)
+PASS  xcr0_constant_over_time (57.8 ms)
 RUN   xcr0_unchanged_after_exception_dispatch
-PASS  xcr0_unchanged_after_exception_dispatch (0.0 ms)
+PASS  xcr0_unchanged_after_exception_dispatch (0.1 ms)
 RUN   xcr0_same_in_child_process
-PASS  xcr0_same_in_child_process (13.2 ms)
+PASS  xcr0_same_in_child_process (13.9 ms)
 RUN   xcr0_unchanged_under_thread_context_ops
-  INFO context_ops = cycles=200 get=200 set=200 worker_reads=249600
-PASS  xcr0_unchanged_under_thread_context_ops (8.4 ms)
+  INFO context_ops = cycles=200 get=200 set=200 worker_reads=65536
+PASS  xcr0_unchanged_under_thread_context_ops (7.9 ms)
 RUN   xcr0_identical_across_processor_groups
   INFO groups = 1
-  SKIP single processor group (the per-CPU case covers it)
-SKIP  xcr0_identical_across_processor_groups (0.4 ms): single processor group (the per-CPU case covers it)
+  INFO group0_cpus = group 0: 28
+  INFO placed_workers = 28 of 28
+  INFO nonexistent_group = SetThreadGroupAffinity(group 1) -> 0 err 87
+  SKIP single processor group: forced placement self-checked on group 0; the multi-group half needs > 64 logical processors or a test boot with bcdedit /set groupsize (Windows 7 / Server 2008 R2 or later)
+SKIP  xcr0_identical_across_processor_groups (9.4 ms): single processor group: forced placement self-checked on group 0; the multi-group half needs > 64 logical processors or a test boot with bcdedit /set groupsize (Windows 7 / Server 2008 R2 or later)
 RUN   xcr0_same_in_other_architecture_process
   INFO process = arch=x64 wow64=0 native_machine=0x8664
   INFO other_arch = x86
-PASS  xcr0_same_in_other_architecture_process (19.0 ms)
+  INFO iswow64process2 = this x64 pm=0x0 nm=0x8664; other x86 pm=0x14c nm=0x8664
+PASS  xcr0_same_in_other_architecture_process (11.6 ms)
 RUN   avx_eligibility_rule
   INFO avx = hw=1 osxsave=1 xcr0[2:1]=11 -> 1
 PASS  avx_eligibility_rule (0.1 ms)
@@ -253,4 +257,4 @@ RUN   xcr0_summary_info
   INFO eligible = avx=1 avx2=1 fma=1 avx512f=0 amx=0
   INFO xinuse = 0x203
 PASS  xcr0_summary_info (0.8 ms)
-SUMMARY exe=xcr0_probe arch=x64 total=86 pass=75 fail=0 crash=0 skip=11 xfail=0 perf=0 checks=885 checks_failed=0 exit=0
+SUMMARY exe=xcr0_probe arch=x64 total=86 pass=75 fail=0 crash=0 skip=11 xfail=0 perf=0 checks=1032 checks_failed=0 exit=0

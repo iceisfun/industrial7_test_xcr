@@ -6,7 +6,7 @@ ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq moni
 RUN   zmm_gate_cpuid_subfeatures
   INFO avx512_hw = (none)
   INFO avx512_usable = (none)
-PASS  zmm_gate_cpuid_subfeatures (0.2 ms)
+PASS  zmm_gate_cpuid_subfeatures (0.1 ms)
 RUN   zmm_gate_eligibility
   INFO avx512_eligible = 0
   INFO reason = AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
@@ -47,7 +47,7 @@ RUN   zmm_api_locate_invalid_ids
 PASS  zmm_api_locate_invalid_ids (0.0 ms)
 RUN   zmm_api_locate_not_enabled_id
   EXPECT-FAIL Wine 11.0: LocateXStateFeature returns a pointer for a feature id that is not enabled
-  FAIL zmm_registers.c:520: p == NULL (LocateXStateFeature(63)=7bf73580 (length 0) although feature 63 is not enabled (enabled 0x7))
+  FAIL zmm_registers.c:532: p == NULL (LocateXStateFeature(63)=7bf6d480 (length 0) although feature 63 is not enabled (enabled 0x7))
   INFO ids_checked = 5
 XFAIL zmm_api_locate_not_enabled_id (0.5 ms): Wine 11.0: LocateXStateFeature returns a pointer for a feature id that is not enabled
 RUN   zmm_api_rtl_enabled_extended_features
@@ -55,7 +55,7 @@ RUN   zmm_api_rtl_enabled_extended_features
 PASS  zmm_api_rtl_enabled_extended_features (0.0 ms)
 RUN   zmm_api_set_mask_without_xstate_chunk
   EXPECT-FAIL Wine 11.0: SetXStateFeaturesMask fails without setting ERROR_INVALID_PARAMETER (last error 0)
-  FAIL zmm_registers.c:565: err == ERROR_INVALID_PARAMETER (got 0x0 (0) want 0x57 (87))
+  FAIL zmm_registers.c:577: err == ERROR_INVALID_PARAMETER (got 0x0 (0) want 0x57 (87))
 XFAIL zmm_api_set_mask_without_xstate_chunk (0.4 ms): Wine 11.0: SetXStateFeaturesMask fails without setting ERROR_INVALID_PARAMETER (last error 0)
 RUN   zmm_api_fresh_context_mask_empty
   INFO fresh_mask = 0x3
@@ -66,16 +66,16 @@ SKIP  zmm_api_copy_context_avx512 (0.1 ms): AVX-512 state not enabled (GetEnable
 RUN   zmm_gate_uniform_across_cpus
   INFO cpus_checked = 28
   INFO cpuid_avx512f_mismatches = 0
-PASS  zmm_gate_uniform_across_cpus (24.1 ms)
+PASS  zmm_gate_uniform_across_cpus (3.6 ms)
 RUN   zmm_fault_evex_ud_when_unusable
   INFO ineligible_reason = AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
-PASS  zmm_fault_evex_ud_when_unusable (19.7 ms)
+PASS  zmm_fault_evex_ud_when_unusable (16.3 ms)
 RUN   zmm_fault_kmov_ud_when_unusable
   INFO ineligible_reason = AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
-PASS  zmm_fault_kmov_ud_when_unusable (19.5 ms)
+PASS  zmm_fault_kmov_ud_when_unusable (17.2 ms)
 RUN   zmm_fault_xsetbv_user_mode
   INFO xsetbv_exception = 0xc0000005
-PASS  zmm_fault_xsetbv_user_mode (17.1 ms)
+PASS  zmm_fault_xsetbv_user_mode (11.5 ms)
 RUN   zmm_regs_roundtrip_patterns
   SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
 SKIP  zmm_regs_roundtrip_patterns (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
@@ -397,4 +397,31 @@ SKIP  zmm_context_get_xstate_avx512 (0.1 ms): AVX512F not advertised (CPUID.(7,0
 RUN   zmm_context_set_xstate_avx512
   SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
 SKIP  zmm_context_set_xstate_avx512 (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
-SUMMARY exe=zmm_registers arch=x86 total=130 pass=17 fail=0 crash=0 skip=111 xfail=2 perf=0 checks=97 checks_failed=2 exit=0
+RUN   zmm_fp16_arith_vs_model_daz_ftz_ignored
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fp16_arith_vs_model_daz_ftz_ignored (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fp16_fma_single_rounding_vs_model
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fp16_fma_single_rounding_vs_model (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fp16_embedded_rounding_sae_and_masking
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fp16_embedded_rounding_sae_and_masking (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_fp16_conversions_vs_model
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_fp16_conversions_vs_model (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_bf16_vcvtne2ps2bf16_rne_daz_vs_model
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_bf16_vcvtne2ps2bf16_rne_daz_vs_model (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_bf16_vdpbf16ps_vs_model
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_bf16_vdpbf16ps_vs_model (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_bitalg_vpshufbitqmb_masked_popcnt
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_bitalg_vpshufbitqmb_masked_popcnt (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_vbmi2_double_shifts_all_widths
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_vbmi2_double_shifts_all_widths (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+RUN   zmm_vbmi2_compress_expand_byte_word_forms
+  SKIP AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SKIP  zmm_vbmi2_compress_expand_byte_word_forms (0.1 ms): AVX512F not advertised (CPUID.(7,0):EBX[16]=0)
+SUMMARY exe=zmm_registers arch=x86 total=139 pass=17 fail=0 crash=0 skip=120 xfail=2 perf=0 checks=97 checks_failed=2 exit=0

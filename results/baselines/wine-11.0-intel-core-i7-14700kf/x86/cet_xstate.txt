@@ -1,0 +1,36 @@
+wineserver: using server-side synchronization.
+ENV   exe=cet_xstate arch=x86 wow64=1 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw nx pdpe1gb rdtscp invariant_tsc
+RUN   cet_feature_reporting
+  INFO cpuid_cet_ss = 1
+  INFO cpuid_cet_ibt = 1
+  INFO xss_supported = 0x19900
+  INFO xss_cet_u_supported = 1
+  INFO xss_cet_s_supported = 1
+  INFO api_xstate_present = 1
+  INFO api_cet_u = 0
+  INFO api_cet_s = 0
+  INFO RtlGetEnabledExtendedFeatures_CET_U = 0x0
+  INFO rdssp_main = 0x0
+  INFO image_dllcharacteristics_ex = 0x1
+  INFO image_ehcont_table = 0
+PASS  cet_feature_reporting (1.5 ms)
+RUN   cet_mitigation_policy
+  INFO policy_query = ok
+  INFO policy_flags = 0x0
+  INFO EnableUserShadowStack = 0
+  INFO AuditUserShadowStack = 0
+  INFO SetContextIpValidation = 0
+  INFO AuditSetContextIpValidation = 0
+  INFO EnableUserShadowStackStrictMode = 0
+  INFO SetContextIpValidationRelaxedMode = 0
+  INFO rdssp_active = 0
+  EXPECT-FAIL Wine does not validate the policy buffer length (11.0)
+  FAIL cet_xstate.c:418: !r && gle == ERROR_INVALID_PARAMETER (Length 8: ret=1 GLE=0, want FALSE/ERROR_INVALID_PARAMETER)
+XFAIL cet_mitigation_policy (1.1 ms): Wine does not validate the policy buffer length (11.0)
+RUN   cet_enforcement_x86
+  SKIP CET user shadow stacks are x64-only on Windows; 32-bit and WOW64 processes have none
+SKIP  cet_enforcement_x86 (0.2 ms): CET user shadow stacks are x64-only on Windows; 32-bit and WOW64 processes have none
+SUMMARY exe=cet_xstate arch=x86 total=3 pass=1 fail=0 crash=0 skip=1 xfail=1 perf=0 checks=6 checks_failed=1 exit=0

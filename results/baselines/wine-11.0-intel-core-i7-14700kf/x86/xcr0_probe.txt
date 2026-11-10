@@ -8,17 +8,17 @@ RUN   cpuid_osxsave_implies_xsave
   INFO xsave_osxsave_avx = 1/1/1
 PASS  cpuid_osxsave_implies_xsave (0.1 ms)
 RUN   xgetbv0_executes_when_osxsave
-PASS  xgetbv0_executes_when_osxsave (13.5 ms)
+PASS  xgetbv0_executes_when_osxsave (15.5 ms)
 RUN   xgetbv0_ud_without_osxsave
   SKIP OSXSAVE=1: XGETBV is legal here (the #UD rule cannot be exercised)
-SKIP  xgetbv0_ud_without_osxsave (0.2 ms): OSXSAVE=1: XGETBV is legal here (the #UD rule cannot be exercised)
+SKIP  xgetbv0_ud_without_osxsave (0.3 ms): OSXSAVE=1: XGETBV is legal here (the #UD rule cannot be exercised)
 RUN   xgetbv0_repeatable
-PASS  xgetbv0_repeatable (0.3 ms)
+PASS  xgetbv0_repeatable (1.1 ms)
 RUN   harness_cpu_info_matches_raw
 PASS  harness_cpu_info_matches_raw (0.0 ms)
 RUN   xcr0_x87_bit0_set
   INFO xcr0 = 0x207 (x87,sse,avx,pkru)
-PASS  xcr0_x87_bit0_set (0.1 ms)
+PASS  xcr0_x87_bit0_set (0.2 ms)
 RUN   xcr0_sse_bit1_set
 PASS  xcr0_sse_bit1_set (0.0 ms)
 RUN   xcr0_avx_requires_sse
@@ -39,7 +39,7 @@ RUN   xcr0_no_supervisor_components
 PASS  xcr0_no_supervisor_components (0.0 ms)
 RUN   xcr0_pkru_bit9
   INFO pkru = xcr0[9]=1 pku=1 ospke=1
-PASS  xcr0_pkru_bit9 (0.1 ms)
+PASS  xcr0_pkru_bit9 (0.2 ms)
 RUN   xcr0_bit63_and_unknown_bits
 PASS  xcr0_bit63_and_unknown_bits (0.0 ms)
 RUN   xcr0_subset_of_cpuid_supported
@@ -47,12 +47,12 @@ RUN   xcr0_subset_of_cpuid_supported
 PASS  xcr0_subset_of_cpuid_supported (0.1 ms)
 RUN   xcr0_avx_enabled_iff_supported_note
   INFO supported_not_enabled = 0x0 (-)
-PASS  xcr0_avx_enabled_iff_supported_note (0.1 ms)
+PASS  xcr0_avx_enabled_iff_supported_note (0.2 ms)
 RUN   cpuid_d0_supported_mask_shape
 PASS  cpuid_d0_supported_mask_shape (0.0 ms)
 RUN   cpuid_d1_xss_mask_shape
   INFO xss_supported = 0x19900 (pt,cet_u,cet_s,lbr,hwp)
-PASS  cpuid_d1_xss_mask_shape (0.1 ms)
+PASS  cpuid_d1_xss_mask_shape (0.2 ms)
 RUN   xcr0_xss_masks_disjoint
 PASS  xcr0_xss_masks_disjoint (0.0 ms)
 RUN   cpuid_d_user_component_flags
@@ -82,7 +82,7 @@ RUN   cpuid_d1_capability_bits
 PASS  cpuid_d1_capability_bits (0.1 ms)
 RUN   xsavec_xcomp_bv_equals_xcr0
   INFO xcomp_bv = 0x8000000000000207 xstate_bv 0x203
-PASS  xsavec_xcomp_bv_equals_xcr0 (0.2 ms)
+PASS  xsavec_xcomp_bv_equals_xcr0 (0.1 ms)
 RUN   xsave_header_within_xcr0
   INFO xstate_bv = 0x203
 PASS  xsave_header_within_xcr0 (0.1 ms)
@@ -92,15 +92,15 @@ PASS  xsaveopt_header_within_xcr0 (0.1 ms)
 RUN   xrstor_rejects_xstate_bv_outside_xcr0
   INFO probes = 60 (XSTATE_BV bits clear in XCR0 (standard form))
   INFO exception_code = 0xc0000005
-PASS  xrstor_rejects_xstate_bv_outside_xcr0 (14.3 ms)
+PASS  xrstor_rejects_xstate_bv_outside_xcr0 (17.7 ms)
 RUN   xrstor_compacted_rejects_xcomp_bv_outside_xcr0
   INFO probes = 59 (XCOMP_BV[62:0] bits clear in XCR0 (compacted form))
   INFO exception_code = 0xc0000005
-PASS  xrstor_compacted_rejects_xcomp_bv_outside_xcr0 (14.8 ms)
+PASS  xrstor_compacted_rejects_xcomp_bv_outside_xcr0 (20.1 ms)
 RUN   xrstor_rejects_reserved_header_bytes
   INFO probes = 4 (nonzero reserved XSAVE header bytes)
   INFO exception_code = 0xc0000005
-PASS  xrstor_rejects_reserved_header_bytes (15.0 ms)
+PASS  xrstor_rejects_reserved_header_bytes (17.4 ms)
 RUN   xgetbv1_subset_of_xcr0
   INFO xinuse_union = 0x203
 PASS  xgetbv1_subset_of_xcr0 (0.1 ms)
@@ -131,13 +131,13 @@ RUN   xgetbv_invalid_index_faults
   INFO exception_code = 0xc0000005
   INFO exception_params = n=2 [0x0, 0xffffffff]
   NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
-PASS  xgetbv_invalid_index_faults (13.7 ms)
+PASS  xgetbv_invalid_index_faults (18.1 ms)
 RUN   xgetbv_index2_info
   INFO xgetbv2 = faulted=1 code=0xc0000005 value=0xa5a5c0de5a5a1234
-PASS  xgetbv_index2_info (12.2 ms)
+PASS  xgetbv_index2_info (18.5 ms)
 RUN   xgetbv_lock_prefix_ud
   INFO exception_code = 0xc000001d
-PASS  xgetbv_lock_prefix_ud (18.9 ms)
+PASS  xgetbv_lock_prefix_ud (14.2 ms)
 RUN   xgetbv_64bit_operand_semantics
   SKIP 64-bit operand rules (RCX[63:32] ignored, RAX/RDX zero-extended) apply to 64-bit mode only
 SKIP  xgetbv_64bit_operand_semantics (0.4 ms): 64-bit operand rules (RCX[63:32] ignored, RAX/RDX zero-extended) apply to 64-bit mode only
@@ -145,46 +145,50 @@ RUN   xsetbv_same_value_faults
   INFO exception_code = 0xc0000005
   INFO exception_params = n=2 [0x0, 0xffffffff]
   NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
-PASS  xsetbv_same_value_faults (17.7 ms)
+PASS  xsetbv_same_value_faults (18.9 ms)
 RUN   xsetbv_invalid_value_faults
   INFO exception_code = 0xc0000005
   INFO exception_params = n=2 [0x0, 0xffffffff]
   NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
-PASS  xsetbv_invalid_value_faults (16.1 ms)
+PASS  xsetbv_invalid_value_faults (18.9 ms)
 RUN   xsetbv_xcr1_faults
   INFO exception_code = 0xc0000005
   INFO exception_params = n=2 [0x0, 0xffffffff]
   NOTE reported as STATUS_ACCESS_VIOLATION (what Windows 10 19041 KiOpDecode does for register-form 0F 01 opcodes)
-PASS  xsetbv_xcr1_faults (13.5 ms)
+PASS  xsetbv_xcr1_faults (15.4 ms)
 RUN   xcr0_unchanged_after_xsetbv_attempts
-PASS  xcr0_unchanged_after_xsetbv_attempts (26.6 ms)
+PASS  xcr0_unchanged_after_xsetbv_attempts (30.1 ms)
 RUN   xcr0_identical_on_every_cpu
   INFO cpus_checked = 28
-PASS  xcr0_identical_on_every_cpu (3.7 ms)
+PASS  xcr0_identical_on_every_cpu (4.7 ms)
 RUN   xcr0_constant_across_many_threads
   INFO threads = 128
-PASS  xcr0_constant_across_many_threads (12.8 ms)
+PASS  xcr0_constant_across_many_threads (10.0 ms)
 RUN   xcr0_constant_over_time
   INFO window_ms = 58
-PASS  xcr0_constant_over_time (57.9 ms)
+PASS  xcr0_constant_over_time (58.0 ms)
 RUN   xcr0_unchanged_after_exception_dispatch
 PASS  xcr0_unchanged_after_exception_dispatch (0.1 ms)
 RUN   xcr0_same_in_child_process
-PASS  xcr0_same_in_child_process (14.2 ms)
+PASS  xcr0_same_in_child_process (15.0 ms)
 RUN   xcr0_unchanged_under_thread_context_ops
-  INFO context_ops = cycles=200 get=200 set=200 worker_reads=93184
-PASS  xcr0_unchanged_under_thread_context_ops (8.6 ms)
+  INFO context_ops = cycles=200 get=200 set=200 worker_reads=92672
+PASS  xcr0_unchanged_under_thread_context_ops (7.7 ms)
 RUN   xcr0_identical_across_processor_groups
   INFO groups = 1
-  SKIP single processor group (the per-CPU case covers it)
-SKIP  xcr0_identical_across_processor_groups (0.3 ms): single processor group (the per-CPU case covers it)
+  INFO group0_cpus = group 0: 28
+  INFO placed_workers = 28 of 28
+  INFO nonexistent_group = SetThreadGroupAffinity(group 1) -> 0 err 87
+  SKIP single processor group: forced placement self-checked on group 0; the multi-group half needs > 64 logical processors or a test boot with bcdedit /set groupsize (Windows 7 / Server 2008 R2 or later)
+SKIP  xcr0_identical_across_processor_groups (10.9 ms): single processor group: forced placement self-checked on group 0; the multi-group half needs > 64 logical processors or a test boot with bcdedit /set groupsize (Windows 7 / Server 2008 R2 or later)
 RUN   xcr0_same_in_other_architecture_process
   INFO process = arch=x86 wow64=1 native_machine=0x8664
   INFO other_arch = x64
-PASS  xcr0_same_in_other_architecture_process (12.9 ms)
+  INFO iswow64process2 = this x86 pm=0x14c nm=0x8664; other x64 pm=0x0 nm=0x8664
+PASS  xcr0_same_in_other_architecture_process (11.9 ms)
 RUN   avx_eligibility_rule
   INFO avx = hw=1 osxsave=1 xcr0[2:1]=11 -> 1
-PASS  avx_eligibility_rule (0.2 ms)
+PASS  avx_eligibility_rule (0.1 ms)
 RUN   avx2_eligibility_rule
 PASS  avx2_eligibility_rule (0.0 ms)
 RUN   fma_f16c_eligibility_rule
@@ -194,7 +198,7 @@ RUN   avx512_eligibility_rule
 PASS  avx512_eligibility_rule (0.1 ms)
 RUN   amx_eligibility_rule
   SKIP no AMX on this CPU (eligibility rule checked, nothing to execute)
-SKIP  amx_eligibility_rule (0.1 ms): no AMX on this CPU (eligibility rule checked, nothing to execute)
+SKIP  amx_eligibility_rule (0.2 ms): no AMX on this CPU (eligibility rule checked, nothing to execute)
 RUN   feature_gate_table_consistency
   INFO features = 63
 PASS  feature_gate_table_consistency (0.0 ms)
@@ -254,4 +258,4 @@ RUN   xcr0_summary_info
   INFO eligible = avx=1 avx2=1 fma=1 avx512f=0 amx=0
   INFO xinuse = 0x203
 PASS  xcr0_summary_info (0.8 ms)
-SUMMARY exe=xcr0_probe arch=x86 total=86 pass=74 fail=0 crash=0 skip=12 xfail=0 perf=0 checks=880 checks_failed=0 exit=0
+SUMMARY exe=xcr0_probe arch=x86 total=86 pass=74 fail=0 crash=0 skip=12 xfail=0 perf=0 checks=1028 checks_failed=0 exit=0

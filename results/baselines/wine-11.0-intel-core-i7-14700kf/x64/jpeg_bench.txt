@@ -1,0 +1,128 @@
+wineserver: using server-side synchronization.
+ENV   exe=jpeg_bench arch=x64 wow64=0 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+RUN   jpeg_env_report
+  INFO tier_scalar = usable
+  INFO tier_sse2 = usable
+  INFO tier_avx2 = usable
+  INFO ncpu = 28
+  INFO cpu = Intel(R) Core(TM) i7-14700KF
+  INFO bench_cpu = 15 (single-thread rows are pinned to it; multi-thread rows are not pinned)
+  INFO mode = quick
+  NOTE running under Wine 11.0: numbers describe the host + Wine, not Windows
+PASS  jpeg_env_report (1.5 ms)
+RUN   jpeg_decode_vga_gray
+  INFO encode_ms = 6
+  INFO threads = up to 16 (logical processors 28, buffer budget 320 MB)
+  PERF jpeg_decode_vga_gray_scalar_1t = 152.825 MPix/s (n=3 min=152.236 max=153.757 sd=0.767)
+  PERF jpeg_decode_vga_gray_scalar_2t = 235.487 MPix/s (n=3 min=229.253 max=257.079 sd=14.6)
+  INFO jpeg_decode_vga_gray_scalar_2t.scaling = 1.54x of 1 thread
+  PERF jpeg_decode_vga_gray_scalar_4t = 459.72 MPix/s (n=3 min=450.572 max=520.511 sd=38)
+  INFO jpeg_decode_vga_gray_scalar_4t.scaling = 3.01x of 1 thread
+  PERF jpeg_decode_vga_gray_scalar_8t = 889.822 MPix/s (n=3 min=872.847 max=938.414 sd=34)
+  INFO jpeg_decode_vga_gray_scalar_8t.scaling = 5.82x of 1 thread
+  PERF jpeg_decode_vga_gray_scalar_16t = 1605.67 MPix/s (n=3 min=1598.05 max=1614.71 sd=8.34)
+  INFO jpeg_decode_vga_gray_scalar_16t.scaling = 10.51x of 1 thread
+  PERF jpeg_decode_vga_gray_sse2_1t = 246.991 MPix/s (n=3 min=228.854 max=249.614 sd=11.3)
+  PERF jpeg_decode_vga_gray_sse2_2t = 314.876 MPix/s (n=3 min=312.583 max=365.951 sd=30.2)
+  INFO jpeg_decode_vga_gray_sse2_2t.scaling = 1.27x of 1 thread
+  PERF jpeg_decode_vga_gray_sse2_4t = 651.256 MPix/s (n=3 min=602.838 max=661.753 sd=31.4)
+  INFO jpeg_decode_vga_gray_sse2_4t.scaling = 2.64x of 1 thread
+  PERF jpeg_decode_vga_gray_sse2_8t = 1195.71 MPix/s (n=3 min=1177.28 max=1220.86 sd=21.9)
+  INFO jpeg_decode_vga_gray_sse2_8t.scaling = 4.84x of 1 thread
+  PERF jpeg_decode_vga_gray_sse2_16t = 2191.94 MPix/s (n=3 min=2180.64 max=2213.17 sd=16.5)
+  INFO jpeg_decode_vga_gray_sse2_16t.scaling = 8.87x of 1 thread
+  PERF jpeg_decode_vga_gray_avx2_1t = 277.593 MPix/s (n=3 min=274.384 max=277.625 sd=1.86)
+  PERF jpeg_decode_vga_gray_avx2_2t = 365.966 MPix/s (n=3 min=334.354 max=396.775 sd=31.2)
+  INFO jpeg_decode_vga_gray_avx2_2t.scaling = 1.32x of 1 thread
+  PERF jpeg_decode_vga_gray_avx2_4t = 662.727 MPix/s (n=3 min=583.618 max=701.336 sd=60)
+  INFO jpeg_decode_vga_gray_avx2_4t.scaling = 2.39x of 1 thread
+  PERF jpeg_decode_vga_gray_avx2_8t = 1258.41 MPix/s (n=3 min=1246.79 max=1274.15 sd=13.7)
+  INFO jpeg_decode_vga_gray_avx2_8t.scaling = 4.53x of 1 thread
+  PERF jpeg_decode_vga_gray_avx2_16t = 2261.87 MPix/s (n=3 min=2176.95 max=2282.92 sd=56.1)
+  INFO jpeg_decode_vga_gray_avx2_16t.scaling = 8.15x of 1 thread
+PERF  jpeg_decode_vga_gray (764.1 ms)
+RUN   jpeg_decode_512_420_rst
+  INFO encode_ms = 7
+  INFO threads = up to 16 (logical processors 28, buffer budget 320 MB)
+  PERF jpeg_decode_mt_420_scalar_1t = 74.6241 MPix/s (n=3 min=74.368 max=74.7399 sd=0.19)
+  PERF jpeg_decode_mt_420_scalar_2t = 136.973 MPix/s (n=3 min=129.182 max=145.494 sd=8.16)
+  INFO jpeg_decode_mt_420_scalar_2t.scaling = 1.84x of 1 thread
+  PERF jpeg_decode_mt_420_scalar_4t = 230.425 MPix/s (n=3 min=211.839 max=240.865 sd=14.7)
+  INFO jpeg_decode_mt_420_scalar_4t.scaling = 3.09x of 1 thread
+  PERF jpeg_decode_mt_420_scalar_8t = 424.903 MPix/s (n=3 min=420.516 max=425.72 sd=2.8)
+  INFO jpeg_decode_mt_420_scalar_8t.scaling = 5.69x of 1 thread
+  PERF jpeg_decode_mt_420_scalar_16t = 788.638 MPix/s (n=3 min=787.414 max=814.104 sd=15.1)
+  INFO jpeg_decode_mt_420_scalar_16t.scaling = 10.57x of 1 thread
+  PERF jpeg_decode_mt_420_sse2_1t = 120.85 MPix/s (n=3 min=120.807 max=121.198 sd=0.215)
+  PERF jpeg_decode_mt_420_sse2_2t = 192.359 MPix/s (n=3 min=192.112 max=238.121 sd=26.5)
+  INFO jpeg_decode_mt_420_sse2_2t.scaling = 1.59x of 1 thread
+  PERF jpeg_decode_mt_420_sse2_4t = 314.132 MPix/s (n=3 min=306.011 max=339.286 sd=17.3)
+  INFO jpeg_decode_mt_420_sse2_4t.scaling = 2.60x of 1 thread
+  PERF jpeg_decode_mt_420_sse2_8t = 622.072 MPix/s (n=3 min=602.261 max=637.413 sd=17.6)
+  INFO jpeg_decode_mt_420_sse2_8t.scaling = 5.15x of 1 thread
+  PERF jpeg_decode_mt_420_sse2_16t = 1102.82 MPix/s (n=3 min=1093.51 max=1109.22 sd=7.9)
+  INFO jpeg_decode_mt_420_sse2_16t.scaling = 9.13x of 1 thread
+  PERF jpeg_decode_mt_420_avx2_1t = 134.965 MPix/s (n=3 min=134.711 max=135.352 sd=0.323)
+  PERF jpeg_decode_mt_420_avx2_2t = 209.99 MPix/s (n=3 min=193.098 max=232.821 sd=19.9)
+  INFO jpeg_decode_mt_420_avx2_2t.scaling = 1.56x of 1 thread
+  PERF jpeg_decode_mt_420_avx2_4t = 410.549 MPix/s (n=3 min=338.999 max=440.91 sd=52.3)
+  INFO jpeg_decode_mt_420_avx2_4t.scaling = 3.04x of 1 thread
+  PERF jpeg_decode_mt_420_avx2_8t = 623.201 MPix/s (n=3 min=603.082 max=626.675 sd=12.7)
+  INFO jpeg_decode_mt_420_avx2_8t.scaling = 4.62x of 1 thread
+  PERF jpeg_decode_mt_420_avx2_16t = 1165.96 MPix/s (n=3 min=1159.39 max=1174.12 sd=7.38)
+  INFO jpeg_decode_mt_420_avx2_16t.scaling = 8.64x of 1 thread
+PERF  jpeg_decode_512_420_rst (1377.4 ms)
+RUN   jpeg_decode_1k_444_rst
+  INFO encode_ms = 43
+  INFO threads = up to 16 (logical processors 28, buffer budget 320 MB)
+  PERF jpeg_decode_1k_444_rst_scalar_1t = 41.7098 MPix/s (n=3 min=41.4847 max=41.7143 sd=0.131)
+  PERF jpeg_decode_1k_444_rst_scalar_2t = 77.5534 MPix/s (n=3 min=73.9024 max=78.6979 sd=2.5)
+  INFO jpeg_decode_1k_444_rst_scalar_2t.scaling = 1.86x of 1 thread
+  PERF jpeg_decode_1k_444_rst_scalar_4t = 137.661 MPix/s (n=3 min=136.963 max=149.15 sd=6.84)
+  INFO jpeg_decode_1k_444_rst_scalar_4t.scaling = 3.30x of 1 thread
+  PERF jpeg_decode_1k_444_rst_scalar_8t = 243.626 MPix/s (n=3 min=231.722 max=254.951 sd=11.6)
+  INFO jpeg_decode_1k_444_rst_scalar_8t.scaling = 5.84x of 1 thread
+  PERF jpeg_decode_1k_444_rst_scalar_16t = 460.19 MPix/s (n=3 min=456.908 max=461.531 sd=2.38)
+  INFO jpeg_decode_1k_444_rst_scalar_16t.scaling = 11.03x of 1 thread
+  PERF jpeg_decode_1k_444_rst_sse2_1t = 65.1111 MPix/s (n=3 min=64.0419 max=65.8311 sd=0.9)
+  PERF jpeg_decode_1k_444_rst_sse2_2t = 115.793 MPix/s (n=3 min=102.892 max=115.876 sd=7.47)
+  INFO jpeg_decode_1k_444_rst_sse2_2t.scaling = 1.78x of 1 thread
+  PERF jpeg_decode_1k_444_rst_sse2_4t = 213.96 MPix/s (n=3 min=182.237 max=232.735 sd=25.5)
+  INFO jpeg_decode_1k_444_rst_sse2_4t.scaling = 3.29x of 1 thread
+  PERF jpeg_decode_1k_444_rst_sse2_8t = 334.326 MPix/s (n=3 min=327.659 max=358.903 sd=16.5)
+  INFO jpeg_decode_1k_444_rst_sse2_8t.scaling = 5.13x of 1 thread
+  PERF jpeg_decode_1k_444_rst_sse2_16t = 620.418 MPix/s (n=3 min=608.9 max=628.796 sd=9.99)
+  INFO jpeg_decode_1k_444_rst_sse2_16t.scaling = 9.53x of 1 thread
+  PERF jpeg_decode_1k_444_rst_avx2_1t = 72.3081 MPix/s (n=3 min=71.349 max=72.3813 sd=0.576)
+  PERF jpeg_decode_1k_444_rst_avx2_2t = 124.791 MPix/s (n=3 min=108.703 max=132.506 sd=12.1)
+  INFO jpeg_decode_1k_444_rst_avx2_2t.scaling = 1.73x of 1 thread
+  PERF jpeg_decode_1k_444_rst_avx2_4t = 170.405 MPix/s (n=3 min=170.161 max=227.935 sd=33.3)
+  INFO jpeg_decode_1k_444_rst_avx2_4t.scaling = 2.36x of 1 thread
+  PERF jpeg_decode_1k_444_rst_avx2_8t = 372.11 MPix/s (n=3 min=360.837 max=387.515 sd=13.4)
+  INFO jpeg_decode_1k_444_rst_avx2_8t.scaling = 5.15x of 1 thread
+  PERF jpeg_decode_1k_444_rst_avx2_16t = 653.779 MPix/s (n=3 min=653.279 max=656.863 sd=1.94)
+  INFO jpeg_decode_1k_444_rst_avx2_16t.scaling = 9.04x of 1 thread
+PERF  jpeg_decode_1k_444_rst (2875.4 ms)
+RUN   jpeg_decode_4k_420
+  INFO encode_ms = 243
+  INFO threads = up to 4 (logical processors 28, buffer budget 320 MB)
+  PERF jpeg_decode_4k_420_scalar_1t = 70.9348 MPix/s (n=3 min=70.4776 max=71.0769 sd=0.313)
+  PERF jpeg_decode_4k_420_scalar_2t = 135.798 MPix/s (n=3 min=133.102 max=138.953 sd=2.93)
+  INFO jpeg_decode_4k_420_scalar_2t.scaling = 1.91x of 1 thread
+  PERF jpeg_decode_4k_420_scalar_4t = 269.051 MPix/s (n=3 min=262.879 max=272.834 sd=5.03)
+  INFO jpeg_decode_4k_420_scalar_4t.scaling = 3.79x of 1 thread
+  PERF jpeg_decode_4k_420_sse2_1t = 111.437 MPix/s (n=3 min=111.279 max=111.816 sd=0.276)
+  PERF jpeg_decode_4k_420_sse2_2t = 212.009 MPix/s (n=3 min=202.624 max=219.192 sd=8.31)
+  INFO jpeg_decode_4k_420_sse2_2t.scaling = 1.90x of 1 thread
+  PERF jpeg_decode_4k_420_sse2_4t = 401.243 MPix/s (n=3 min=392.892 max=412.756 sd=9.97)
+  INFO jpeg_decode_4k_420_sse2_4t.scaling = 3.60x of 1 thread
+  PERF jpeg_decode_4k_420_avx2_1t = 121.895 MPix/s (n=3 min=121.543 max=122.699 sd=0.592)
+  PERF jpeg_decode_4k_420_avx2_2t = 234.274 MPix/s (n=3 min=220.454 max=236.619 sd=8.73)
+  INFO jpeg_decode_4k_420_avx2_2t.scaling = 1.92x of 1 thread
+  PERF jpeg_decode_4k_420_avx2_4t = 400.316 MPix/s (n=3 min=346.749 max=420.468 sd=38.1)
+  INFO jpeg_decode_4k_420_avx2_4t.scaling = 3.28x of 1 thread
+PERF  jpeg_decode_4k_420 (3825.8 ms)
+SUMMARY exe=jpeg_bench arch=x64 total=5 pass=1 fail=0 crash=0 skip=0 xfail=0 perf=4 checks=66 checks_failed=0 exit=0

@@ -6,18 +6,18 @@ ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq moni
 RUN   sse_fp32_add_sub_packed
   INFO addps = 42000 vectors
   INFO subps = 42000 vectors
-PASS  sse_fp32_add_sub_packed (37.0 ms)
+PASS  sse_fp32_add_sub_packed (30.4 ms)
 RUN   sse_fp32_mul_div_packed
   INFO mulps = 42000 vectors
   INFO divps = 42000 vectors
-PASS  sse_fp32_mul_div_packed (43.4 ms)
+PASS  sse_fp32_mul_div_packed (42.4 ms)
 RUN   sse_fp32_sqrt_packed
   INFO sqrtps = 70000 vectors
-PASS  sse_fp32_sqrt_packed (40.3 ms)
+PASS  sse_fp32_sqrt_packed (40.0 ms)
 RUN   sse_fp32_min_max_packed
   INFO minps = 42000 vectors
   INFO maxps = 42000 vectors
-PASS  sse_fp32_min_max_packed (24.7 ms)
+PASS  sse_fp32_min_max_packed (24.6 ms)
 RUN   sse_fp32_logic_packed
   INFO andps = 8400 vectors
   INFO andnps = 8400 vectors
@@ -32,26 +32,26 @@ RUN   sse_fp32_scalar_ops_preserve_upper
   INFO sqrtss = 33600 vectors
   INFO minss = 33600 vectors
   INFO maxss = 33600 vectors
-PASS  sse_fp32_scalar_ops_preserve_upper (67.0 ms)
+PASS  sse_fp32_scalar_ops_preserve_upper (65.8 ms)
 RUN   sse_fp32_cmpps_cmpss_predicates
   INFO cmpps = 89600 vectors
   INFO cmpss = 89600 vectors
-PASS  sse_fp32_cmpps_cmpss_predicates (47.9 ms)
+PASS  sse_fp32_cmpps_cmpss_predicates (47.4 ms)
 RUN   sse2_fp64_add_sub_packed
   INFO addpd = 56000 vectors
   INFO subpd = 56000 vectors
-PASS  sse2_fp64_add_sub_packed (21.4 ms)
+PASS  sse2_fp64_add_sub_packed (21.2 ms)
 RUN   sse2_fp64_mul_div_packed
   INFO mulpd = 56000 vectors
   INFO divpd = 56000 vectors
-PASS  sse2_fp64_mul_div_packed (30.1 ms)
+PASS  sse2_fp64_mul_div_packed (29.8 ms)
 RUN   sse2_fp64_sqrt_packed
   INFO sqrtpd = 84000 vectors
-PASS  sse2_fp64_sqrt_packed (25.9 ms)
+PASS  sse2_fp64_sqrt_packed (25.2 ms)
 RUN   sse2_fp64_min_max_packed
   INFO minpd = 56000 vectors
   INFO maxpd = 56000 vectors
-PASS  sse2_fp64_min_max_packed (17.8 ms)
+PASS  sse2_fp64_min_max_packed (16.7 ms)
 RUN   sse2_fp64_logic_packed
   INFO andpd = 8400 vectors
   INFO andnpd = 8400 vectors
@@ -66,7 +66,7 @@ RUN   sse2_fp64_scalar_ops_preserve_upper
   INFO sqrtsd = 33600 vectors
   INFO minsd = 33600 vectors
   INFO maxsd = 33600 vectors
-PASS  sse2_fp64_scalar_ops_preserve_upper (40.1 ms)
+PASS  sse2_fp64_scalar_ops_preserve_upper (40.0 ms)
 RUN   sse2_fp64_cmppd_cmpsd_predicates
   INFO cmppd = 89600 vectors
   INFO cmpsd = 89600 vectors
@@ -90,40 +90,40 @@ RUN   sse3_addsub_hadd_hsub
   INFO hsubps = 33600 vectors
   INFO haddpd = 33600 vectors
   INFO hsubpd = 33600 vectors
-PASS  sse3_addsub_hadd_hsub (56.1 ms)
+PASS  sse3_addsub_hadd_hsub (55.8 ms)
 RUN   sse41_roundps_roundpd_all_modes
   INFO roundps = 64000 vectors
   INFO roundpd = 64000 vectors
-PASS  sse41_roundps_roundpd_all_modes (32.0 ms)
+PASS  sse41_roundps_roundpd_all_modes (31.8 ms)
 RUN   sse41_roundss_roundsd_preserve_upper
   INFO roundss = 51200 vectors
   INFO roundsd = 51200 vectors
-PASS  sse41_roundss_roundsd_preserve_upper (20.7 ms)
+PASS  sse41_roundss_roundsd_preserve_upper (20.6 ms)
 RUN   sse41_round_known_answers
 PASS  sse41_round_known_answers (0.0 ms)
 RUN   sse41_dpps_dppd
   INFO dpps = 49152 vectors
   INFO dppd = 38400 vectors
-PASS  sse41_dpps_dppd (26.3 ms)
+PASS  sse41_dpps_dppd (24.6 ms)
 RUN   sse_rcpps_rsqrtps_accuracy
   INFO rcpps/rsqrtps accuracy = 179402 vectors
   INFO rcpps_max_rel_err = 0.0002999 (bound 0.0003662)
   INFO rsqrtps_max_rel_err = 0.0003212 (bound 0.0003662)
-PASS  sse_rcpps_rsqrtps_accuracy (5.2 ms)
+PASS  sse_rcpps_rsqrtps_accuracy (4.2 ms)
 RUN   sse_rcp_rsqrt_special_values
   INFO rcpps_2pow126 = 0x00000000
   INFO rcpps_0x7E7FF000 = 0x00800800
-PASS  sse_rcp_rsqrt_special_values (0.2 ms)
+PASS  sse_rcp_rsqrt_special_values (0.1 ms)
 RUN   sse2_cvtdq2ps_cvtps2dq_cvttps2dq
   INFO cvtdq2ps = 24000 vectors
   INFO cvtps2dq = 24000 vectors
   INFO cvttps2dq = 24000 vectors
-PASS  sse2_cvtdq2ps_cvtps2dq_cvttps2dq (23.4 ms)
+PASS  sse2_cvtdq2ps_cvtps2dq_cvttps2dq (22.0 ms)
 RUN   sse2_cvtpd2dq_cvttpd2dq_cvtdq2pd
   INFO cvtpd2dq = 24000 vectors
   INFO cvttpd2dq = 24000 vectors
   INFO cvtdq2pd = 9600 vectors
-PASS  sse2_cvtpd2dq_cvttpd2dq_cvtdq2pd (10.0 ms)
+PASS  sse2_cvtpd2dq_cvttpd2dq_cvtdq2pd (9.9 ms)
 RUN   sse2_cvtps2pd_cvtpd2ps
   INFO cvtps2pd = 42000 vectors
   INFO cvtpd2ps = 42000 vectors
@@ -137,7 +137,7 @@ RUN   sse_cvtsi2ss_cvtsi2sd
   INFO cvtsi2sd r32 = 12800 vectors
   INFO cvtsi2ss r64 = 24000 vectors
   INFO cvtsi2sd r64 = 24000 vectors
-PASS  sse_cvtsi2ss_cvtsi2sd (15.6 ms)
+PASS  sse_cvtsi2ss_cvtsi2sd (15.5 ms)
 RUN   sse_cvtss2si_cvtsd2si_indefinite
   INFO cvtss2si r32 = 24000 vectors
   INFO cvttss2si r32 = 24000 vectors
@@ -147,7 +147,7 @@ RUN   sse_cvtss2si_cvtsd2si_indefinite
   INFO cvttss2si r64 = 24000 vectors
   INFO cvtsd2si r64 = 24000 vectors
   INFO cvttsd2si r64 = 24000 vectors
-PASS  sse_cvtss2si_cvtsd2si_indefinite (36.7 ms)
+PASS  sse_cvtss2si_cvtsd2si_indefinite (36.6 ms)
 RUN   sse_cvt_known_answers
 PASS  sse_cvt_known_answers (0.0 ms)
 RUN   sse2_int_add_sub_wraparound
@@ -159,7 +159,7 @@ RUN   sse2_int_add_sub_wraparound
   INFO psubw = 6000 vectors
   INFO psubd = 6000 vectors
   INFO psubq = 6000 vectors
-PASS  sse2_int_add_sub_wraparound (5.9 ms)
+PASS  sse2_int_add_sub_wraparound (5.7 ms)
 RUN   sse2_int_saturating_add_sub
   INFO paddsb = 6000 vectors
   INFO paddsw = 6000 vectors
@@ -169,25 +169,25 @@ RUN   sse2_int_saturating_add_sub
   INFO paddusw = 6000 vectors
   INFO psubusb = 6000 vectors
   INFO psubusw = 6000 vectors
-PASS  sse2_int_saturating_add_sub (6.1 ms)
+PASS  sse2_int_saturating_add_sub (5.8 ms)
 RUN   sse2_int_multiply
   INFO pmullw = 6000 vectors
   INFO pmulhw = 6000 vectors
   INFO pmulhuw = 6000 vectors
   INFO pmuludq = 6000 vectors
   INFO pmaddwd = 6000 vectors
-PASS  sse2_int_multiply (3.8 ms)
+PASS  sse2_int_multiply (3.6 ms)
 RUN   sse2_int_avg_sad
   INFO pavgb = 6000 vectors
   INFO pavgw = 6000 vectors
   INFO psadbw = 6000 vectors
-PASS  sse2_int_avg_sad (2.3 ms)
+PASS  sse2_int_avg_sad (2.2 ms)
 RUN   sse2_int_min_max
   INFO pminub = 6000 vectors
   INFO pmaxub = 6000 vectors
   INFO pminsw = 6000 vectors
   INFO pmaxsw = 6000 vectors
-PASS  sse2_int_min_max (3.0 ms)
+PASS  sse2_int_min_max (2.9 ms)
 RUN   sse2_int_compare
   INFO pcmpeqb = 6000 vectors
   INFO pcmpeqw = 6000 vectors
@@ -195,13 +195,13 @@ RUN   sse2_int_compare
   INFO pcmpgtb = 6000 vectors
   INFO pcmpgtw = 6000 vectors
   INFO pcmpgtd = 6000 vectors
-PASS  sse2_int_compare (4.6 ms)
+PASS  sse2_int_compare (4.4 ms)
 RUN   sse2_int_logic
   INFO pand = 2000 vectors
   INFO pandn = 2000 vectors
   INFO por = 2000 vectors
   INFO pxor = 2000 vectors
-PASS  sse2_int_logic (1.2 ms)
+PASS  sse2_int_logic (1.1 ms)
 RUN   sse2_shift_by_xmm_count
   INFO psllw xmm = 6000 vectors
   INFO pslld xmm = 6000 vectors
@@ -211,7 +211,7 @@ RUN   sse2_shift_by_xmm_count
   INFO psrlq xmm = 6000 vectors
   INFO psraw xmm = 6000 vectors
   INFO psrad xmm = 6000 vectors
-PASS  sse2_shift_by_xmm_count (3.9 ms)
+PASS  sse2_shift_by_xmm_count (3.8 ms)
 RUN   sse2_shift_by_imm_sweep
   INFO psllw imm = 6144 vectors
   INFO pslld imm = 6144 vectors
@@ -221,7 +221,7 @@ RUN   sse2_shift_by_imm_sweep
   INFO psrlq imm = 6144 vectors
   INFO psraw imm = 6144 vectors
   INFO psrad imm = 6144 vectors
-PASS  sse2_shift_by_imm_sweep (6.4 ms)
+PASS  sse2_shift_by_imm_sweep (6.2 ms)
 RUN   sse2_byte_shift_pslldq_psrldq
   INFO pslldq = 6144 vectors
   INFO psrldq = 6144 vectors
@@ -250,12 +250,12 @@ RUN   sse2_unpack_interleave_and_moves
   INFO movss xmm,xmm (merge) = 1200 vectors
   INFO movsd xmm,xmm (merge) = 1200 vectors
   INFO movq xmm,xmm (zero upper) = 1200 vectors
-PASS  sse2_unpack_interleave_and_moves (3.5 ms)
+PASS  sse2_unpack_interleave_and_moves (3.4 ms)
 RUN   sse2_pshufd_pshuflw_pshufhw_imm_sweep
   INFO pshufd = 4096 vectors
   INFO pshuflw = 4096 vectors
   INFO pshufhw = 4096 vectors
-PASS  sse2_pshufd_pshuflw_pshufhw_imm_sweep (1.7 ms)
+PASS  sse2_pshufd_pshuflw_pshufhw_imm_sweep (1.6 ms)
 RUN   sse_shufps_shufpd_imm_sweep
   INFO shufps = 4096 vectors
   INFO shufpd = 800 vectors
@@ -284,7 +284,7 @@ RUN   ssse3_abs_sign
   INFO psignb = 4000 vectors
   INFO psignw = 4000 vectors
   INFO psignd = 4000 vectors
-PASS  ssse3_abs_sign (3.4 ms)
+PASS  ssse3_abs_sign (3.3 ms)
 RUN   ssse3_horizontal_add_sub
   INFO phaddw = 4000 vectors
   INFO phaddd = 4000 vectors
@@ -296,13 +296,13 @@ PASS  ssse3_horizontal_add_sub (3.1 ms)
 RUN   ssse3_pmaddubsw_pmulhrsw
   INFO pmaddubsw = 8000 vectors
   INFO pmulhrsw = 8000 vectors
-PASS  ssse3_pmaddubsw_pmulhrsw (2.0 ms)
+PASS  ssse3_pmaddubsw_pmulhrsw (1.9 ms)
 RUN   ssse3_pshufb
   INFO pshufb = 12000 vectors
 PASS  ssse3_pshufb (1.8 ms)
 RUN   ssse3_palignr_imm_sweep
   INFO palignr = 8192 vectors
-PASS  ssse3_palignr_imm_sweep (1.1 ms)
+PASS  ssse3_palignr_imm_sweep (1.0 ms)
 RUN   sse41_pmulld_pmuldq
   INFO pmulld = 8000 vectors
   INFO pmuldq = 8000 vectors
@@ -316,11 +316,11 @@ RUN   sse41_min_max_all_widths
   INFO pmaxsd = 4000 vectors
   INFO pminud = 4000 vectors
   INFO pmaxud = 4000 vectors
-PASS  sse41_min_max_all_widths (4.1 ms)
+PASS  sse41_min_max_all_widths (4.0 ms)
 RUN   sse41_pcmpeqq_sse42_pcmpgtq
   INFO pcmpeqq = 8000 vectors
   INFO pcmpgtq = 8000 vectors
-PASS  sse41_pcmpeqq_sse42_pcmpgtq (2.0 ms)
+PASS  sse41_pcmpeqq_sse42_pcmpgtq (1.9 ms)
 RUN   sse41_blend_imm_sweep
   INFO pblendw = 6144 vectors
   INFO blendps = 2560 vectors
@@ -331,7 +331,7 @@ RUN   sse41_insertps_imm_sweep
 PASS  sse41_insertps_imm_sweep (1.0 ms)
 RUN   sse41_mpsadbw
   INFO mpsadbw = 9600 vectors
-PASS  sse41_mpsadbw (1.4 ms)
+PASS  sse41_mpsadbw (1.3 ms)
 RUN   sse41_blendv_xmm0_mask
   INFO blendv = 9000 vectors
 PASS  sse41_blendv_xmm0_mask (0.6 ms)
@@ -368,7 +368,7 @@ RUN   sse42_pcmpestrm_imm_sweep
 PASS  sse42_pcmpestrm_imm_sweep (19.3 ms)
 RUN   sse42_pcmpistri_imm_sweep
   INFO pcmpistri = 61440 vectors
-PASS  sse42_pcmpistri_imm_sweep (19.3 ms)
+PASS  sse42_pcmpistri_imm_sweep (19.2 ms)
 RUN   sse42_pcmpistrm_imm_sweep
   INFO pcmpistrm = 61440 vectors
 PASS  sse42_pcmpistrm_imm_sweep (19.2 ms)
@@ -387,7 +387,7 @@ RUN   gpr_popcnt
 PASS  gpr_popcnt (0.3 ms)
 RUN   gpr_lzcnt
   INFO lzcnt = 15000 vectors
-PASS  gpr_lzcnt (0.3 ms)
+PASS  gpr_lzcnt (0.2 ms)
 RUN   gpr_tzcnt
   INFO tzcnt = 15000 vectors
 PASS  gpr_tzcnt (0.2 ms)

@@ -7,14 +7,14 @@ RUN   initial_env_case_thread
   INFO main_thread_fcw = 0x037f
   INFO mxcsr_mask = 0x0000ffff (raw 0x0000ffff)
   INFO daz_supported = 1
-PASS  initial_env_case_thread (0.4 ms)
+PASS  initial_env_case_thread (0.2 ms)
 RUN   new_thread_default_env
   INFO new_thread_env = mxcsr=0x1f80 fcw=0x027f fsw=0x0000 ftw=0xffff
-PASS  new_thread_default_env (1.8 ms)
+PASS  new_thread_default_env (1.5 ms)
 RUN   new_thread_not_inherit_parent_env
 PASS  new_thread_not_inherit_parent_env (0.2 ms)
 RUN   new_thread_from_worker_gets_default_env
-PASS  new_thread_from_worker_gets_default_env (0.4 ms)
+PASS  new_thread_from_worker_gets_default_env (0.5 ms)
 RUN   thread_env_change_not_visible_to_others
 PASS  thread_env_change_not_visible_to_others (0.4 ms)
 RUN   crt_beginthreadex_env
@@ -22,9 +22,9 @@ RUN   crt_beginthreadex_env
 PASS  crt_beginthreadex_env (0.2 ms)
 RUN   threads_env_isolated_under_preemption
   INFO threads = 58 (ncpu 28)
-PASS  threads_env_isolated_under_preemption (363.9 ms)
+PASS  threads_env_isolated_under_preemption (326.2 ms)
 RUN   env_control_preserved_across_waits
-PASS  env_control_preserved_across_waits (31.8 ms)
+PASS  env_control_preserved_across_waits (31.7 ms)
 RUN   mxcsr_mask_from_fxsave
   INFO mxcsr_mask_raw = 0x0000ffff
 PASS  mxcsr_mask_from_fxsave (0.1 ms)
@@ -41,7 +41,7 @@ PASS  sse_and_x87_state_independent (0.0 ms)
 RUN   mxcsr_reserved_bits_fault
   INFO gp_code_bit_0x10000 = 0xc0000005
   INFO gp_code_bit_0x80000000 = 0xc0000005
-PASS  mxcsr_reserved_bits_fault (21.8 ms)
+PASS  mxcsr_reserved_bits_fault (23.0 ms)
 RUN   sse_masked_invalid_operation
 PASS  sse_masked_invalid_operation (0.0 ms)
 RUN   sse_masked_divide_by_zero
@@ -71,91 +71,91 @@ RUN   sse_unmasked_invalid_operation
   INFO handler_mxcsr = 0x00001f01
   INFO exception_info = n=2 [0]=0x0 [1]=0x1f01
   INFO ctx_flags = 0x0010005f
-PASS  sse_unmasked_invalid_operation (17.0 ms)
+PASS  sse_unmasked_invalid_operation (16.8 ms)
 RUN   sse_unmasked_denormal_operand
   INFO code_DE = 0xc0000093
   INFO handler_mxcsr = 0x00001e82
   INFO exception_info = n=2 [0]=0x0 [1]=0x1e82
   INFO ctx_flags = 0x0010005f
   XFAIL Wine 11.0 reports DE as 0xc0000093 (Windows: 0xc000008d or INVALID_OPERATION)
-XFAIL sse_unmasked_denormal_operand (12.5 ms): Wine 11.0 reports DE as 0xc0000093 (Windows: 0xc000008d or INVALID_OPERATION)
+XFAIL sse_unmasked_denormal_operand (12.7 ms): Wine 11.0 reports DE as 0xc0000093 (Windows: 0xc000008d or INVALID_OPERATION)
 RUN   sse_unmasked_divide_by_zero
   INFO code_ZE = 0xc000008e
   INFO handler_mxcsr = 0x00001d84
   INFO exception_info = n=2 [0]=0x0 [1]=0x1d84
   INFO ctx_flags = 0x0010005f
-PASS  sse_unmasked_divide_by_zero (14.9 ms)
+PASS  sse_unmasked_divide_by_zero (14.1 ms)
 RUN   sse_unmasked_overflow
   INFO code_OE = 0xc0000091
   INFO handler_mxcsr = 0x00001b88
   INFO exception_info = n=2 [0]=0x0 [1]=0x1b88
   INFO ctx_flags = 0x0010005f
-PASS  sse_unmasked_overflow (17.6 ms)
+PASS  sse_unmasked_overflow (11.1 ms)
 RUN   sse_unmasked_underflow_exact_tiny
   INFO code_UE = 0xc0000093
   INFO handler_mxcsr = 0x00001790
   INFO exception_info = n=2 [0]=0x0 [1]=0x1790
   INFO ctx_flags = 0x0010005f
-PASS  sse_unmasked_underflow_exact_tiny (12.8 ms)
+PASS  sse_unmasked_underflow_exact_tiny (15.0 ms)
 RUN   sse_unmasked_inexact
   INFO code_PE = 0xc000008f
   INFO handler_mxcsr = 0x00000fa0
   INFO exception_info = n=2 [0]=0x0 [1]=0xfa0
   INFO ctx_flags = 0x0010005f
-PASS  sse_unmasked_inexact (16.3 ms)
+PASS  sse_unmasked_inexact (11.7 ms)
 RUN   sse_unmasked_packed_dest_unchanged
   INFO code_PACKED = 0xc000008e
   INFO handler_mxcsr = 0x00001d84
   INFO exception_info = n=2 [0]=0x0 [1]=0x1d84
   INFO ctx_flags = 0x0010005f
-PASS  sse_unmasked_packed_dest_unchanged (18.5 ms)
+PASS  sse_unmasked_packed_dest_unchanged (11.9 ms)
 RUN   sse_unmasked_unhandled_terminates_with_code
-PASS  sse_unmasked_unhandled_terminates_with_code (10.4 ms)
+PASS  sse_unmasked_unhandled_terminates_with_code (10.0 ms)
 RUN   x87_unmasked_invalid_operation
-  INFO fip_matches_op = 1 (FIP 0xff0159da, op 0x6fffff0159da)
+  INFO fip_matches_op = 1 (FIP 0xff015a3a, op 0x6fffff015a3a)
   INFO code_x87_IE = 0xc0000090
   INFO handler_fcw = 0x037e
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_invalid_operation (16.0 ms)
+PASS  x87_unmasked_invalid_operation (17.3 ms)
 RUN   x87_unmasked_stack_fault
-  INFO fip_matches_op = 1 (FIP 0xff015989, op 0x6fffff015989)
+  INFO fip_matches_op = 1 (FIP 0xff0159e9, op 0x6fffff0159e9)
   INFO code_x87_SF = 0xc0000092
   INFO handler_fcw = 0x037e
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_stack_fault (17.0 ms)
+PASS  x87_unmasked_stack_fault (13.5 ms)
 RUN   x87_unmasked_denormal_operand
-  INFO fip_matches_op = 1 (FIP 0xff0158bd, op 0x6fffff0158bd)
+  INFO fip_matches_op = 1 (FIP 0xff01591d, op 0x6fffff01591d)
   INFO code_x87_DE = 0xc0000093
   INFO handler_fcw = 0x037d
   INFO exception_info = n=0 [0]=0x0
   XFAIL Wine 11.0 reports x87 DE as 0xc0000093 (Windows [K2]: 0xc000008d or INVALID_OPERATION)
-XFAIL x87_unmasked_denormal_operand (16.8 ms): Wine 11.0 reports x87 DE as 0xc0000093 (Windows [K2]: 0xc000008d or INVALID_OPERATION)
+XFAIL x87_unmasked_denormal_operand (17.3 ms): Wine 11.0 reports x87 DE as 0xc0000093 (Windows [K2]: 0xc000008d or INVALID_OPERATION)
 RUN   x87_unmasked_divide_by_zero
-  INFO fip_matches_op = 1 (FIP 0xff01594a, op 0x6fffff01594a)
+  INFO fip_matches_op = 1 (FIP 0xff0159aa, op 0x6fffff0159aa)
   INFO code_x87_ZE = 0xc000008e
   INFO handler_fcw = 0x037b
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_divide_by_zero (13.2 ms)
+PASS  x87_unmasked_divide_by_zero (14.1 ms)
 RUN   x87_unmasked_overflow
-  INFO fip_matches_op = 1 (FIP 0xff015902, op 0x6fffff015902)
+  INFO fip_matches_op = 1 (FIP 0xff015962, op 0x6fffff015962)
   INFO code_x87_OE = 0xc0000091
   INFO handler_fcw = 0x0377
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_overflow (15.3 ms)
+PASS  x87_unmasked_overflow (16.4 ms)
 RUN   x87_unmasked_underflow
-  INFO fip_matches_op = 1 (FIP 0xff015902, op 0x6fffff015902)
+  INFO fip_matches_op = 1 (FIP 0xff015962, op 0x6fffff015962)
   INFO code_x87_UE = 0xc0000093
   INFO handler_fcw = 0x036f
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_underflow (13.7 ms)
+PASS  x87_unmasked_underflow (13.6 ms)
 RUN   x87_unmasked_inexact
-  INFO fip_matches_op = 1 (FIP 0xff01594a, op 0x6fffff01594a)
+  INFO fip_matches_op = 1 (FIP 0xff0159aa, op 0x6fffff0159aa)
   INFO code_x87_PE = 0xc000008f
   INFO handler_fcw = 0x035f
   INFO exception_info = n=0 [0]=0x0
-PASS  x87_unmasked_inexact (17.5 ms)
+PASS  x87_unmasked_inexact (16.8 ms)
 RUN   x87_unmasked_unhandled_terminates_with_code
-PASS  x87_unmasked_unhandled_terminates_with_code (10.7 ms)
+PASS  x87_unmasked_unhandled_terminates_with_code (10.1 ms)
 RUN   x87_fninit_state
   INFO fninit_fcw_raw = 0x037f
 PASS  x87_fninit_state (0.1 ms)
@@ -166,7 +166,7 @@ PASS  x87_cw_writable_bits (0.3 ms)
 RUN   x87_stack_order_and_top
 PASS  x87_stack_order_and_top (0.0 ms)
 RUN   x87_tag_word_and_save_layouts
-  INFO fnstenv_fip = 0xff0157ed
+  INFO fnstenv_fip = 0xff01584d
 PASS  x87_tag_word_and_save_layouts (0.1 ms)
 RUN   x87_precision_control
 PASS  x87_precision_control (0.0 ms)
@@ -222,46 +222,46 @@ RUN   crt_fenv_exception_flags
 PASS  crt_fenv_exception_flags (0.0 ms)
 RUN   crt_fenv_hold_update
   INFO toolchain_feholdexcept_clears_mxcsr_flags = 0
-PASS  crt_fenv_hold_update (0.2 ms)
+PASS  crt_fenv_hold_update (0.1 ms)
 RUN   crt_fegetenv_fesetenv_roundtrip
   INFO toolchain_fesetenv_restores_mxcsr = 0 (0x1f80 want 0xdf80)
   INFO fe_dfl_env = mxcsr=0x1f80 fcw=0x037f
-PASS  crt_fegetenv_fesetenv_roundtrip (0.5 ms)
+PASS  crt_fegetenv_fesetenv_roundtrip (0.2 ms)
 RUN   ctx_rtlcapturecontext_fp_env
 PASS  ctx_rtlcapturecontext_fp_env (0.0 ms)
 RUN   ctx_handler_sees_and_sets_fp_env
   INFO raise_ctx_flags = 0x0010000f
-PASS  ctx_handler_sees_and_sets_fp_env (0.2 ms)
+PASS  ctx_handler_sees_and_sets_fp_env (0.1 ms)
 RUN   ctx_legacy_fltsave_mxcsr_info
   INFO fltsave_mxcsr_only_applied = 0 (MXCSR after 0x1f80)
-PASS  ctx_legacy_fltsave_mxcsr_info (0.3 ms)
+PASS  ctx_legacy_fltsave_mxcsr_info (0.1 ms)
 RUN   ctx_get_set_thread_context_fp_env
 PASS  ctx_get_set_thread_context_fp_env (1.3 ms)
 RUN   ctx_set_context_before_thread_start_info
   INFO suspended_new_thread_ctx = mxcsr=0x00001f80 fcw=0x027f
   INFO pre_start_setcontext_mxcsr_seen = 0x3f80 (set 0x3f80)
-PASS  ctx_set_context_before_thread_start_info (0.7 ms)
+PASS  ctx_set_context_before_thread_start_info (0.5 ms)
 RUN   sse_unmasked_packed_precomputation_first
   INFO code = 0xc000008e
-PASS  sse_unmasked_packed_precomputation_first (17.1 ms)
+PASS  sse_unmasked_packed_precomputation_first (12.4 ms)
 RUN   sse_unmasked_packed_postcomputation_with_masked_precomputation
   INFO code = 0xc000008f
-PASS  sse_unmasked_packed_postcomputation_with_masked_precomputation (14.3 ms)
+PASS  sse_unmasked_packed_postcomputation_with_masked_precomputation (16.1 ms)
 RUN   x87_fldenv_pending_exception_delivered
-PASS  x87_fldenv_pending_exception_delivered (15.3 ms)
+PASS  x87_fldenv_pending_exception_delivered (13.7 ms)
 RUN   sse_unmasked_exceptions_concurrent_threads
   INFO threads = 16 x 64 exceptions
-PASS  sse_unmasked_exceptions_concurrent_threads (28.2 ms)
+PASS  sse_unmasked_exceptions_concurrent_threads (20.7 ms)
 RUN   ctx_continue_reserved_mxcsr_bits_sanitized
-  XFAIL Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0x64fb63f0 exc 0x00000000)
-XFAIL ctx_continue_reserved_mxcsr_bits_sanitized (10.5 ms): Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0x64fb63f0 exc 0x00000000)
+  XFAIL Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0x8703f3f0 exc 0x00000000)
+XFAIL ctx_continue_reserved_mxcsr_bits_sanitized (10.7 ms): Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0x8703f3f0 exc 0x00000000)
 RUN   ctx_setthreadcontext_reserved_mxcsr_bits_sanitized
   XFAIL Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0xc000001d exc 0xc000001d)
-XFAIL ctx_setthreadcontext_reserved_mxcsr_bits_sanitized (14.7 ms): Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0xc000001d exc 0xc000001d)
+XFAIL ctx_setthreadcontext_reserved_mxcsr_bits_sanitized (13.4 ms): Wine 11.0: a CONTEXT MXCSR with reserved bits kills the process (exit 0xc000001d exc 0xc000001d)
 RUN   fxrstor_xrstor_reserved_mxcsr_fault
   INFO xrstor_x87_only_reserved_mxcsr = no fault
-PASS  fxrstor_xrstor_reserved_mxcsr_fault (34.4 ms)
+PASS  fxrstor_xrstor_reserved_mxcsr_fault (31.9 ms)
 RUN   env_preserved_across_cpu_migration
   INFO affinity_moves = 56 over 28 CPUs (0 refused)
-PASS  env_preserved_across_cpu_migration (118.2 ms)
+PASS  env_preserved_across_cpu_migration (127.8 ms)
 SUMMARY exe=fp_environment arch=x64 total=84 pass=79 fail=0 crash=0 skip=1 xfail=4 perf=0 checks=2844 checks_failed=0 exit=0

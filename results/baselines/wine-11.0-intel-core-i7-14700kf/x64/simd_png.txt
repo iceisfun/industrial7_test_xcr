@@ -1,0 +1,278 @@
+wineserver: using server-side synchronization.
+ENV   exe=simd_png arch=x64 wow64=0 os=10.0.19045.5796 (Windows 10 Pro 21H1) wine=11.0
+ENV   cpu="Intel(R) Core(TM) i7-14700KF" vendor=GenuineIntel family=0x6 model=0xb7 stepping=1 hypervisor=0 ncpu=28
+ENV   osxsave=1 xcr0=0x207 xcr0_supported=0x207 xss_supported=0x19900 xsave_size=2696/2696 api_xstate=0x7
+ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq monitor ssse3 fma cx16 sse4.1 sse4.2 movbe popcnt aes xsave osxsave avx f16c rdrand bmi1 avx2 bmi2 erms rdseed adx clflushopt clwb sha pku ospke waitpkg gfni vaes vpclmulqdq rdpid keylocker movdiri movdir64b fsrm md_clear serialize hybrid avx_vnni xsaveopt xsavec xgetbv1 lahf_lm lzcnt prefetchw syscall nx pdpe1gb rdtscp lm invariant_tsc
+RUN   kernel_sets_available
+  INFO scalar = usable
+  INFO sse2 = usable
+  INFO ssse3 = usable
+  INFO avx2 = usable
+  INFO crc32_pclmul = usable (AVX2 set folds CRC-32 with PCLMULQDQ)
+  INFO corpus = 419 images, 206 inflate vectors, 36 checksum vectors; Pillow cross-checked 194
+PASS  kernel_sets_available (0.5 ms)
+RUN   adler32_zlib_vectors_all_tiers
+  INFO variants_tested = 4
+PASS  adler32_zlib_vectors_all_tiers (4.5 ms)
+RUN   crc32_zlib_vectors_all_variants
+  INFO variants_tested = 3
+PASS  crc32_zlib_vectors_all_variants (9.9 ms)
+RUN   crc32_pclmul_available_matches_table
+PASS  crc32_pclmul_available_matches_table (1.2 ms)
+RUN   adler32_random_lengths_alignment_incremental
+PASS  adler32_random_lengths_alignment_incremental (22.0 ms)
+RUN   crc32_random_lengths_alignment_incremental
+PASS  crc32_random_lengths_alignment_incremental (122.4 ms)
+RUN   checksums_guard_page_tails
+PASS  checksums_guard_page_tails (3.6 ms)
+RUN   unfilter_scalar_vs_spec_reference
+PASS  unfilter_scalar_vs_spec_reference (5.2 ms)
+RUN   unfilter_roundtrip_all_tiers
+PASS  unfilter_roundtrip_all_tiers (5.4 ms)
+RUN   unfilter_sse2_vs_scalar
+  INFO rows = 21672
+PASS  unfilter_sse2_vs_scalar (24.1 ms)
+RUN   unfilter_ssse3_vs_scalar
+  INFO rows = 21672
+PASS  unfilter_ssse3_vs_scalar (23.9 ms)
+RUN   unfilter_avx2_vs_scalar
+  INFO rows = 21672
+PASS  unfilter_avx2_vs_scalar (23.8 ms)
+RUN   unfilter_guard_page_bounds
+PASS  unfilter_guard_page_bounds (7.3 ms)
+RUN   expand_scalar_vs_spec_reference
+  INFO rows = 3900
+PASS  expand_scalar_vs_spec_reference (3.0 ms)
+RUN   expand_sse2_vs_reference
+  INFO rows = 3900
+PASS  expand_sse2_vs_reference (2.9 ms)
+RUN   expand_ssse3_vs_reference
+  INFO rows = 3900
+PASS  expand_ssse3_vs_reference (3.0 ms)
+RUN   expand_avx2_vs_reference
+  INFO rows = 3900
+PASS  expand_avx2_vs_reference (3.0 ms)
+RUN   expand_guard_page_bounds_all_tiers
+  INFO rows = 2100
+  INFO rows = 2100
+  INFO rows = 2100
+  INFO rows = 2100
+PASS  expand_guard_page_bounds_all_tiers (188.5 ms)
+RUN   copy_match_tiers_vs_bytewise
+PASS  copy_match_tiers_vs_bytewise (46.5 ms)
+RUN   inflate_vectors_scalar
+  INFO vectors = 21 valid, 185 invalid/truncated
+PASS  inflate_vectors_scalar (5.7 ms)
+RUN   inflate_vectors_sse2
+  INFO vectors = 21 valid, 185 invalid/truncated
+PASS  inflate_vectors_sse2 (5.2 ms)
+RUN   inflate_vectors_ssse3
+  INFO vectors = 21 valid, 185 invalid/truncated
+PASS  inflate_vectors_ssse3 (5.1 ms)
+RUN   inflate_vectors_avx2
+  INFO vectors = 21 valid, 185 invalid/truncated
+PASS  inflate_vectors_avx2 (5.4 ms)
+RUN   inflate_runtime_fixed_huffman_roundtrip
+PASS  inflate_runtime_fixed_huffman_roundtrip (28.1 ms)
+RUN   corpus_valid_scalar
+  INFO images = 268
+PASS  corpus_valid_scalar (5.1 ms)
+RUN   corpus_valid_sse2
+  INFO images = 268
+PASS  corpus_valid_sse2 (4.2 ms)
+RUN   corpus_valid_ssse3
+  INFO images = 268
+PASS  corpus_valid_ssse3 (4.0 ms)
+RUN   corpus_valid_avx2
+  INFO images = 268
+PASS  corpus_valid_avx2 (4.1 ms)
+RUN   corpus_corrupt_scalar
+  INFO images = 151
+PASS  corpus_corrupt_scalar (0.5 ms)
+RUN   corpus_corrupt_sse2
+  INFO images = 151
+PASS  corpus_corrupt_sse2 (0.4 ms)
+RUN   corpus_corrupt_ssse3
+  INFO images = 151
+PASS  corpus_corrupt_ssse3 (0.4 ms)
+RUN   corpus_corrupt_avx2
+  INFO images = 151
+PASS  corpus_corrupt_avx2 (0.4 ms)
+RUN   corpus_guard_page_input_all_tiers
+PASS  corpus_guard_page_input_all_tiers (23.1 ms)
+RUN   trunc_every_prefix_rgb8
+PASS  trunc_every_prefix_rgb8 (19.9 ms)
+RUN   trunc_every_prefix_adam7
+PASS  trunc_every_prefix_adam7 (61.8 ms)
+RUN   trunc_every_prefix_palette_split_idat
+PASS  trunc_every_prefix_palette_split_idat (25.4 ms)
+RUN   fuzz_mutations_all_tiers_agree
+  INFO mutations = 1500: 206 decoded, 1294 errors, 48 ms
+PASS  fuzz_mutations_all_tiers_agree (95.9 ms)
+RUN   fuzz_child_process_consistent
+  INFO child_ms = 41
+PASS  fuzz_child_process_consistent (69.1 ms)
+RUN   api_invalid_arguments
+PASS  api_invalid_arguments (0.0 ms)
+RUN   api_max_pixels_limit
+PASS  api_max_pixels_limit (0.5 ms)
+RUN   api_image_metadata
+PASS  api_image_metadata (0.2 ms)
+RUN   corpus_files_match_embedded
+  INFO files = 313
+PASS  corpus_files_match_embedded (10.1 ms)
+RUN   synth_decode_matches_source_all_tiers
+PASS  synth_decode_matches_source_all_tiers (137.3 ms)
+RUN   mt_decode_16_threads
+  INFO threads = 16 of 16
+  INFO decodes = 960 in 13 ms
+PASS  mt_decode_16_threads (26.3 ms)
+RUN   mt_decode_256_threads
+  INFO threads = 256 of 256
+  INFO decodes = 2048 in 30 ms
+PASS  mt_decode_256_threads (109.2 ms)
+RUN   mt_decode_while_suspended_getcontext
+  INFO context = InitializeContext XSTATE, xstate mask 0x4
+  INFO suspend_cycles = 75500 in 1500 ms, 27487 decodes on 4 threads
+PASS  mt_decode_while_suspended_getcontext (1501.0 ms)
+RUN   mt_decode_while_context_roundtrip
+  INFO context = InitializeContext XSTATE, xstate mask 0x4
+  INFO suspend_cycles = 58372 in 1500 ms, 27851 decodes on 4 threads
+PASS  mt_decode_while_context_roundtrip (1501.0 ms)
+RUN   threadpool_callbacks_decode
+  INFO callbacks = 160
+PASS  threadpool_callbacks_decode (6.1 ms)
+RUN   fpenv_decode_preserves_mxcsr_and_x87
+PASS  fpenv_decode_preserves_mxcsr_and_x87 (0.8 ms)
+RUN   fpenv_results_independent_of_fp_modes
+PASS  fpenv_results_independent_of_fp_modes (17.2 ms)
+RUN   perf_decode_rgba8_scalar
+  PERF decode_rgba8_1024x768_scalar = 42.3551 MPix/s
+  INFO median_ms = 18.57 (min 18.42 max 18.94)
+PERF  perf_decode_rgba8_scalar (169.0 ms)
+RUN   perf_decode_rgba8_sse2
+  PERF decode_rgba8_1024x768_sse2 = 63.4537 MPix/s
+  INFO median_ms = 12.39 (min 12.25 max 12.57)
+PERF  perf_decode_rgba8_sse2 (112.5 ms)
+RUN   perf_decode_rgba8_ssse3
+  PERF decode_rgba8_1024x768_ssse3 = 62.2981 MPix/s
+  INFO median_ms = 12.62 (min 12.51 max 12.76)
+PERF  perf_decode_rgba8_ssse3 (114.0 ms)
+RUN   perf_decode_rgba8_avx2
+  PERF decode_rgba8_1024x768_avx2 = 64.1331 MPix/s
+  INFO median_ms = 12.26 (min 12.24 max 13.06)
+PERF  perf_decode_rgba8_avx2 (111.9 ms)
+RUN   perf_decode_adam7_scalar
+  PERF decode_rgb8_adam7_640x480_scalar = 45.253 MPix/s
+  INFO median_ms = 6.79 (min 6.77 max 6.82)
+PERF  perf_decode_adam7_scalar (61.6 ms)
+RUN   perf_decode_adam7_sse2
+  PERF decode_rgb8_adam7_640x480_sse2 = 59.152 MPix/s
+  INFO median_ms = 5.19 (min 5.16 max 5.37)
+PERF  perf_decode_adam7_sse2 (47.2 ms)
+RUN   perf_decode_adam7_ssse3
+  PERF decode_rgb8_adam7_640x480_ssse3 = 61.5742 MPix/s
+  INFO median_ms = 4.99 (min 4.97 max 5.24)
+PERF  perf_decode_adam7_ssse3 (45.5 ms)
+RUN   perf_decode_adam7_avx2
+  PERF decode_rgb8_adam7_640x480_avx2 = 62.3048 MPix/s
+  INFO median_ms = 4.93 (min 4.89 max 5.01)
+PERF  perf_decode_adam7_avx2 (44.7 ms)
+RUN   perf_inflate_scalar
+  PERF inflate_fixed_scalar = 344.41 MB/s
+  PERF inflate_dynamic_scalar = 345.629 MB/s
+PERF  perf_inflate_scalar (103.3 ms)
+RUN   perf_inflate_sse2
+  PERF inflate_fixed_sse2 = 419.376 MB/s
+  PERF inflate_dynamic_sse2 = 463.965 MB/s
+PERF  perf_inflate_sse2 (87.7 ms)
+RUN   perf_inflate_ssse3
+  PERF inflate_fixed_ssse3 = 420.104 MB/s
+  PERF inflate_dynamic_ssse3 = 475.108 MB/s
+PERF  perf_inflate_ssse3 (87.3 ms)
+RUN   perf_inflate_avx2
+  PERF inflate_fixed_avx2 = 403.097 MB/s
+  PERF inflate_dynamic_avx2 = 458.641 MB/s
+PERF  perf_inflate_avx2 (90.0 ms)
+RUN   perf_kernel_unfilter_sub_bpp4
+  PERF unfilter_sub_bpp4_scalar = 2769.22 MB/s
+  PERF unfilter_sub_bpp4_sse2 = 12168.4 MB/s
+  INFO speedup_sse2 = 4.39x
+  PERF unfilter_sub_bpp4_ssse3 = 12189.1 MB/s
+  INFO speedup_ssse3 = 4.40x
+  PERF unfilter_sub_bpp4_avx2 = 11968.3 MB/s
+  INFO speedup_avx2 = 4.32x
+PERF  perf_kernel_unfilter_sub_bpp4 (73.9 ms)
+RUN   perf_kernel_unfilter_up
+  PERF unfilter_up_scalar = 3936.29 MB/s
+  PERF unfilter_up_sse2 = 59864 MB/s
+  INFO speedup_sse2 = 15.21x
+  PERF unfilter_up_ssse3 = 56379.3 MB/s
+  INFO speedup_ssse3 = 14.32x
+  PERF unfilter_up_avx2 = 71748.5 MB/s
+  INFO speedup_avx2 = 18.23x
+PERF  perf_kernel_unfilter_up (73.1 ms)
+RUN   perf_kernel_unfilter_avg_bpp3
+  PERF unfilter_avg_bpp3_scalar = 1822.16 MB/s
+  PERF unfilter_avg_bpp3_sse2 = 3713.27 MB/s
+  INFO speedup_sse2 = 2.04x
+  PERF unfilter_avg_bpp3_ssse3 = 3718.54 MB/s
+  INFO speedup_ssse3 = 2.04x
+  PERF unfilter_avg_bpp3_avx2 = 3413.33 MB/s
+  INFO speedup_avx2 = 1.87x
+PERF  perf_kernel_unfilter_avg_bpp3 (74.6 ms)
+RUN   perf_kernel_unfilter_paeth_bpp4
+  PERF unfilter_paeth_bpp4_scalar = 248.761 MB/s
+  PERF unfilter_paeth_bpp4_sse2 = 1380.23 MB/s
+  INFO speedup_sse2 = 5.55x
+  PERF unfilter_paeth_bpp4_ssse3 = 1431.77 MB/s
+  INFO speedup_ssse3 = 5.76x
+  PERF unfilter_paeth_bpp4_avx2 = 1486.01 MB/s
+  INFO speedup_avx2 = 5.97x
+PERF  perf_kernel_unfilter_paeth_bpp4 (78.8 ms)
+RUN   perf_kernel_unfilter_paeth_bpp1
+  PERF unfilter_paeth_bpp1_scalar = 217.746 MB/s
+  PERF unfilter_paeth_bpp1_sse2 = 217.394 MB/s
+  INFO speedup_sse2 = 1.00x
+  PERF unfilter_paeth_bpp1_ssse3 = 217.8 MB/s
+  INFO speedup_ssse3 = 1.00x
+  PERF unfilter_paeth_bpp1_avx2 = 218.026 MB/s
+  INFO speedup_avx2 = 1.00x
+PERF  perf_kernel_unfilter_paeth_bpp1 (97.3 ms)
+RUN   perf_kernel_adler32
+  PERF adler32_scalar = 4699.56 MB/s
+  PERF adler32_sse2 = 26733.3 MB/s
+  INFO speedup_sse2 = 5.69x
+  PERF adler32_ssse3 = 33620 MB/s
+  INFO speedup_ssse3 = 7.15x
+  PERF adler32_avx2 = 55874.3 MB/s
+  INFO speedup_avx2 = 11.89x
+PERF  perf_kernel_adler32 (72.7 ms)
+RUN   perf_kernel_crc32
+  PERF crc32_scalar = 682.024 MB/s
+  PERF crc32_sse2 = 3622.76 MB/s
+  INFO speedup_sse2 = 5.31x
+  PERF crc32_ssse3 = 3608.2 MB/s
+  INFO speedup_ssse3 = 5.29x
+  PERF crc32_avx2 = 40542.5 MB/s
+  INFO speedup_avx2 = 59.44x
+PERF  perf_kernel_crc32 (73.1 ms)
+RUN   perf_kernel_expand_rgb8
+  PERF expand_rgb8_in_scalar = 4481.6 MB/s
+  PERF expand_rgb8_in_sse2 = 4407.81 MB/s
+  INFO speedup_sse2 = 0.98x
+  PERF expand_rgb8_in_ssse3 = 30295.3 MB/s
+  INFO speedup_ssse3 = 6.76x
+  PERF expand_rgb8_in_avx2 = 38556.4 MB/s
+  INFO speedup_avx2 = 8.60x
+PERF  perf_kernel_expand_rgb8 (72.8 ms)
+RUN   perf_kernel_expand_palette8
+  PERF expand_pal8_in_scalar = 2730.94 MB/s
+  PERF expand_pal8_in_sse2 = 2730.4 MB/s
+  INFO speedup_sse2 = 1.00x
+  PERF expand_pal8_in_ssse3 = 2730.8 MB/s
+  INFO speedup_ssse3 = 1.00x
+  PERF expand_pal8_in_avx2 = 9536.31 MB/s
+  INFO speedup_avx2 = 3.49x
+PERF  perf_kernel_expand_palette8 (73.2 ms)
+SUMMARY exe=simd_png arch=x64 total=71 pass=50 fail=0 crash=0 skip=0 xfail=0 perf=21 checks=479 checks_failed=0 exit=0

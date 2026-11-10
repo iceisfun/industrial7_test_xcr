@@ -6,455 +6,455 @@ ENV   usable: fpu tsc cx8 cmov clflush mmx fxsr sse sse2 htt sse3 pclmulqdq moni
 RUN   selftest_pattern_words
   INFO daz_supported = 1
   INFO explain_example = worker-APC pattern of #17 reg 9 word 2
-PASS  selftest_pattern_words (0.4 ms)
+PASS  selftest_pattern_words (0.2 ms)
 RUN   selftest_compute_reference
 PASS  selftest_compute_reference (0.0 ms)
 RUN   probe_rounding_reference
 PASS  probe_rounding_reference (0.0 ms)
 RUN   selftest_oracle_analyzer
-PASS  selftest_oracle_analyzer (0.1 ms)
+PASS  selftest_oracle_analyzer (0.0 ms)
 RUN   xstate_capture_probe
   INFO xstate_capture = ok
-PASS  xstate_capture_probe (21.0 ms)
+PASS  xstate_capture_probe (20.8 ms)
 RUN   iso_xmm_spin_preempt_only
   INFO threads = 16
   INFO config = ops=0x9 yields=0x1 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 68299
+  INFO iterations = 64049
   INFO apc_holds = 0
-  INFO ops = hold=34357 x87=0 mmx=0 compute=33942 call=0
-  INFO yields = spin=68299
-PASS  iso_xmm_spin_preempt_only (145.3 ms)
+  INFO ops = hold=32237 x87=0 mmx=0 compute=31812 call=0
+  INFO yields = spin=64049
+PASS  iso_xmm_spin_preempt_only (148.2 ms)
 RUN   iso_xmm_switchtothread
   INFO threads = 16
   INFO config = ops=0x9 yields=0x2 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 69464
+  INFO iterations = 68835
   INFO apc_holds = 0
-  INFO ops = hold=34709 x87=0 mmx=0 compute=34755 call=0
-  INFO yields = SwitchToThread=69464
-PASS  iso_xmm_switchtothread (126.7 ms)
+  INFO ops = hold=34405 x87=0 mmx=0 compute=34430 call=0
+  INFO yields = SwitchToThread=68835
+PASS  iso_xmm_switchtothread (126.8 ms)
 RUN   iso_xmm_sleep0
   INFO threads = 16
   INFO config = ops=0x9 yields=0x4 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 68497
+  INFO iterations = 66952
   INFO apc_holds = 0
-  INFO ops = hold=34248 x87=0 mmx=0 compute=34249 call=0
-  INFO yields = Sleep(0)=68497
-PASS  iso_xmm_sleep0 (126.3 ms)
+  INFO ops = hold=33505 x87=0 mmx=0 compute=33447 call=0
+  INFO yields = Sleep(0)=66952
+PASS  iso_xmm_sleep0 (127.0 ms)
 RUN   iso_xmm_sleep1
   INFO threads = 16
   INFO config = ops=0x9 yields=0x8 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 1801
+  INFO iterations = 1769
   INFO apc_holds = 0
-  INFO ops = hold=918 x87=0 mmx=0 compute=883 call=0
-  INFO yields = Sleep(1)=1801
-PASS  iso_xmm_sleep1 (126.9 ms)
+  INFO ops = hold=904 x87=0 mmx=0 compute=865 call=0
+  INFO yields = Sleep(1)=1769
+PASS  iso_xmm_sleep1 (133.1 ms)
 RUN   iso_xmm_event_pingpong
   INFO threads = 16
   INFO config = ops=0x9 yields=0x10 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 22424
+  INFO iterations = 4106
   INFO apc_holds = 0
-  INFO ops = hold=11217 x87=0 mmx=0 compute=11207 call=0
-  INFO yields = event-pingpong=22424
-PASS  iso_xmm_event_pingpong (125.5 ms)
+  INFO ops = hold=2051 x87=0 mmx=0 compute=2055 call=0
+  INFO yields = event-pingpong=4106
+PASS  iso_xmm_event_pingpong (136.4 ms)
 RUN   iso_xmm_waitable_timer
   INFO threads = 16
   INFO config = ops=0x9 yields=0x20 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 3430
+  INFO iterations = 3427
   INFO apc_holds = 0
-  INFO ops = hold=1760 x87=0 mmx=0 compute=1670 call=0
-  INFO yields = waitable-timer=3430
-PASS  iso_xmm_waitable_timer (125.7 ms)
+  INFO ops = hold=1757 x87=0 mmx=0 compute=1670 call=0
+  INFO yields = waitable-timer=3427
+PASS  iso_xmm_waitable_timer (126.2 ms)
 RUN   iso_xmm_self_apc
   INFO threads = 16
   INFO config = ops=0x9 yields=0x40 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 27479
-  INFO apc_holds = 27479
-  INFO ops = hold=13776 x87=0 mmx=0 compute=13703 call=0
-  INFO yields = self-APC=27479
-PASS  iso_xmm_self_apc (125.9 ms)
+  INFO iterations = 19728
+  INFO apc_holds = 19728
+  INFO ops = hold=9867 x87=0 mmx=0 compute=9861 call=0
+  INFO yields = self-APC=19728
+PASS  iso_xmm_self_apc (125.2 ms)
 RUN   iso_xmm_alertable_sleepex
   INFO threads = 16
   INFO config = ops=0x9 yields=0x80 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 3542
+  INFO iterations = 3526
   INFO apc_holds = 0
-  INFO ops = hold=1797 x87=0 mmx=0 compute=1745 call=0
-  INFO yields = alertable-SleepEx=3542
-PASS  iso_xmm_alertable_sleepex (125.4 ms)
+  INFO ops = hold=1789 x87=0 mmx=0 compute=1737 call=0
+  INFO yields = alertable-SleepEx=3526
+PASS  iso_xmm_alertable_sleepex (125.7 ms)
 RUN   iso_xmm_critsec_contention
   INFO threads = 16
   INFO config = ops=0x9 yields=0x100 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 53479
+  INFO iterations = 64270
   INFO apc_holds = 0
-  INFO ops = hold=26608 x87=0 mmx=0 compute=26871 call=0
-  INFO yields = critical-section=53479
-PASS  iso_xmm_critsec_contention (125.7 ms)
+  INFO ops = hold=32020 x87=0 mmx=0 compute=32250 call=0
+  INFO yields = critical-section=64270
+PASS  iso_xmm_critsec_contention (125.2 ms)
 RUN   iso_xmm_srwlock_contention
   INFO threads = 16
   INFO config = ops=0x9 yields=0x200 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 55096
+  INFO iterations = 55283
   INFO apc_holds = 0
-  INFO ops = hold=27501 x87=0 mmx=0 compute=27595 call=0
-  INFO yields = SRW-lock=55096
-PASS  iso_xmm_srwlock_contention (125.3 ms)
+  INFO ops = hold=27599 x87=0 mmx=0 compute=27684 call=0
+  INFO yields = SRW-lock=55283
+PASS  iso_xmm_srwlock_contention (125.1 ms)
 RUN   iso_xmm_semaphore_contention
   INFO threads = 16
   INFO config = ops=0x9 yields=0x400 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 34430
+  INFO iterations = 35874
   INFO apc_holds = 0
-  INFO ops = hold=17034 x87=0 mmx=0 compute=17396 call=0
-  INFO yields = semaphore=34430
-PASS  iso_xmm_semaphore_contention (125.2 ms)
+  INFO ops = hold=17726 x87=0 mmx=0 compute=18148 call=0
+  INFO yields = semaphore=35874
+PASS  iso_xmm_semaphore_contention (125.8 ms)
 RUN   iso_xmm_blocking_syscalls
   INFO threads = 16
   INFO config = ops=0x9 yields=0x800 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 8719
+  INFO iterations = 8778
   INFO apc_holds = 0
-  INFO ops = hold=4404 x87=0 mmx=0 compute=4315 call=0
-  INFO yields = syscalls=8719
-PASS  iso_xmm_blocking_syscalls (124.8 ms)
+  INFO ops = hold=4429 x87=0 mmx=0 compute=4349 call=0
+  INFO yields = syscalls=8778
+PASS  iso_xmm_blocking_syscalls (126.0 ms)
 RUN   iso_xmm_self_affinity_hop
   INFO threads = 16
   INFO config = ops=0x9 yields=0x1000 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 11292
+  INFO iterations = 20149
   INFO apc_holds = 0
-  INFO ops = hold=5648 x87=0 mmx=0 compute=5644 call=0
-  INFO yields = affinity-hop=11292
-PASS  iso_xmm_self_affinity_hop (126.1 ms)
+  INFO ops = hold=10103 x87=0 mmx=0 compute=10046 call=0
+  INFO yields = affinity-hop=20149
+PASS  iso_xmm_self_affinity_hop (125.9 ms)
 RUN   iso_xmm_self_priority_change
   INFO threads = 16
   INFO config = ops=0x9 yields=0x2000 ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 53864
+  INFO iterations = 54179
   INFO apc_holds = 0
-  INFO ops = hold=27085 x87=0 mmx=0 compute=26779 call=0
-  INFO yields = priority-change=53864
-PASS  iso_xmm_self_priority_change (126.0 ms)
+  INFO ops = hold=27194 x87=0 mmx=0 compute=26985 call=0
+  INFO yields = priority-change=54179
+PASS  iso_xmm_self_priority_change (125.0 ms)
 RUN   iso_ymm_spin_preempt_only
   INFO threads = 16
   INFO config = ops=0x9 yields=0x1 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 67067
+  INFO iterations = 65322
   INFO apc_holds = 0
-  INFO ops = hold=33440 x87=0 mmx=0 compute=33627 call=0
-  INFO yields = spin=67067
-PASS  iso_ymm_spin_preempt_only (126.0 ms)
+  INFO ops = hold=32603 x87=0 mmx=0 compute=32719 call=0
+  INFO yields = spin=65322
+PASS  iso_ymm_spin_preempt_only (125.6 ms)
 RUN   iso_ymm_switchtothread
   INFO threads = 16
   INFO config = ops=0x9 yields=0x2 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 70706
+  INFO iterations = 66741
   INFO apc_holds = 0
-  INFO ops = hold=35492 x87=0 mmx=0 compute=35214 call=0
-  INFO yields = SwitchToThread=70706
-PASS  iso_ymm_switchtothread (126.1 ms)
+  INFO ops = hold=33484 x87=0 mmx=0 compute=33257 call=0
+  INFO yields = SwitchToThread=66741
+PASS  iso_ymm_switchtothread (126.2 ms)
 RUN   iso_ymm_sleep0
   INFO threads = 16
   INFO config = ops=0x9 yields=0x4 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 67760
+  INFO iterations = 66845
   INFO apc_holds = 0
-  INFO ops = hold=33708 x87=0 mmx=0 compute=34052 call=0
-  INFO yields = Sleep(0)=67760
-PASS  iso_ymm_sleep0 (125.3 ms)
+  INFO ops = hold=33304 x87=0 mmx=0 compute=33541 call=0
+  INFO yields = Sleep(0)=66845
+PASS  iso_ymm_sleep0 (126.5 ms)
 RUN   iso_ymm_sleep1
   INFO threads = 16
   INFO config = ops=0x9 yields=0x8 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 1811
+  INFO iterations = 1806
   INFO apc_holds = 0
-  INFO ops = hold=924 x87=0 mmx=0 compute=887 call=0
-  INFO yields = Sleep(1)=1811
-PASS  iso_ymm_sleep1 (125.3 ms)
+  INFO ops = hold=924 x87=0 mmx=0 compute=882 call=0
+  INFO yields = Sleep(1)=1806
+PASS  iso_ymm_sleep1 (125.0 ms)
 RUN   iso_ymm_event_pingpong
   INFO threads = 16
   INFO config = ops=0x9 yields=0x10 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 22009
+  INFO iterations = 10409
   INFO apc_holds = 0
-  INFO ops = hold=10989 x87=0 mmx=0 compute=11020 call=0
-  INFO yields = event-pingpong=22009
-PASS  iso_ymm_event_pingpong (125.1 ms)
+  INFO ops = hold=5217 x87=0 mmx=0 compute=5192 call=0
+  INFO yields = event-pingpong=10409
+PASS  iso_ymm_event_pingpong (127.1 ms)
 RUN   iso_ymm_waitable_timer
   INFO threads = 16
   INFO config = ops=0x9 yields=0x20 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 3434
+  INFO iterations = 3420
   INFO apc_holds = 0
-  INFO ops = hold=1714 x87=0 mmx=0 compute=1720 call=0
-  INFO yields = waitable-timer=3434
-PASS  iso_ymm_waitable_timer (125.1 ms)
+  INFO ops = hold=1710 x87=0 mmx=0 compute=1710 call=0
+  INFO yields = waitable-timer=3420
+PASS  iso_ymm_waitable_timer (125.9 ms)
 RUN   iso_ymm_self_apc
   INFO threads = 16
   INFO config = ops=0x9 yields=0x40 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 25967
-  INFO apc_holds = 25967
-  INFO ops = hold=12875 x87=0 mmx=0 compute=13092 call=0
-  INFO yields = self-APC=25967
-PASS  iso_ymm_self_apc (125.6 ms)
+  INFO iterations = 26874
+  INFO apc_holds = 26874
+  INFO ops = hold=13330 x87=0 mmx=0 compute=13544 call=0
+  INFO yields = self-APC=26874
+PASS  iso_ymm_self_apc (125.8 ms)
 RUN   iso_ymm_alertable_sleepex
   INFO threads = 16
   INFO config = ops=0x9 yields=0x80 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 3556
+  INFO iterations = 3561
   INFO apc_holds = 0
-  INFO ops = hold=1778 x87=0 mmx=0 compute=1778 call=0
-  INFO yields = alertable-SleepEx=3556
-PASS  iso_ymm_alertable_sleepex (126.7 ms)
+  INFO ops = hold=1785 x87=0 mmx=0 compute=1776 call=0
+  INFO yields = alertable-SleepEx=3561
+PASS  iso_ymm_alertable_sleepex (126.5 ms)
 RUN   iso_ymm_critsec_contention
   INFO threads = 16
   INFO config = ops=0x9 yields=0x100 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 65734
+  INFO iterations = 61739
   INFO apc_holds = 0
-  INFO ops = hold=32891 x87=0 mmx=0 compute=32843 call=0
-  INFO yields = critical-section=65734
-PASS  iso_ymm_critsec_contention (125.9 ms)
+  INFO ops = hold=30889 x87=0 mmx=0 compute=30850 call=0
+  INFO yields = critical-section=61739
+PASS  iso_ymm_critsec_contention (125.8 ms)
 RUN   iso_ymm_srwlock_contention
   INFO threads = 16
   INFO config = ops=0x9 yields=0x200 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 53192
+  INFO iterations = 53340
   INFO apc_holds = 0
-  INFO ops = hold=26565 x87=0 mmx=0 compute=26627 call=0
-  INFO yields = SRW-lock=53192
-PASS  iso_ymm_srwlock_contention (125.5 ms)
+  INFO ops = hold=26551 x87=0 mmx=0 compute=26789 call=0
+  INFO yields = SRW-lock=53340
+PASS  iso_ymm_srwlock_contention (126.8 ms)
 RUN   iso_ymm_semaphore_contention
   INFO threads = 16
   INFO config = ops=0x9 yields=0x400 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 24520
+  INFO iterations = 35505
   INFO apc_holds = 0
-  INFO ops = hold=12402 x87=0 mmx=0 compute=12118 call=0
-  INFO yields = semaphore=24520
-PASS  iso_ymm_semaphore_contention (125.8 ms)
+  INFO ops = hold=17920 x87=0 mmx=0 compute=17585 call=0
+  INFO yields = semaphore=35505
+PASS  iso_ymm_semaphore_contention (125.1 ms)
 RUN   iso_ymm_blocking_syscalls
   INFO threads = 16
   INFO config = ops=0x9 yields=0x800 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 8678
+  INFO iterations = 9098
   INFO apc_holds = 0
-  INFO ops = hold=4317 x87=0 mmx=0 compute=4361 call=0
-  INFO yields = syscalls=8678
-PASS  iso_ymm_blocking_syscalls (125.3 ms)
+  INFO ops = hold=4522 x87=0 mmx=0 compute=4576 call=0
+  INFO yields = syscalls=9098
+PASS  iso_ymm_blocking_syscalls (125.5 ms)
 RUN   iso_ymm_self_affinity_hop
   INFO threads = 16
   INFO config = ops=0x9 yields=0x1000 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 6786
+  INFO iterations = 17659
   INFO apc_holds = 0
-  INFO ops = hold=3347 x87=0 mmx=0 compute=3439 call=0
-  INFO yields = affinity-hop=6786
-PASS  iso_ymm_self_affinity_hop (126.4 ms)
+  INFO ops = hold=8689 x87=0 mmx=0 compute=8970 call=0
+  INFO yields = affinity-hop=17659
+PASS  iso_ymm_self_affinity_hop (126.0 ms)
 RUN   iso_ymm_self_priority_change
   INFO threads = 16
   INFO config = ops=0x9 yields=0x2000 ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 51980
+  INFO iterations = 50353
   INFO apc_holds = 0
-  INFO ops = hold=25833 x87=0 mmx=0 compute=26147 call=0
-  INFO yields = priority-change=51980
-PASS  iso_ymm_self_priority_change (125.0 ms)
+  INFO ops = hold=24985 x87=0 mmx=0 compute=25368 call=0
+  INFO yields = priority-change=50353
+PASS  iso_ymm_self_priority_change (126.1 ms)
 RUN   iso_x87_stack_all_yields
   INFO threads = 16
   INFO config = ops=0x2 yields=0x3fff ctl=0x0 tmr=0x0 kind=3 spin=2000 ms=120 xstate=0
-  INFO iterations = 6208
-  INFO apc_holds = 450
-  INFO ops = hold=0 x87=6208 mmx=0 compute=0 call=0
-  INFO yields = spin=516 SwitchToThread=448 Sleep(0)=408 Sleep(1)=459 event-pingpong=422 waitable-timer=409 self-APC=450 alertable-SleepEx=435 critical-section=467 SRW-lock=445 semaphore=456 syscalls=441 affinity-hop=407 priority-change=445
-PASS  iso_x87_stack_all_yields (126.3 ms)
+  INFO iterations = 6451
+  INFO apc_holds = 474
+  INFO ops = hold=0 x87=6451 mmx=0 compute=0 call=0
+  INFO yields = spin=527 SwitchToThread=471 Sleep(0)=425 Sleep(1)=476 event-pingpong=436 waitable-timer=423 self-APC=474 alertable-SleepEx=441 critical-section=485 SRW-lock=467 semaphore=474 syscalls=459 affinity-hop=433 priority-change=460
+PASS  iso_x87_stack_all_yields (125.7 ms)
 RUN   iso_mmx_all_yields
   INFO threads = 16
   INFO config = ops=0x4 yields=0x3fff ctl=0x0 tmr=0x0 kind=3 spin=2000 ms=120 xstate=0
-  INFO iterations = 6048
-  INFO apc_holds = 418
-  INFO ops = hold=0 x87=0 mmx=6048 compute=0 call=0
-  INFO yields = spin=381 SwitchToThread=429 Sleep(0)=448 Sleep(1)=415 event-pingpong=456 waitable-timer=467 self-APC=418 alertable-SleepEx=414 critical-section=458 SRW-lock=414 semaphore=440 syscalls=448 affinity-hop=424 priority-change=436
-PASS  iso_mmx_all_yields (126.2 ms)
+  INFO iterations = 6532
+  INFO apc_holds = 454
+  INFO ops = hold=0 x87=0 mmx=6532 compute=0 call=0
+  INFO yields = spin=410 SwitchToThread=476 Sleep(0)=497 Sleep(1)=459 event-pingpong=496 waitable-timer=483 self-APC=454 alertable-SleepEx=446 critical-section=494 SRW-lock=441 semaphore=472 syscalls=489 affinity-hop=453 priority-change=462
+PASS  iso_mmx_all_yields (127.0 ms)
 RUN   iso_compute_xmm_all_yields
   INFO threads = 16
   INFO config = ops=0x8 yields=0x3fff ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 7933
-  INFO apc_holds = 536
-  INFO ops = hold=0 x87=0 mmx=0 compute=7933 call=0
-  INFO yields = spin=568 SwitchToThread=566 Sleep(0)=545 Sleep(1)=565 event-pingpong=576 waitable-timer=538 self-APC=536 alertable-SleepEx=535 critical-section=601 SRW-lock=601 semaphore=564 syscalls=598 affinity-hop=581 priority-change=559
-PASS  iso_compute_xmm_all_yields (128.0 ms)
+  INFO iterations = 8658
+  INFO apc_holds = 589
+  INFO ops = hold=0 x87=0 mmx=0 compute=8658 call=0
+  INFO yields = spin=621 SwitchToThread=628 Sleep(0)=595 Sleep(1)=637 event-pingpong=626 waitable-timer=581 self-APC=589 alertable-SleepEx=588 critical-section=638 SRW-lock=641 semaphore=614 syscalls=652 affinity-hop=640 priority-change=608
+PASS  iso_compute_xmm_all_yields (127.5 ms)
 RUN   iso_compute_ymm_all_yields
   INFO threads = 16
   INFO config = ops=0x8 yields=0x3fff ctl=0x0 tmr=0x0 kind=2 spin=2000 ms=120 xstate=0
-  INFO iterations = 7761
-  INFO apc_holds = 591
-  INFO ops = hold=0 x87=0 mmx=0 compute=7761 call=0
-  INFO yields = spin=572 SwitchToThread=525 Sleep(0)=573 Sleep(1)=565 event-pingpong=522 waitable-timer=516 self-APC=591 alertable-SleepEx=563 critical-section=555 SRW-lock=554 semaphore=584 syscalls=546 affinity-hop=526 priority-change=569
-PASS  iso_compute_ymm_all_yields (130.8 ms)
+  INFO iterations = 8627
+  INFO apc_holds = 657
+  INFO ops = hold=0 x87=0 mmx=0 compute=8627 call=0
+  INFO yields = spin=619 SwitchToThread=598 Sleep(0)=635 Sleep(1)=633 event-pingpong=573 waitable-timer=591 self-APC=657 alertable-SleepEx=615 critical-section=614 SRW-lock=608 semaphore=645 syscalls=621 affinity-hop=591 priority-change=627
+PASS  iso_compute_ymm_all_yields (126.6 ms)
 RUN   iso_call_nonvolatile_all_yields
   INFO threads = 16
   INFO config = ops=0x10 yields=0x3fff ctl=0x0 tmr=0x0 kind=1 spin=2000 ms=120 xstate=0
-  INFO iterations = 3526
-  INFO apc_holds = 517
-  INFO ops = hold=0 x87=0 mmx=0 compute=0 call=3526
-  INFO yields = spin=515 SwitchToThread=484 Sleep(0)=518 Sleep(1)=516 event-pingpong=508 waitable-timer=503 self-APC=517 alertable-SleepEx=507 critical-section=477 SRW-lock=477 semaphore=496 syscalls=492 affinity-hop=513 priority-change=529
-PASS  iso_call_nonvolatile_all_yields (127.4 ms)
+  INFO iterations = 4343
+  INFO apc_holds = 642
+  INFO ops = hold=0 x87=0 mmx=0 compute=0 call=4343
+  INFO yields = spin=633 SwitchToThread=613 Sleep(0)=644 Sleep(1)=613 event-pingpong=627 waitable-timer=617 self-APC=642 alertable-SleepEx=626 critical-section=590 SRW-lock=592 semaphore=621 syscalls=617 affinity-hop=627 priority-change=624
+PASS  iso_call_nonvolatile_all_yields (126.2 ms)
 RUN   iso_all_ops_2_threads
   INFO threads = 2
   INFO config = ops=0x1f yields=0x3fff ctl=0x0 tmr=0x0 kind=3 spin=2000 ms=150 xstate=0
-  INFO iterations = 872
-  INFO apc_holds = 75
-  INFO ops = hold=182 x87=163 mmx=192 compute=186 call=149
-  INFO yields = spin=66 SwitchToThread=83 Sleep(0)=70 Sleep(1)=73 event-pingpong=63 waitable-timer=58 self-APC=75 alertable-SleepEx=80 critical-section=74 SRW-lock=79 semaphore=76 syscalls=76 affinity-hop=64 priority-change=84
-PASS  iso_all_ops_2_threads (155.0 ms)
+  INFO iterations = 1011
+  INFO apc_holds = 89
+  INFO ops = hold=214 x87=191 mmx=216 compute=207 call=183
+  INFO yields = spin=73 SwitchToThread=99 Sleep(0)=86 Sleep(1)=82 event-pingpong=72 waitable-timer=70 self-APC=89 alertable-SleepEx=96 critical-section=88 SRW-lock=89 semaphore=86 syscalls=89 affinity-hop=82 priority-change=93
+PASS  iso_all_ops_2_threads (154.0 ms)
 RUN   iso_all_ops_4_threads
   INFO threads = 4
   INFO config = ops=0x1f yields=0x3fff ctl=0x0 tmr=0x0 kind=3 spin=2000 ms=150 xstate=0
-  INFO iterations = 1563
-  INFO apc_holds = 127
-  INFO ops = hold=306 x87=316 mmx=323 compute=300 call=318
-  INFO yields = spin=148 SwitchToThread=143 Sleep(0)=141 Sleep(1)=134 event-pingpong=140 waitable-timer=116 self-APC=127 alertable-SleepEx=136 critical-section=151 SRW-lock=135 semaphore=126 syscalls=120 affinity-hop=126 priority-change=138
-PASS  iso_all_ops_4_threads (156.4 ms)
+  INFO iterations = 1867
+  INFO apc_holds = 158
+  INFO ops = hold=365 x87=388 mmx=386 compute=351 call=377
+  INFO yields = spin=174 SwitchToThread=171 Sleep(0)=164 Sleep(1)=165 event-pingpong=163 waitable-timer=145 self-APC=158 alertable-SleepEx=171 critical-section=181 SRW-lock=155 semaphore=145 syscalls=144 affinity-hop=144 priority-change=164
+PASS  iso_all_ops_4_threads (155.0 ms)
 RUN   scale_64_threads_all_ops
   INFO threads = 64
   INFO config = ops=0x1f yields=0x3fff ctl=0x0 tmr=0x0 kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 38472
-  INFO apc_holds = 3294
-  INFO ops = hold=7761 x87=7590 mmx=7813 compute=7695 call=7613
-  INFO yields = spin=3288 SwitchToThread=3310 Sleep(0)=3307 Sleep(1)=3295 event-pingpong=3356 waitable-timer=3333 self-APC=3294 alertable-SleepEx=3255 critical-section=3284 SRW-lock=3204 semaphore=3280 syscalls=3295 affinity-hop=3304 priority-change=3280
-PASS  scale_64_threads_all_ops (312.9 ms)
+  INFO iterations = 49718
+  INFO apc_holds = 4230
+  INFO ops = hold=10021 x87=9852 mmx=9974 compute=10001 call=9870
+  INFO yields = spin=4214 SwitchToThread=4264 Sleep(0)=4281 Sleep(1)=4187 event-pingpong=4348 waitable-timer=4319 self-APC=4230 alertable-SleepEx=4261 critical-section=4233 SRW-lock=4171 semaphore=4279 syscalls=4264 affinity-hop=4287 priority-change=4250
+PASS  scale_64_threads_all_ops (310.8 ms)
 RUN   scale_256_threads_all_ops
   INFO threads = 256
   INFO config = ops=0x1f yields=0x3ffe ctl=0x0 tmr=0x0 kind=3 spin=500 ms=400 xstate=0
-  INFO iterations = 79825
-  INFO apc_holds = 7406
-  INFO ops = hold=15969 x87=15951 mmx=15994 compute=15992 call=15919
-  INFO yields = SwitchToThread=7515 Sleep(0)=7407 Sleep(1)=7251 event-pingpong=7388 waitable-timer=7286 self-APC=7406 alertable-SleepEx=7357 critical-section=7305 SRW-lock=7347 semaphore=7448 syscalls=7357 affinity-hop=7313 priority-change=7364
-PASS  scale_256_threads_all_ops (485.1 ms)
+  INFO iterations = 55650
+  INFO apc_holds = 5168
+  INFO ops = hold=11038 x87=11127 mmx=11174 compute=11164 call=11147
+  INFO yields = SwitchToThread=5269 Sleep(0)=5184 Sleep(1)=5032 event-pingpong=5089 waitable-timer=5081 self-APC=5168 alertable-SleepEx=5120 critical-section=5094 SRW-lock=5148 semaphore=5214 syscalls=5100 affinity-hop=5165 priority-change=5133
+PASS  scale_256_threads_all_ops (482.1 ms)
 RUN   scale_2x_cpus_spin_preempt
   INFO threads = 56
   INFO config = ops=0xf yields=0x1 ctl=0x0 tmr=0x0 kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 122054
+  INFO iterations = 139564
   INFO apc_holds = 0
-  INFO ops = hold=30527 x87=30384 mmx=30711 compute=30432 call=0
-  INFO yields = spin=122054
-PASS  scale_2x_cpus_spin_preempt (261.5 ms)
+  INFO ops = hold=34829 x87=34777 mmx=35146 compute=34812 call=0
+  INFO yields = spin=139564
+PASS  scale_2x_cpus_spin_preempt (262.8 ms)
 RUN   ctl_suspend_resume_only
   INFO threads = 16
   INFO config = ops=0xf yields=0x3fff ctl=0x1 tmr=0x0 kind=3 spin=2000 ms=200 xstate=0
-  INFO iterations = 9582
-  INFO apc_holds = 706
-  INFO ops = hold=2316 x87=2438 mmx=2454 compute=2374 call=0
-  INFO yields = spin=665 SwitchToThread=633 Sleep(0)=676 Sleep(1)=692 event-pingpong=687 waitable-timer=677 self-APC=706 alertable-SleepEx=706 critical-section=707 SRW-lock=699 semaphore=675 syscalls=686 affinity-hop=687 priority-change=686
-  INFO ctl = suspends=2086 captures=0 hold_hits=0 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_suspend_resume_only (208.0 ms)
+  INFO iterations = 11363
+  INFO apc_holds = 841
+  INFO ops = hold=2746 x87=2865 mmx=2920 compute=2832 call=0
+  INFO yields = spin=791 SwitchToThread=756 Sleep(0)=803 Sleep(1)=824 event-pingpong=831 waitable-timer=788 self-APC=841 alertable-SleepEx=834 critical-section=828 SRW-lock=819 semaphore=807 syscalls=812 affinity-hop=807 priority-change=822
+  INFO ctl = suspends=8223 captures=0 hold_hits=0 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_suspend_resume_only (208.7 ms)
 RUN   ctl_getctx_xmm_hold
   INFO threads = 8
   INFO config = ops=0x1 yields=0x4 ctl=0x2 tmr=0x0 kind=1 spin=2000 ms=200 xstate=0
-  INFO iterations = 25323
+  INFO iterations = 18844
   INFO apc_holds = 0
-  INFO ops = hold=25323 x87=0 mmx=0 compute=0 call=0
-  INFO yields = Sleep(0)=25323
-  INFO ctl = suspends=7888 captures=7888 hold_hits=7708 (apc 0) asm_other=18 outside=162 checked_outside=162 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_getctx_xmm_hold (205.6 ms)
+  INFO ops = hold=18844 x87=0 mmx=0 compute=0 call=0
+  INFO yields = Sleep(0)=18844
+  INFO ctl = suspends=8751 captures=8751 hold_hits=8625 (apc 0) asm_other=8 outside=118 checked_outside=118 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_getctx_xmm_hold (205.9 ms)
 RUN   ctl_getctx_x87_hold
   INFO threads = 8
   INFO config = ops=0x2 yields=0x2 ctl=0x2 tmr=0x0 kind=1 spin=2000 ms=200 xstate=0
-  INFO iterations = 24272
+  INFO iterations = 19456
   INFO apc_holds = 0
-  INFO ops = hold=0 x87=24272 mmx=0 compute=0 call=0
-  INFO yields = SwitchToThread=24272
-  INFO ctl = suspends=6953 captures=6953 hold_hits=6804 (apc 0) asm_other=10 outside=139 checked_outside=139 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_getctx_x87_hold (205.8 ms)
+  INFO ops = hold=0 x87=19456 mmx=0 compute=0 call=0
+  INFO yields = SwitchToThread=19456
+  INFO ctl = suspends=8506 captures=8506 hold_hits=8383 (apc 0) asm_other=3 outside=120 checked_outside=120 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_getctx_x87_hold (206.0 ms)
 RUN   ctl_getctx_mmx_hold
   INFO threads = 8
   INFO config = ops=0x4 yields=0x2 ctl=0x2 tmr=0x0 kind=1 spin=2000 ms=200 xstate=0
-  INFO iterations = 26799
+  INFO iterations = 23240
   INFO apc_holds = 0
-  INFO ops = hold=0 x87=0 mmx=26799 compute=0 call=0
-  INFO yields = SwitchToThread=26799
-  INFO ctl = suspends=8511 captures=8511 hold_hits=8293 (apc 0) asm_other=16 outside=202 checked_outside=202 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_getctx_mmx_hold (206.0 ms)
+  INFO ops = hold=0 x87=0 mmx=23240 compute=0 call=0
+  INFO yields = SwitchToThread=23240
+  INFO ctl = suspends=9004 captures=9004 hold_hits=8827 (apc 0) asm_other=15 outside=162 checked_outside=162 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_getctx_mmx_hold (206.2 ms)
 RUN   ctl_getctx_mixed_ops_all_yields
   INFO threads = 16
   INFO config = ops=0x1f yields=0x3fff ctl=0x2 tmr=0x0 kind=1 spin=2000 ms=250 xstate=0
-  INFO iterations = 10472
-  INFO apc_holds = 897
-  INFO ops = hold=2056 x87=2102 mmx=2133 compute=2090 call=2091
-  INFO yields = spin=909 SwitchToThread=841 Sleep(0)=971 Sleep(1)=944 event-pingpong=916 waitable-timer=906 self-APC=897 alertable-SleepEx=894 critical-section=853 SRW-lock=869 semaphore=869 syscalls=883 affinity-hop=922 priority-change=889
-  INFO ctl = suspends=2149 captures=2149 hold_hits=343 (apc 17) asm_other=0 outside=1806 checked_outside=1793 apc_skip=13 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_getctx_mixed_ops_all_yields (261.2 ms)
+  INFO iterations = 12498
+  INFO apc_holds = 1091
+  INFO ops = hold=2453 x87=2506 mmx=2532 compute=2529 call=2478
+  INFO yields = spin=1075 SwitchToThread=1031 Sleep(0)=1141 Sleep(1)=1102 event-pingpong=1079 waitable-timer=1082 self-APC=1091 alertable-SleepEx=1074 critical-section=1022 SRW-lock=1047 semaphore=1030 syscalls=1074 affinity-hop=1088 priority-change=1040
+  INFO ctl = suspends=7365 captures=7365 hold_hits=1162 (apc 63) asm_other=1 outside=6202 checked_outside=6187 apc_skip=15 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_getctx_mixed_ops_all_yields (258.2 ms)
 RUN   ctl_getctx_xstate_ymm_hold
   INFO threads = 8
   INFO config = ops=0x1 yields=0x4 ctl=0x4 tmr=0x0 kind=2 spin=2000 ms=200 xstate=1
-  INFO iterations = 24098
+  INFO iterations = 19962
   INFO apc_holds = 0
-  INFO ops = hold=24098 x87=0 mmx=0 compute=0 call=0
-  INFO yields = Sleep(0)=24098
-  INFO ctl = suspends=7973 captures=7973 hold_hits=7779 (apc 0) asm_other=20 outside=174 checked_outside=174 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_getctx_xstate_ymm_hold (205.7 ms)
+  INFO ops = hold=19962 x87=0 mmx=0 compute=0 call=0
+  INFO yields = Sleep(0)=19962
+  INFO ctl = suspends=8760 captures=8760 hold_hits=8589 (apc 0) asm_other=20 outside=151 checked_outside=151 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_getctx_xstate_ymm_hold (206.6 ms)
 RUN   ctl_getctx_xstate_xmm_uppers_clean
   INFO threads = 8
   INFO config = ops=0x7 yields=0x804 ctl=0x4 tmr=0x0 kind=1 spin=2000 ms=200 xstate=1
-  INFO iterations = 14666
+  INFO iterations = 13841
   INFO apc_holds = 0
-  INFO ops = hold=4907 x87=4829 mmx=4930 compute=0 call=0
-  INFO yields = Sleep(0)=7433 syscalls=7233
-  INFO ctl = suspends=8042 captures=8042 hold_hits=5148 (apc 0) asm_other=10 outside=2884 checked_outside=2884 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_getctx_xstate_xmm_uppers_clean (205.5 ms)
+  INFO ops = hold=4622 x87=4561 mmx=4658 compute=0 call=0
+  INFO yields = Sleep(0)=7011 syscalls=6830
+  INFO ctl = suspends=7622 captures=7622 hold_hits=5566 (apc 0) asm_other=12 outside=2044 checked_outside=2044 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_getctx_xstate_xmm_uppers_clean (206.1 ms)
 RUN   ctl_getctx_xstate_mixed_kinds
   INFO threads = 16
   INFO config = ops=0x1f yields=0x3fff ctl=0x4 tmr=0x0 kind=3 spin=2000 ms=250 xstate=1
-  INFO iterations = 11852
-  INFO apc_holds = 1013
-  INFO ops = hold=2366 x87=2323 mmx=2424 compute=2368 call=2371
-  INFO yields = spin=1063 SwitchToThread=1006 Sleep(0)=1000 Sleep(1)=1044 event-pingpong=977 waitable-timer=1016 self-APC=1013 alertable-SleepEx=983 critical-section=998 SRW-lock=1048 semaphore=1022 syscalls=1010 affinity-hop=998 priority-change=1045
-  INFO ctl = suspends=3177 captures=3177 hold_hits=472 (apc 28) asm_other=1 outside=2704 checked_outside=2696 apc_skip=8 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_getctx_xstate_mixed_kinds (258.7 ms)
+  INFO iterations = 12819
+  INFO apc_holds = 1099
+  INFO ops = hold=2559 x87=2513 mmx=2607 compute=2574 call=2566
+  INFO yields = spin=1149 SwitchToThread=1083 Sleep(0)=1085 Sleep(1)=1143 event-pingpong=1052 waitable-timer=1102 self-APC=1099 alertable-SleepEx=1084 critical-section=1073 SRW-lock=1119 semaphore=1108 syscalls=1086 affinity-hop=1077 priority-change=1125
+  INFO ctl = suspends=8744 captures=8744 hold_hits=1353 (apc 69) asm_other=4 outside=7387 checked_outside=7365 apc_skip=22 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_getctx_xstate_mixed_kinds (259.7 ms)
 RUN   ctl_setctx_unchanged_xmm
   INFO threads = 8
   INFO config = ops=0x9 yields=0xc ctl=0x12 tmr=0x0 kind=1 spin=2000 ms=200 xstate=0
-  INFO iterations = 2873
+  INFO iterations = 2827
   INFO apc_holds = 0
-  INFO ops = hold=1463 x87=0 mmx=0 compute=1410 call=0
-  INFO yields = Sleep(0)=1419 Sleep(1)=1454
-  INFO ctl = suspends=6898 captures=6898 hold_hits=365 (apc 0) asm_other=3 outside=6530 checked_outside=6530 apc_skip=0 sets=6898 aff=0 prio=0 apc=0
-PASS  ctl_setctx_unchanged_xmm (206.0 ms)
+  INFO ops = hold=1439 x87=0 mmx=0 compute=1388 call=0
+  INFO yields = Sleep(0)=1394 Sleep(1)=1433
+  INFO ctl = suspends=7753 captures=7753 hold_hits=537 (apc 0) asm_other=2 outside=7214 checked_outside=7214 apc_skip=0 sets=7753 aff=0 prio=0 apc=0
+PASS  ctl_setctx_unchanged_xmm (206.7 ms)
 RUN   ctl_setctx_unchanged_x87_mmx
   INFO threads = 8
   INFO config = ops=0x6 yields=0xa ctl=0x12 tmr=0x0 kind=1 spin=2000 ms=200 xstate=0
-  INFO iterations = 2759
+  INFO iterations = 2723
   INFO apc_holds = 0
-  INFO ops = hold=0 x87=1381 mmx=1378 compute=0 call=0
-  INFO yields = SwitchToThread=1392 Sleep(1)=1367
-  INFO ctl = suspends=8243 captures=8243 hold_hits=946 (apc 0) asm_other=1 outside=7296 checked_outside=7296 apc_skip=0 sets=8243 aff=0 prio=0 apc=0
-PASS  ctl_setctx_unchanged_x87_mmx (206.1 ms)
+  INFO ops = hold=0 x87=1366 mmx=1357 compute=0 call=0
+  INFO yields = SwitchToThread=1376 Sleep(1)=1347
+  INFO ctl = suspends=7789 captures=7789 hold_hits=968 (apc 0) asm_other=0 outside=6821 checked_outside=6821 apc_skip=0 sets=7789 aff=0 prio=0 apc=0
+PASS  ctl_setctx_unchanged_x87_mmx (206.5 ms)
 RUN   ctl_setctx_unchanged_ymm_xstate
   INFO threads = 8
   INFO config = ops=0x9 yields=0x84 ctl=0x14 tmr=0x0 kind=2 spin=2000 ms=200 xstate=1
-  INFO iterations = 5669
+  INFO iterations = 5678
   INFO apc_holds = 0
-  INFO ops = hold=2798 x87=0 mmx=0 compute=2871 call=0
-  INFO yields = Sleep(0)=2831 alertable-SleepEx=2838
-  INFO ctl = suspends=7875 captures=7875 hold_hits=916 (apc 0) asm_other=1 outside=6958 checked_outside=6958 apc_skip=0 sets=7875 aff=0 prio=0 apc=0
-PASS  ctl_setctx_unchanged_ymm_xstate (206.9 ms)
+  INFO ops = hold=2799 x87=0 mmx=0 compute=2879 call=0
+  INFO yields = Sleep(0)=2836 alertable-SleepEx=2842
+  INFO ctl = suspends=7536 captures=7536 hold_hits=897 (apc 0) asm_other=4 outside=6635 checked_outside=6635 apc_skip=0 sets=7536 aff=0 prio=0 apc=0
+PASS  ctl_setctx_unchanged_ymm_xstate (207.7 ms)
 RUN   ctl_setctx_unchanged_mixed_all
   INFO threads = 16
   INFO config = ops=0x1f yields=0x3fff ctl=0x18 tmr=0x0 kind=3 spin=2000 ms=250 xstate=1
-  INFO iterations = 12045
-  INFO apc_holds = 1076
-  INFO ops = hold=2361 x87=2363 mmx=2400 compute=2484 call=2437
-  INFO yields = spin=1034 SwitchToThread=1069 Sleep(0)=1038 Sleep(1)=1040 event-pingpong=1029 waitable-timer=1024 self-APC=1076 alertable-SleepEx=1046 critical-section=977 SRW-lock=1036 semaphore=964 syscalls=1053 affinity-hop=1036 priority-change=1060
-  INFO ctl = suspends=3624 captures=3624 hold_hits=578 (apc 27) asm_other=1 outside=3045 checked_outside=3033 apc_skip=12 sets=3624 aff=0 prio=0 apc=0
-PASS  ctl_setctx_unchanged_mixed_all (260.3 ms)
+  INFO iterations = 12147
+  INFO apc_holds = 1082
+  INFO ops = hold=2383 x87=2381 mmx=2422 compute=2504 call=2457
+  INFO yields = spin=1043 SwitchToThread=1080 Sleep(0)=1038 Sleep(1)=1049 event-pingpong=1045 waitable-timer=1021 self-APC=1082 alertable-SleepEx=1055 critical-section=990 SRW-lock=1045 semaphore=979 syscalls=1059 affinity-hop=1046 priority-change=1072
+  INFO ctl = suspends=5335 captures=5335 hold_hits=761 (apc 36) asm_other=4 outside=4570 checked_outside=4557 apc_skip=13 sets=5335 aff=0 prio=0 apc=0
+PASS  ctl_setctx_unchanged_mixed_all (260.4 ms)
 RUN   ctl_victim_affinity_hops
   INFO threads = 16
   INFO config = ops=0xf yields=0x5 ctl=0x28 tmr=0x0 kind=3 spin=2000 ms=200 xstate=1
-  INFO iterations = 52045
+  INFO iterations = 47617
   INFO apc_holds = 0
-  INFO ops = hold=13036 x87=13267 mmx=12865 compute=12877 call=0
-  INFO yields = spin=25956 Sleep(0)=26089
-  INFO ctl = suspends=2699 captures=2699 hold_hits=2279 (apc 0) asm_other=4 outside=416 checked_outside=416 apc_skip=0 sets=0 aff=671 prio=0 apc=0
-PASS  ctl_victim_affinity_hops (208.0 ms)
+  INFO ops = hold=11922 x87=12163 mmx=11762 compute=11770 call=0
+  INFO yields = spin=23751 Sleep(0)=23866
+  INFO ctl = suspends=2217 captures=2217 hold_hits=1859 (apc 0) asm_other=3 outside=355 checked_outside=355 apc_skip=0 sets=0 aff=542 prio=0 apc=0
+PASS  ctl_victim_affinity_hops (207.2 ms)
 RUN   ctl_victim_priority_changes
   INFO threads = 16
   INFO config = ops=0xf yields=0x3 ctl=0x48 tmr=0x0 kind=3 spin=2000 ms=200 xstate=1
-  INFO iterations = 61367
+  INFO iterations = 69615
   INFO apc_holds = 0
-  INFO ops = hold=15476 x87=15166 mmx=15339 compute=15386 call=0
-  INFO yields = spin=30600 SwitchToThread=30767
-  INFO ctl = suspends=7481 captures=7481 hold_hits=7252 (apc 0) asm_other=16 outside=213 checked_outside=213 apc_skip=0 sets=0 aff=0 prio=1942 apc=0
-PASS  ctl_victim_priority_changes (207.3 ms)
+  INFO ops = hold=17590 x87=17201 mmx=17513 compute=17311 call=0
+  INFO yields = spin=34676 SwitchToThread=34939
+  INFO ctl = suspends=7657 captures=7657 hold_hits=7386 (apc 0) asm_other=12 outside=259 checked_outside=259 apc_skip=0 sets=0 aff=0 prio=1985 apc=0
+PASS  ctl_victim_priority_changes (207.0 ms)
 RUN   ctl_apc_injection
   INFO threads = 8
   INFO config = ops=0x7 yields=0xb0 ctl=0x88 tmr=0x0 kind=3 spin=2000 ms=250 xstate=1
-  INFO iterations = 6220
-  INFO apc_holds = 2482
-  INFO ops = hold=2076 x87=2093 mmx=2051 compute=0 call=0
-  INFO yields = event-pingpong=2100 waitable-timer=2026 alertable-SleepEx=2094
-  INFO ctl = suspends=10007 captures=10007 hold_hits=2682 (apc 343) asm_other=7 outside=7318 checked_outside=5312 apc_skip=2006 sets=0 aff=0 prio=0 apc=2482
-PASS  ctl_apc_injection (258.5 ms)
+  INFO iterations = 6230
+  INFO apc_holds = 2361
+  INFO ops = hold=2075 x87=2083 mmx=2072 compute=0 call=0
+  INFO yields = event-pingpong=2117 waitable-timer=2007 alertable-SleepEx=2106
+  INFO ctl = suspends=9512 captures=9512 hold_hits=2069 (apc 233) asm_other=2 outside=7441 checked_outside=5362 apc_skip=2079 sets=0 aff=0 prio=0 apc=2361
+PASS  ctl_apc_injection (257.3 ms)
 RUN   ctl_oracle_long_hold_xmm
   INFO threads = 1
   INFO config = ops=0x1 yields=0x1 ctl=0x2 tmr=0x0 kind=1 spin=200000 ms=250 xstate=0
@@ -462,8 +462,8 @@ RUN   ctl_oracle_long_hold_xmm
   INFO apc_holds = 0
   INFO ops = hold=2 x87=0 mmx=0 compute=0 call=0
   INFO yields = spin=2
-  INFO ctl = suspends=11693 captures=11693 hold_hits=11693 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-PASS  ctl_oracle_long_hold_xmm (270.6 ms)
+  INFO ctl = suspends=12274 captures=12274 hold_hits=12274 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+PASS  ctl_oracle_long_hold_xmm (273.3 ms)
 RUN   ctl_oracle_long_hold_x87
   INFO threads = 1
   INFO config = ops=0x2 yields=0x1 ctl=0x12 tmr=0x0 kind=1 spin=200000 ms=250 xstate=0
@@ -471,8 +471,8 @@ RUN   ctl_oracle_long_hold_x87
   INFO apc_holds = 0
   INFO ops = hold=0 x87=2 mmx=0 compute=0 call=0
   INFO yields = spin=2
-  INFO ctl = suspends=11063 captures=11063 hold_hits=11063 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=11063 aff=0 prio=0 apc=0
-PASS  ctl_oracle_long_hold_x87 (269.3 ms)
+  INFO ctl = suspends=10990 captures=10990 hold_hits=10990 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=10990 aff=0 prio=0 apc=0
+PASS  ctl_oracle_long_hold_x87 (263.6 ms)
 RUN   ctl_oracle_long_hold_mmx
   INFO threads = 1
   INFO config = ops=0x4 yields=0x1 ctl=0x12 tmr=0x0 kind=1 spin=200000 ms=250 xstate=0
@@ -480,8 +480,8 @@ RUN   ctl_oracle_long_hold_mmx
   INFO apc_holds = 0
   INFO ops = hold=0 x87=0 mmx=2 compute=0 call=0
   INFO yields = spin=2
-  INFO ctl = suspends=11887 captures=11887 hold_hits=11887 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=11887 aff=0 prio=0 apc=0
-PASS  ctl_oracle_long_hold_mmx (270.5 ms)
+  INFO ctl = suspends=8860 captures=8860 hold_hits=8860 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=8860 aff=0 prio=0 apc=0
+PASS  ctl_oracle_long_hold_mmx (270.9 ms)
 RUN   ctl_oracle_long_hold_ymm_xstate
   INFO threads = 1
   INFO config = ops=0x1 yields=0x1 ctl=0x14 tmr=0x0 kind=2 spin=200000 ms=250 xstate=1
@@ -489,161 +489,162 @@ RUN   ctl_oracle_long_hold_ymm_xstate
   INFO apc_holds = 0
   INFO ops = hold=2 x87=0 mmx=0 compute=0 call=0
   INFO yields = spin=2
-  INFO ctl = suspends=12689 captures=12689 hold_hits=12689 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=12689 aff=0 prio=0 apc=0
-PASS  ctl_oracle_long_hold_ymm_xstate (273.6 ms)
+  INFO ctl = suspends=10970 captures=10970 hold_hits=10970 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=10970 aff=0 prio=0 apc=0
+PASS  ctl_oracle_long_hold_ymm_xstate (275.7 ms)
 RUN   ctl_oracle_during_yielding_calls
   INFO threads = 8
   INFO config = ops=0x10 yields=0x82c ctl=0x18 tmr=0x0 kind=1 spin=2000 ms=200 xstate=1
-  INFO iterations = 1995
+  INFO iterations = 2007
   INFO apc_holds = 0
-  INFO ops = hold=0 x87=0 mmx=0 compute=0 call=1995
-  INFO yields = Sleep(0)=967 Sleep(1)=994 waitable-timer=1001 syscalls=1028
-  INFO ctl = suspends=6480 captures=6480 hold_hits=0 (apc 0) asm_other=0 outside=6480 checked_outside=6480 apc_skip=0 sets=6480 aff=0 prio=0 apc=0
-PASS  ctl_oracle_during_yielding_calls (207.5 ms)
+  INFO ops = hold=0 x87=0 mmx=0 compute=0 call=2007
+  INFO yields = Sleep(0)=973 Sleep(1)=1002 waitable-timer=1009 syscalls=1030
+  INFO ctl = suspends=7694 captures=7694 hold_hits=0 (apc 0) asm_other=3 outside=7691 checked_outside=7691 apc_skip=0 sets=7694 aff=0 prio=0 apc=0
+PASS  ctl_oracle_during_yielding_calls (209.1 ms)
 RUN   preempt_one_cpu_long_holds
-  INFO hold_calibration = 20000 PAUSE iterations in 0.290 ms -> spin 1836547 for ~40 ms holds
+  INFO hold_calibration = 20000 PAUSE iterations in 0.290 ms -> spin 1835915 for ~40 ms holds
   INFO threads = 4
-  INFO config = ops=0x7 yields=0x1 ctl=0x0 tmr=0x0 kind=3 spin=1836547 ms=500 xstate=0
-  INFO iterations = 14
+  INFO config = ops=0x7 yields=0x1 ctl=0x0 tmr=0x0 kind=3 spin=1835915 ms=500 xstate=0
+  INFO iterations = 15
   INFO apc_holds = 0
-  INFO ops = hold=4 x87=5 mmx=5 compute=0 call=0
-  INFO yields = spin=14
-  INFO holds_descheduled = 13 of 14 timed holds took > 2x hold_ms (pinned=1)
-PASS  preempt_one_cpu_long_holds (557.7 ms)
+  INFO ops = hold=5 x87=4 mmx=6 compute=0 call=0
+  INFO yields = spin=15
+  INFO holds_descheduled = 14 of 15 timed holds took > 2x hold_ms (pinned=1)
+PASS  preempt_one_cpu_long_holds (565.6 ms)
 RUN   preempt_one_cpu_long_holds_captured
-  INFO hold_calibration = 20000 PAUSE iterations in 0.297 ms -> spin 1345442 for ~30 ms holds
+  INFO hold_calibration = 20000 PAUSE iterations in 0.290 ms -> spin 1377410 for ~30 ms holds
   INFO threads = 4
-  INFO config = ops=0x7 yields=0x3 ctl=0x18 tmr=0x0 kind=3 spin=1345442 ms=500 xstate=1
-  INFO iterations = 19
+  INFO config = ops=0x7 yields=0x3 ctl=0x18 tmr=0x0 kind=3 spin=1377410 ms=500 xstate=1
+  INFO iterations = 20
   INFO apc_holds = 0
-  INFO ops = hold=5 x87=4 mmx=10 compute=0 call=0
-  INFO yields = spin=10 SwitchToThread=9
-  INFO holds_descheduled = 19 of 19 timed holds took > 2x hold_ms (pinned=1)
-  INFO ctl = suspends=157 captures=157 hold_hits=151 (apc 0) asm_other=0 outside=6 checked_outside=6 apc_skip=0 sets=157 aff=0 prio=0 apc=0
-PASS  preempt_one_cpu_long_holds_captured (575.9 ms)
+  INFO ops = hold=6 x87=4 mmx=10 compute=0 call=0
+  INFO yields = spin=11 SwitchToThread=9
+  INFO holds_descheduled = 18 of 20 timed holds took > 2x hold_ms (pinned=1)
+  INFO ctl = suspends=159 captures=159 hold_hits=154 (apc 0) asm_other=0 outside=5 checked_outside=5 apc_skip=0 sets=159 aff=0 prio=0 apc=0
+PASS  preempt_one_cpu_long_holds_captured (558.0 ms)
 RUN   preempt_pairs_per_cpu
-  INFO hold_calibration = 20000 PAUSE iterations in 0.297 ms -> spin 672494 for ~15 ms holds
+  INFO hold_calibration = 20000 PAUSE iterations in 0.290 ms -> spin 688468 for ~15 ms holds
   INFO threads = 56
-  INFO config = ops=0xf yields=0x3 ctl=0x0 tmr=0x0 kind=3 spin=672494 ms=500 xstate=0
-  INFO iterations = 905
+  INFO config = ops=0xf yields=0x3 ctl=0x0 tmr=0x0 kind=3 spin=688468 ms=500 xstate=0
+  INFO iterations = 897
   INFO apc_holds = 0
-  INFO ops = hold=222 x87=231 mmx=219 compute=233 call=0
-  INFO yields = spin=445 SwitchToThread=460
-  INFO holds_descheduled = 431 of 672 timed holds took > 2x hold_ms (pinned=2)
-PASS  preempt_pairs_per_cpu (577.3 ms)
+  INFO ops = hold=221 x87=232 mmx=212 compute=232 call=0
+  INFO yields = spin=445 SwitchToThread=452
+  INFO holds_descheduled = 434 of 665 timed holds took > 2x hold_ms (pinned=2)
+PASS  preempt_pairs_per_cpu (558.9 ms)
 RUN   ctl_migrate_during_long_holds
   INFO hold_calibration = 20000 PAUSE iterations in 0.601 ms -> spin 110852 for ~5 ms holds
   INFO threads = 8
   INFO config = ops=0x7 yields=0x1 ctl=0x28 tmr=0x0 kind=3 spin=110852 ms=400 xstate=1
-  INFO iterations = 720
+  INFO iterations = 796
   INFO apc_holds = 0
-  INFO ops = hold=254 x87=230 mmx=236 compute=0 call=0
-  INFO yields = spin=720
-  INFO holds_descheduled = 35 of 720 timed holds took > 2x hold_ms (pinned=0)
-  INFO ctl = suspends=985 captures=985 hold_hits=985 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=0 aff=240 prio=0 apc=0
-PASS  ctl_migrate_during_long_holds (417.4 ms)
+  INFO ops = hold=281 x87=254 mmx=261 compute=0 call=0
+  INFO yields = spin=796
+  INFO holds_descheduled = 30 of 796 timed holds took > 2x hold_ms (pinned=0)
+  INFO ctl = suspends=918 captures=918 hold_hits=916 (apc 0) asm_other=0 outside=2 checked_outside=2 apc_skip=0 sets=0 aff=221 prio=0 apc=0
+PASS  ctl_migrate_during_long_holds (420.4 ms)
 RUN   ctl_everything_2x_cpus
   INFO threads = 56
   INFO config = ops=0x1f yields=0x3fff ctl=0xf8 tmr=0x0 kind=3 spin=2000 ms=400 xstate=1
-  INFO iterations = 65830
-  INFO apc_holds = 6087
-  INFO ops = hold=13256 x87=13240 mmx=13120 compute=13096 call=13118
-  INFO yields = spin=5632 SwitchToThread=5648 Sleep(0)=5662 Sleep(1)=5633 event-pingpong=5602 waitable-timer=5637 self-APC=5771 alertable-SleepEx=5641 critical-section=5618 SRW-lock=5562 semaphore=5476 syscalls=5725 affinity-hop=5662 priority-change=5679
-  INFO ctl = suspends=3664 captures=3664 hold_hits=515 (apc 43) asm_other=0 outside=3149 checked_outside=2835 apc_skip=314 sets=3664 aff=338 prio=294 apc=316
-PASS  ctl_everything_2x_cpus (418.5 ms)
+  INFO iterations = 64987
+  INFO apc_holds = 6001
+  INFO ops = hold=13149 x87=13061 mmx=12933 compute=12926 call=12918
+  INFO yields = spin=5590 SwitchToThread=5553 Sleep(0)=5589 Sleep(1)=5543 event-pingpong=5530 waitable-timer=5593 self-APC=5684 alertable-SleepEx=5591 critical-section=5550 SRW-lock=5475 semaphore=5396 syscalls=5633 affinity-hop=5597 priority-change=5581
+  INFO ctl = suspends=3686 captures=3686 hold_hits=562 (apc 47) asm_other=3 outside=3121 checked_outside=2822 apc_skip=299 sets=3686 aff=338 prio=294 apc=317
+PASS  ctl_everything_2x_cpus (417.8 ms)
 RUN   tmr_queue_apc_injection
   INFO threads = 16
   INFO config = ops=0x7 yields=0x90 ctl=0x0 tmr=0x5 kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 8409
-  INFO apc_holds = 253
-  INFO ops = hold=2804 x87=2826 mmx=2779 compute=0 call=0
-  INFO yields = event-pingpong=4210 alertable-SleepEx=4199
-  INFO timers = ticks=253 apc=253 wake=0 kick=0 callback_holds=0
-PASS  tmr_queue_apc_injection (277.4 ms)
+  INFO iterations = 8590
+  INFO apc_holds = 252
+  INFO ops = hold=2910 x87=2860 mmx=2820 compute=0 call=0
+  INFO yields = event-pingpong=4323 alertable-SleepEx=4267
+  INFO timers = ticks=252 apc=252 wake=0 kick=0 callback_holds=0
+PASS  tmr_queue_apc_injection (278.1 ms)
 RUN   tmr_queue_kick_suspend
   INFO threads = 16
   INFO config = ops=0xf yields=0x5 ctl=0x0 tmr=0x11 kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 102477
+  INFO iterations = 100985
   INFO apc_holds = 0
-  INFO ops = hold=25630 x87=25476 mmx=25640 compute=25731 call=0
-  INFO yields = spin=51280 Sleep(0)=51197
-  INFO timers = ticks=252 apc=0 wake=0 kick=251 callback_holds=0
-PASS  tmr_queue_kick_suspend (277.7 ms)
+  INFO ops = hold=25144 x87=25100 mmx=25314 compute=25427 call=0
+  INFO yields = spin=50662 Sleep(0)=50323
+  INFO timers = ticks=253 apc=0 wake=0 kick=252 callback_holds=0
+PASS  tmr_queue_kick_suspend (276.9 ms)
 RUN   tmr_queue_wake_events
   INFO threads = 16
   INFO config = ops=0x7 yields=0x10 ctl=0x0 tmr=0x9 kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 46451
+  INFO iterations = 42971
   INFO apc_holds = 0
-  INFO ops = hold=15379 x87=15675 mmx=15397 compute=0 call=0
-  INFO yields = event-pingpong=46451
+  INFO ops = hold=14201 x87=14512 mmx=14258 compute=0 call=0
+  INFO yields = event-pingpong=42971
   INFO timers = ticks=253 apc=0 wake=253 kick=0 callback_holds=0
-PASS  tmr_queue_wake_events (277.4 ms)
+PASS  tmr_queue_wake_events (277.5 ms)
 RUN   tmr_queue_callback_regs
   INFO threads = 8
   INFO config = ops=0x1f yields=0x3fff ctl=0x0 tmr=0x21 kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 6192
-  INFO apc_holds = 559
-  INFO ops = hold=1267 x87=1185 mmx=1269 compute=1244 call=1227
-  INFO yields = spin=497 SwitchToThread=534 Sleep(0)=532 Sleep(1)=511 event-pingpong=533 waitable-timer=530 self-APC=559 alertable-SleepEx=540 critical-section=534 SRW-lock=553 semaphore=515 syscalls=541 affinity-hop=532 priority-change=508
-  INFO timers = ticks=253 apc=0 wake=0 kick=0 callback_holds=253
-PASS  tmr_queue_callback_regs (277.3 ms)
+  INFO iterations = 6139
+  INFO apc_holds = 558
+  INFO ops = hold=1262 x87=1171 mmx=1259 compute=1227 call=1220
+  INFO yields = spin=491 SwitchToThread=538 Sleep(0)=526 Sleep(1)=502 event-pingpong=527 waitable-timer=522 self-APC=558 alertable-SleepEx=538 critical-section=520 SRW-lock=548 semaphore=516 syscalls=541 affinity-hop=525 priority-change=507
+  INFO timers = ticks=252 apc=0 wake=0 kick=0 callback_holds=252
+PASS  tmr_queue_callback_regs (278.5 ms)
 RUN   tmr_mm_apc_injection
   INFO threads = 16
   INFO config = ops=0x7 yields=0xa0 ctl=0x0 tmr=0x6 kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 7754
+  INFO iterations = 7676
   INFO apc_holds = 252
-  INFO ops = hold=2644 x87=2524 mmx=2586 compute=0 call=0
-  INFO yields = waitable-timer=3836 alertable-SleepEx=3918
+  INFO ops = hold=2620 x87=2470 mmx=2586 compute=0 call=0
+  INFO yields = waitable-timer=3802 alertable-SleepEx=3874
   INFO timers = ticks=252 apc=252 wake=0 kick=0 callback_holds=0
-PASS  tmr_mm_apc_injection (297.5 ms)
+PASS  tmr_mm_apc_injection (299.7 ms)
 RUN   tmr_mm_kick_suspend
   INFO threads = 16
   INFO config = ops=0xf yields=0x3 ctl=0x0 tmr=0x12 kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 96919
+  INFO iterations = 105452
   INFO apc_holds = 0
-  INFO ops = hold=24185 x87=24456 mmx=24112 compute=24166 call=0
-  INFO yields = spin=48743 SwitchToThread=48176
-  INFO timers = ticks=253 apc=0 wake=0 kick=253 callback_holds=0
-PASS  tmr_mm_kick_suspend (277.3 ms)
+  INFO ops = hold=26175 x87=26622 mmx=26351 compute=26304 call=0
+  INFO yields = spin=52928 SwitchToThread=52524
+  INFO timers = ticks=252 apc=0 wake=0 kick=252 callback_holds=0
+PASS  tmr_mm_kick_suspend (277.4 ms)
 RUN   tmr_mm_callback_regs
   INFO threads = 8
   INFO config = ops=0x1f yields=0x3fff ctl=0x0 tmr=0x2a kind=3 spin=2000 ms=250 xstate=0
-  INFO iterations = 7197
-  INFO apc_holds = 609
-  INFO ops = hold=1460 x87=1450 mmx=1433 compute=1405 call=1449
-  INFO yields = spin=621 SwitchToThread=616 Sleep(0)=593 Sleep(1)=634 event-pingpong=596 waitable-timer=638 self-APC=609 alertable-SleepEx=624 critical-section=606 SRW-lock=590 semaphore=616 syscalls=657 affinity-hop=643 priority-change=603
-  INFO timers = ticks=253 apc=0 wake=253 kick=0 callback_holds=253
-PASS  tmr_mm_callback_regs (277.2 ms)
+  INFO iterations = 6423
+  INFO apc_holds = 542
+  INFO ops = hold=1298 x87=1287 mmx=1281 compute=1270 call=1287
+  INFO yields = spin=562 SwitchToThread=554 Sleep(0)=531 Sleep(1)=555 event-pingpong=534 waitable-timer=568 self-APC=542 alertable-SleepEx=548 critical-section=545 SRW-lock=535 semaphore=550 syscalls=574 affinity-hop=575 priority-change=537
+  INFO timers = ticks=252 apc=0 wake=252 kick=0 callback_holds=252
+PASS  tmr_mm_callback_regs (279.0 ms)
 RUN   tmr_threadpool_callback_regs
   INFO threads = 8
   INFO config = ops=0x1f yields=0x3fff ctl=0x0 tmr=0x61 kind=3 spin=2000 ms=300 xstate=0
-  INFO iterations = 7799
-  INFO apc_holds = 684
-  INFO ops = hold=1605 x87=1522 mmx=1560 compute=1544 call=1568
-  INFO yields = spin=686 SwitchToThread=632 Sleep(0)=693 Sleep(1)=679 event-pingpong=713 waitable-timer=679 self-APC=684 alertable-SleepEx=665 critical-section=677 SRW-lock=667 semaphore=656 syscalls=660 affinity-hop=621 priority-change=655
+  INFO iterations = 7592
+  INFO apc_holds = 671
+  INFO ops = hold=1565 x87=1477 mmx=1526 compute=1497 call=1527
+  INFO yields = spin=667 SwitchToThread=614 Sleep(0)=680 Sleep(1)=661 event-pingpong=693 waitable-timer=650 self-APC=671 alertable-SleepEx=655 critical-section=662 SRW-lock=648 semaphore=637 syscalls=640 affinity-hop=605 priority-change=636
   INFO pool_callbacks = 303 register holds on thread-pool threads (0 QueueUserWorkItem failures)
   INFO timers = ticks=303 apc=0 wake=0 kick=0 callback_holds=606
-PASS  tmr_threadpool_callback_regs (328.8 ms)
+PASS  tmr_threadpool_callback_regs (328.9 ms)
 RUN   tmr_everything_with_controller
   INFO threads = 56
   INFO config = ops=0x1f yields=0x3fff ctl=0xf8 tmr=0x7f kind=3 spin=2000 ms=500 xstate=1
-  INFO iterations = 83361
-  INFO apc_holds = 7846
-  INFO ops = hold=16655 x87=16644 mmx=16783 compute=16843 call=16436
-  INFO yields = spin=7030 SwitchToThread=7152 Sleep(0)=7079 Sleep(1)=7140 event-pingpong=7232 waitable-timer=6991 self-APC=7165 alertable-SleepEx=7243 critical-section=7105 SRW-lock=7129 semaphore=6990 syscalls=7166 affinity-hop=7179 priority-change=7196
-  INFO pool_callbacks = 1004 register holds on thread-pool threads (0 QueueUserWorkItem failures)
-  INFO ctl = suspends=4079 captures=4079 hold_hits=605 (apc 42) asm_other=0 outside=3474 checked_outside=3142 apc_skip=332 sets=4079 aff=341 prio=307 apc=333
-  INFO timers = ticks=1005 apc=348 wake=336 kick=309 callback_holds=2009
-PASS  tmr_everything_with_controller (536.8 ms)
+  INFO iterations = 83578
+  INFO apc_holds = 7883
+  INFO ops = hold=16708 x87=16678 mmx=16856 compute=16892 call=16444
+  INFO yields = spin=7064 SwitchToThread=7142 Sleep(0)=7075 Sleep(1)=7127 event-pingpong=7219 waitable-timer=7028 self-APC=7199 alertable-SleepEx=7215 critical-section=7139 SRW-lock=7136 semaphore=7027 syscalls=7225 affinity-hop=7185 priority-change=7241
+  INFO pool_callbacks = 1000 register holds on thread-pool threads (0 QueueUserWorkItem failures)
+  INFO ctl = suspends=4167 captures=4167 hold_hits=606 (apc 54) asm_other=1 outside=3560 checked_outside=3207 apc_skip=352 sets=4166 aff=347 prio=315 apc=338
+  INFO timers = ticks=1000 apc=346 wake=335 kick=310 callback_holds=2000
+  XFAIL Wine: GetThreadContext of a thread running host-side syscall code returned a non-PE IP with that code's FP environment in 1 captures; those were not checked, hold-loop oracle unaffected
+XFAIL tmr_everything_with_controller (535.0 ms): Wine: GetThreadContext of a thread running host-side syscall code returned a non-PE IP with that code's FP environment in 1 captures; those were not checked, hold-loop oracle unaffected
 RUN   selftest_mutation_xmm_detected
   INFO threads = 1
   INFO config = ops=0x1 yields=0x1 ctl=0x2 tmr=0x0 kind=1 spin=200000 ms=400 xstate=0
-  INFO iterations = 48
+  INFO iterations = 47
   INFO apc_holds = 0
-  INFO ops = hold=48 x87=0 mmx=0 compute=0 call=0
-  INFO yields = spin=48
+  INFO ops = hold=47 x87=0 mmx=0 compute=0 call=0
+  INFO yields = spin=47
   INFO ctl = suspends=1 captures=1 hold_hits=1 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=1 aff=0 prio=0 apc=0
-PASS  selftest_mutation_xmm_detected (411.3 ms)
+PASS  selftest_mutation_xmm_detected (404.0 ms)
 RUN   selftest_mutation_mxcsr_detected
   INFO threads = 1
   INFO config = ops=0x1 yields=0x1 ctl=0x2 tmr=0x0 kind=1 spin=200000 ms=400 xstate=0
@@ -652,7 +653,7 @@ RUN   selftest_mutation_mxcsr_detected
   INFO ops = hold=46 x87=0 mmx=0 compute=0 call=0
   INFO yields = spin=46
   INFO ctl = suspends=1 captures=1 hold_hits=1 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=1 aff=0 prio=0 apc=0
-PASS  selftest_mutation_mxcsr_detected (412.8 ms)
+PASS  selftest_mutation_mxcsr_detected (418.4 ms)
 RUN   selftest_mutation_ymm_upper_detected
   INFO threads = 1
   INFO config = ops=0x1 yields=0x1 ctl=0x4 tmr=0x0 kind=2 spin=200000 ms=400 xstate=1
@@ -661,39 +662,38 @@ RUN   selftest_mutation_ymm_upper_detected
   INFO ops = hold=48 x87=0 mmx=0 compute=0 call=0
   INFO yields = spin=48
   INFO ctl = suspends=1 captures=1 hold_hits=1 (apc 0) asm_other=0 outside=0 checked_outside=0 apc_skip=0 sets=1 aff=0 prio=0 apc=0
-PASS  selftest_mutation_ymm_upper_detected (409.0 ms)
+PASS  selftest_mutation_ymm_upper_detected (409.3 ms)
 RUN   churn_new_threads_under_stress
   INFO threads = 16
   INFO config = ops=0x1f yields=0x3fff ctl=0x18 tmr=0x0 kind=3 spin=2000 ms=400 xstate=1
-  INFO iterations = 15247
-  INFO apc_holds = 1272
-  INFO ops = hold=2979 x87=3032 mmx=3056 compute=3057 call=3123
-  INFO yields = spin=1289 SwitchToThread=1309 Sleep(0)=1275 Sleep(1)=1280 event-pingpong=1334 waitable-timer=1318 self-APC=1272 alertable-SleepEx=1308 critical-section=1343 SRW-lock=1333 semaphore=1315 syscalls=1344 affinity-hop=1295 priority-change=1355
-  INFO ctl = suspends=1993 captures=1993 hold_hits=281 (apc 12) asm_other=0 outside=1712 checked_outside=1700 apc_skip=10 sets=1991 aff=0 prio=0 apc=0
+  INFO iterations = 20122
+  INFO apc_holds = 1665
+  INFO ops = hold=3931 x87=4014 mmx=4063 compute=4040 call=4074
+  INFO yields = spin=1684 SwitchToThread=1746 Sleep(0)=1695 Sleep(1)=1679 event-pingpong=1730 waitable-timer=1738 self-APC=1665 alertable-SleepEx=1762 critical-section=1763 SRW-lock=1739 semaphore=1714 syscalls=1791 affinity-hop=1700 priority-change=1790
+  INFO ctl = suspends=7414 captures=7414 hold_hits=1121 (apc 64) asm_other=2 outside=6291 checked_outside=6260 apc_skip=31 sets=7414 aff=0 prio=0 apc=0
   INFO churn_threads = 400 (failed 0)
   INFO new_thread_fp_env = MXCSR 0x1f80 FCW 0x027f
-  XFAIL Wine: GetThreadContext of a thread running host-side syscall code returned a non-PE IP with that code's FP environment in 2 captures; those were not checked, hold-loop oracle unaffected
-XFAIL churn_new_threads_under_stress (415.0 ms): Wine: GetThreadContext of a thread running host-side syscall code returned a non-PE IP with that code's FP environment in 2 captures; those were not checked, hold-loop oracle unaffected
+PASS  churn_new_threads_under_stress (410.5 ms)
 RUN   perf_stress_rates_plain_capture
   INFO threads = 4
   INFO config = ops=0x9 yields=0x4 ctl=0x2 tmr=0x0 kind=1 spin=2000 ms=300 xstate=0
-  INFO iterations = 27618
+  INFO iterations = 23542
   INFO apc_holds = 0
-  INFO ops = hold=13771 x87=0 mmx=0 compute=13847 call=0
-  INFO yields = Sleep(0)=27618
-  INFO ctl = suspends=8393 captures=8393 hold_hits=7921 (apc 0) asm_other=33 outside=439 checked_outside=439 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-  PERF worker_iterations_per_s = 90885.9 iter/s
-  PERF context_capture_cycles_per_s = 29337.3 ops/s
-PERF  perf_stress_rates_plain_capture (308.6 ms)
+  INFO ops = hold=11678 x87=0 mmx=0 compute=11864 call=0
+  INFO yields = Sleep(0)=23542
+  INFO ctl = suspends=12929 captures=12929 hold_hits=12564 (apc 0) asm_other=25 outside=340 checked_outside=340 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+  PERF worker_iterations_per_s = 77556.9 iter/s
+  PERF context_capture_cycles_per_s = 43890.4 ops/s
+PERF  perf_stress_rates_plain_capture (306.7 ms)
 RUN   perf_stress_rates_xstate_capture
   INFO threads = 4
   INFO config = ops=0x9 yields=0x4 ctl=0x4 tmr=0x0 kind=3 spin=2000 ms=300 xstate=1
-  INFO iterations = 21148
+  INFO iterations = 21688
   INFO apc_holds = 0
-  INFO ops = hold=10516 x87=0 mmx=0 compute=10632 call=0
-  INFO yields = Sleep(0)=21148
-  INFO ctl = suspends=5205 captures=5205 hold_hits=4484 (apc 0) asm_other=19 outside=702 checked_outside=702 apc_skip=0 sets=0 aff=0 prio=0 apc=0
-  PERF worker_iterations_per_s = 70158.4 iter/s
-  PERF xstate_capture_cycles_per_s = 18680.5 ops/s
-PERF  perf_stress_rates_xstate_capture (306.4 ms)
-SUMMARY exe=xstate_stress arch=x64 total=83 pass=80 fail=0 crash=0 skip=0 xfail=1 perf=2 checks=172993 checks_failed=0 exit=0
+  INFO ops = hold=10794 x87=0 mmx=0 compute=10894 call=0
+  INFO yields = Sleep(0)=21688
+  INFO ctl = suspends=14417 captures=14417 hold_hits=13976 (apc 0) asm_other=15 outside=426 checked_outside=426 apc_skip=0 sets=0 aff=0 prio=0 apc=0
+  PERF worker_iterations_per_s = 71391 iter/s
+  PERF xstate_capture_cycles_per_s = 48802.4 ops/s
+PERF  perf_stress_rates_xstate_capture (306.9 ms)
+SUMMARY exe=xstate_stress arch=x64 total=83 pass=80 fail=0 crash=0 skip=0 xfail=1 perf=2 checks=204120 checks_failed=0 exit=0

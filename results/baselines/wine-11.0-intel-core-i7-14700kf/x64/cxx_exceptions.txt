@@ -29,11 +29,11 @@ PASS  destructor_with_live_simd (0.0 ms)
 RUN   threadpool_callback_throw
 PASS  threadpool_callback_throw (0.3 ms)
 RUN   fiber_throw_across_switch
-PASS  fiber_throw_across_switch (0.0 ms)
+PASS  fiber_throw_across_switch (0.1 ms)
 RUN   veh_translate_av_catch_all
-PASS  veh_translate_av_catch_all (11.7 ms)
+PASS  veh_translate_av_catch_all (9.1 ms)
 RUN   veh_translate_int_divide
-PASS  veh_translate_int_divide (9.6 ms)
+PASS  veh_translate_int_divide (10.2 ms)
 RUN   rtlunwindex_direct_target_frame
   INFO unwind_handler_flags = 0x22
   INFO unwind_handler_code = 0xc0000027
