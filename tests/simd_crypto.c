@@ -2147,6 +2147,11 @@ static void misaligned_case(const char *child, t_feature f) {
     CHECKF(!g_cr.timed_out, "child hung");
     if (t_sde_model() && g_cr.exc_code == 0)   /* emulator artifact (seen for SHA), README "Emulated validation" */
         t_expect_fail("Intel SDE (%s) emulates %s without the legacy-SSE alignment #GP", t_sde_model(), child);
+    if (f == F_SHA && g_cr.exc_code == 0 && !cpu()->is_intel) {
+        /* AMD/Hygon (Zen 2 and Zen 4, Windows 10): the legacy-SSE SHA instruction does not check m128 alignment */
+        t_note("non-Intel CPU: misaligned legacy-SSE SHA m128 operand did not fault (exit 0x%lx); fault hard-required on GenuineIntel only", g_cr.exit_code);
+        return;
+    }
     CHECKF(g_cr.exc_code != 0, "misaligned legacy-SSE m128 operand did not fault although the movdqa control did (exit 0x%lx, output: %.80s)", g_cr.exit_code, g_cr.out);
     if (g_cr.exc_code) {
         t_info("exception_code", "0x%08lx", g_cr.exc_code);

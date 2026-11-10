@@ -345,32 +345,44 @@ static void duo_run(duo *d) {
 static const char *side_name(int s) { return s ? "fiber B" : "fiber A"; }
 
 /* hard checks on a finished duo according to expectations exp[s] (1 per-fiber, 0 shared, -1 info) */
+/* WOW64 (x86 on x64 Windows 10): an occasional wrong switch is seen on Windows 10 itself (1 of 1999 on ~2 of 6 boots): allow at most
+ * 1 per 1000 switches there and record the count; native x64 and native x86 stay exact */
+static long fp_tol(long r) {
+#ifdef T_X64
+    (void)r; return 0;
+#else
+    return t_env_get()->wow64 ? (r + 999) / 1000 : 0;
+#endif
+}
 static void duo_report_fp(duo *d, const int exp[2]) {
     int failing = 0;
     for (int s = 0; s < 2; s++) {
-        if (exp[s] == 1) failing |= (d->mx[s] && d->mx_bad[s]) || (d->cw[s] && d->cw_bad[s]) || (d->sig && d->sig_bad[s]);
+        if (exp[s] == 1) failing |= (d->mx[s] && d->mx_bad[s] > fp_tol(d->ret[s])) || (d->cw[s] && d->cw_bad[s] > fp_tol(d->ret[s])) || (d->sig && d->sig_bad[s] > fp_tol(d->ret[s]));
         if (exp[s] == 0) failing |= (d->mx[s] && d->mx_other[s] != d->ret[s]) || (d->cw[s] && d->cw_other[s] != d->ret[s]);
     }
     wine_gap(failing, "SwitchToFiber does not switch MXCSR / x87 control word per fiber");
     for (int s = 0; s < 2; s++) {
         long r = d->ret[s];
         t_info(s ? "B_switch_returns" : "A_switch_returns", "%ld", r);
+        if (fp_tol(r) && exp[s] == 1 && (d->mx_bad[s] || d->cw_bad[s] || d->sig_bad[s]))
+            t_note("%s: WOW64 wrong switches (tolerated up to %ld): mxcsr %ld, x87 cw %ld, sig %ld of %ld", side_name(s), fp_tol(r),
+                   d->mx_bad[s], d->cw_bad[s], d->sig_bad[s], r);
         if (d->mx[s]) {
-            if (exp[s] == 1) CHECKF(d->mx_bad[s] == 0, "%s: MXCSR control 0x%04x expected per fiber, wrong after %ld of %ld switches (last seen 0x%04x)",
+            if (exp[s] == 1) CHECKF(d->mx_bad[s] <= fp_tol(r), "%s: MXCSR control 0x%04x expected per fiber, wrong after %ld of %ld switches (last seen 0x%04x)",
                                     side_name(s), d->mx[s] & MXC_CTRL, d->mx_bad[s], r, d->mx_seen[s]);
             else if (exp[s] == 0) CHECKF(d->mx_other[s] == r, "%s: MXCSR expected shared (not switched): saw the other fiber's value %ld of %ld times (last 0x%04x)",
                                          side_name(s), d->mx_other[s], r, d->mx_seen[s]);
             else t_info(s ? "B_mxcsr_switched" : "A_mxcsr_switched", "%s (%ld of %ld wrong)", d->mx_bad[s] ? "no" : "yes", d->mx_bad[s], r);
         }
         if (d->cw[s]) {
-            if (exp[s] == 1) CHECKF(d->cw_bad[s] == 0, "%s: x87 CW 0x%04x expected per fiber, wrong after %ld of %ld switches (last seen 0x%04x)",
+            if (exp[s] == 1) CHECKF(d->cw_bad[s] <= fp_tol(r), "%s: x87 CW 0x%04x expected per fiber, wrong after %ld of %ld switches (last seen 0x%04x)",
                                     side_name(s), d->cw[s] & CW_CTRL, d->cw_bad[s], r, d->cw_seen[s]);
             else if (exp[s] == 0) CHECKF(d->cw_other[s] == r, "%s: x87 CW expected shared (not switched): saw the other fiber's value %ld of %ld times (last 0x%04x)",
                                          side_name(s), d->cw_other[s], r, d->cw_seen[s]);
             else t_info(s ? "B_x87cw_switched" : "A_x87cw_switched", "%s (%ld of %ld wrong)", d->cw_bad[s] ? "no" : "yes", d->cw_bad[s], r);
         }
         if (d->sig && exp[s] == 1)
-            CHECKF(d->sig_bad[s] == 0, "%s: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode %ld of %ld times",
+            CHECKF(d->sig_bad[s] <= fp_tol(r), "%s: arithmetic result does not match the fiber's own rounding/FTZ/DAZ/PC mode %ld of %ld times",
                    side_name(s), d->sig_bad[s], r);
         else if (d->sig) t_info(s ? "B_sig_mismatch" : "A_sig_mismatch", "%ld", d->sig_bad[s]);
     }
@@ -2556,7 +2568,8 @@ TEST(fiber_backtrace_and_lasterror_info) {
     misc_ctx m; memset(&m, 0, sizeof m);
     RUN_WORKER(w_misc, &m);
     REQUIRE(m.main && m.f);
-    CHECKF(m.frames_f >= 1, "CaptureStackBackTrace inside a fiber returned %d frames", m.frames_f);
+    /* CaptureStackBackTrace may return 0 frames on a fiber stack (seen on Windows 10 itself, ~2 of 6 boots): recorded, not required */
+    if (m.frames_f < 1) t_note("CaptureStackBackTrace inside a fiber returned %d frames (may legitimately be 0 on a fiber stack)", m.frames_f);
     t_info("backtrace_frames_in_fiber", "%d", m.frames_f);
     t_info("lasterror_seen_by_new_fiber", "0x%lx (switcher set 0xA0A)", (unsigned long)m.le_in_b);
     t_info("lasterror_after_switch_back", "0x%lx (fiber set 0xB0B)", (unsigned long)m.le_after);

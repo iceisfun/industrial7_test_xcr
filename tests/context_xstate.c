@@ -2539,6 +2539,10 @@ TEST(xstate_getctx_zmm) {
     if (ok && cx_suspend(&w)) {
         cx_xc x = { 0 };
         uint64_t req = T_XS_AVX | T_XS_OPMASK | T_XS_ZMM_HI256 | T_XS_HI16_ZMM;
+#ifndef T_X64
+        /* a 32-bit process has only zmm0-7: Windows 10 WOW64 reports 0x67 (no Hi16_ZMM, bit 7) */
+        req &= ~(uint64_t)T_XS_HI16_ZMM;
+#endif
         if (cx_get_x(&w, &x, CX_STD | CONTEXT_XSTATE, req)) {
             uint64_t m = cx_mask(x.ctx);
             CHECKF((m & req) == req, "mask 0x%llx lacks AVX-512 components", (unsigned long long)m);

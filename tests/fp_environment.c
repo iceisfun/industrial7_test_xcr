@@ -1943,7 +1943,19 @@ TEST(crt_fegetenv_fesetenv_roundtrip) {
     CHECKF((cw2 & CW_CMP) == (cw & CW_CMP), "FCW after fesetenv 0x%04x want 0x%04x", cw2, cw);
     CHECK(fesetenv(FE_DFL_ENV) == 0);
     t_info("fe_dfl_env", "mxcsr=0x%04x fcw=0x%04x", t_get_mxcsr(), t_get_x87_cw());
-    CHECKF((t_get_mxcsr() & (MX_MASKS | 0x6000)) == MX_MASKS, "FE_DFL_ENV MXCSR 0x%04x not default control", t_get_mxcsr());
+    /* the CRT's FE_DFL_ENV leaves MXCSR rounding control bits 14:13 as it likes (Windows 10 msvcrt: 0xDF80): CRT behaviour, not
+     * the OS; only the guaranteed part is required: exceptions masked, sticky flags clear */
+    t_note("FE_DFL_ENV MXCSR=0x%04x (RC bits 14:13 not required to be 0)", t_get_mxcsr());
+    CHECKF((t_get_mxcsr() & MX_MASKS) == MX_MASKS, "FE_DFL_ENV MXCSR 0x%04x exceptions not masked", t_get_mxcsr());
+    CHECKF((t_get_mxcsr() & MX_FLAGS) == 0, "FE_DFL_ENV MXCSR 0x%04x sticky flags set", t_get_mxcsr());
+    {   /* fegetenv/fesetenv round trip of a value we set ourselves (x87 part is mandated) */
+        fenv_t e2;
+        t_set_x87_cw((unsigned short)(0x007F | CW_RC(RU) | CW_PC53));
+        CHECK(fegetenv(&e2) == 0);
+        t_set_x87_cw(0x037F);
+        CHECK(fesetenv(&e2) == 0);
+        CHECKF((t_get_x87_cw() & CW_CMP) == ((0x007F | CW_RC(RU) | CW_PC53) & CW_CMP), "FCW after own-env round trip 0x%04x", t_get_x87_cw());
+    }
     t_set_mxcsr(MX_DEF); t_set_x87_cw(0x037F);
 }
 
@@ -2415,6 +2427,16 @@ static void run_badmx(int mode) {
      * may also refuse the value). What is applied is recorded. */
     static t_child_result r;
     REQUIRE(t_child_run("ctx_badmx", mode ? "1" : "0", 5000, &r));
+    if (mode == 0 && !r.timed_out && r.exc_code != 0 && !t_is_wine()) {
+        /* documented contract: NtContinue either sanitises the reserved bits (normal exit) or rejects them by faulting the
+         * child (Windows 10 22H2 raises STATUS_ACCESS_VIOLATION); both are accepted, the harness process is never involved */
+        if (r.exc_code == 0xC0000005u || r.exc_code == 0xC000000Du) {
+            t_info("ctx_continue_outcome", "faulted (exc 0x%08lx, exit 0x%08lx)", r.exc_code, r.exit_code);
+            t_note("NtContinue with reserved MXCSR bits faults the child on this OS instead of sanitising: %s", r.out);
+            return;
+        }
+    }
+    if (mode == 0 && !r.timed_out && r.exc_code == 0) t_info("ctx_continue_outcome", "sanitised or survived (normal exit)");
     int survived = !r.timed_out && strstr(r.out, "SURVIVED=1") != NULL && r.exc_code == 0;
     if (!survived && t_is_wine())
         XFAIL("Wine %s: a CONTEXT MXCSR with reserved bits %s (exit 0x%08lx exc 0x%08lx)", t_wine_version(),
