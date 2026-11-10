@@ -217,8 +217,15 @@ static LONG CALLBACK child_veh(PEXCEPTION_POINTERS ep) {
     EXCEPTION_RECORD *er = ep->ExceptionRecord;
     ULONG_PTR rw = er->NumberParameters >= 1 ? er->ExceptionInformation[0] : 0;
     ULONG_PTR a = er->NumberParameters >= 2 ? er->ExceptionInformation[1] : 0;
-    printf("SM_EXC code=0x%08lx rw=%lu np=%lu off=%lld addr=0x%llx\n", (unsigned long)er->ExceptionCode,
-           (unsigned long)rw, (unsigned long)er->NumberParameters, (long long)(a - g_child_bad), (unsigned long long)a);
+#ifdef T_X64
+    ULONG_PTR cip = (ULONG_PTR)ep->ContextRecord->Rip;
+#else
+    ULONG_PTR cip = (ULONG_PTR)ep->ContextRecord->Eip;
+#endif
+    /* hardware faults: ExceptionAddress and the context IP both name the faulting instruction */
+    printf("SM_EXC code=0x%08lx rw=%lu np=%lu off=%lld addr=0x%llx ipeq=%d\n", (unsigned long)er->ExceptionCode,
+           (unsigned long)rw, (unsigned long)er->NumberParameters, (long long)(a - g_child_bad), (unsigned long long)a,
+           (ULONG_PTR)er->ExceptionAddress == cip);
     fflush(stdout);
     return EXCEPTION_CONTINUE_SEARCH;
 }
@@ -486,7 +493,7 @@ CHILD(sm_fault) {
     return 3;
 }
 
-typedef struct sm_fres { int ok, faulted, nofault; DWORD code; unsigned long rw; long long off; unsigned long long addr; } sm_fres;
+typedef struct sm_fres { int ok, faulted, nofault, ipeq; DWORD code; unsigned long rw; long long off; unsigned long long addr; } sm_fres;
 static t_child_result g_cr;
 static void run_fop(const char *op, sm_fres *f) {
     memset(f, 0, sizeof *f);
@@ -497,9 +504,9 @@ static void run_fop(const char *op, sm_fres *f) {
     if (t_child_find(&g_cr, "SM_ALLOC_FAILED", v, sizeof v)) { CHECKF(0, "%s: child region alloc failed", op); return; }
     f->ok = 1;
     if (t_child_find(&g_cr, "SM_EXC ", v, sizeof v)) {
-        unsigned long c = 0, rw = 0, np = 0; long long off = 0; unsigned long long a = 0;
-        sscanf(v, "code=0x%lx rw=%lu np=%lu off=%lld addr=0x%llx", &c, &rw, &np, &off, &a);
-        f->faulted = 1; f->code = (DWORD)c; f->rw = rw; f->off = off; f->addr = a;
+        unsigned long c = 0, rw = 0, np = 0; long long off = 0; unsigned long long a = 0; int ipeq = -1;
+        sscanf(v, "code=0x%lx rw=%lu np=%lu off=%lld addr=0x%llx ipeq=%d", &c, &rw, &np, &off, &a, &ipeq);
+        f->faulted = 1; f->code = (DWORD)c; f->rw = rw; f->off = off; f->addr = a; f->ipeq = ipeq;
     }
     if (t_child_find(&g_cr, "SM_NOFAULT", v, sizeof v)) f->nofault = 1;
 }
@@ -517,6 +524,8 @@ static void expect_av(const char *op, int want_rw, int page_check) {
     CHECKF(f.code == SM_AV, "%s: exception 0x%08lx, want STATUS_ACCESS_VIOLATION", op, (unsigned long)f.code);
     CHECKF(g_cr.exc_code == f.code, "%s: process exit/exception code 0x%08lx != first exception 0x%08lx", op,
            (unsigned long)g_cr.exc_code, (unsigned long)f.code);
+    /* a fault is reported at the faulting instruction: EXCEPTION_RECORD.ExceptionAddress == CONTEXT IP */
+    CHECKF(f.ipeq == 1, "%s: ExceptionAddress differs from the context instruction pointer (ipeq=%d)", op, f.ipeq);
     if (want_rw >= 0) CHECKF(f.rw == (unsigned long)want_rw, "%s: ExceptionInformation[0]=%lu want %d", op, f.rw, want_rw);
     else t_info(op, "rw=%lu addr=0x%llx", f.rw, f.addr);
     if (page_check) CHECKF(f.off >= 0 && f.off < (long long)sm_pg(), "%s: fault address offset %lld outside the inaccessible page", op, f.off);
@@ -891,6 +900,44 @@ TEST(nt_movnti_unaligned_and_page_crossing) {
     sm_region_free(&rg);
 }
 
+/* AMD SSE4A scalar NT stores: MOVNTSS m32 / MOVNTSD m64 store only the low element (APM Vol 4). */
+TEST(nt_movntss_movntsd_sse4a) {
+    NEED(F_SSE4A);
+    uint8_t *b = sm_valloc(4096); REQUIRE(b);
+    pr_begin();
+    int unaligned_faults = 0;
+    for (int off = 0; off < 16; off++) {
+        uint8_t *p = b + 256 + off;
+        memset(b, 0xA5, 1024);
+        __attribute__((aligned(16))) uint32_t v4[4] = { 0x11223344u + (uint32_t)off, 0xEEEEEEEEu, 0xDDDDDDDDu, 0xCCCCCCCCu };
+        __asm__ volatile("movdqa %[v], %%xmm0\n\t" PR_ARM "movntss %%xmm0, (%[p])" PR_DONE
+                         : PR_OUT : [p] "r"(p), [v] "m"(v4) : "xmm0", "memory" PR_CLOB_C);
+        int fault_ss = g_pr.nexc != 0; pr_clear();
+        sm_sfence();
+        uint32_t got; memcpy(&got, p, 4);
+        int ok_ss = !fault_ss && got == v4[0] && p[-1] == 0xA5 && p[4] == 0xA5;
+        uint8_t *q = b + 512 + off;
+        __attribute__((aligned(16))) uint64_t v2[2] = { 0x0102030405060708ull ^ (uint64_t)off, 0xFFFFFFFFFFFFFFFFull };
+        __asm__ volatile("movdqa %[v], %%xmm0\n\t" PR_ARM "movntsd %%xmm0, (%[p])" PR_DONE
+                         : PR_OUT : [p] "r"(q), [v] "m"(v2) : "xmm0", "memory" PR_CLOB_C);
+        int fault_sd = g_pr.nexc != 0; pr_clear();
+        sm_sfence();
+        uint64_t g2; memcpy(&g2, q, 8);
+        int ok_sd = !fault_sd && g2 == v2[0] && q[-1] == 0xA5 && q[8] == 0xA5;
+        if (off % 8 == 0) {
+            CHECKF(ok_ss, "movntss at +%d: fault=%d value 0x%08x want 0x%08x (or neighbours modified)", off, fault_ss, got, v4[0]);
+            CHECKF(ok_sd, "movntsd at +%d: fault=%d value 0x%016llx (or neighbours modified)", off, fault_sd, (unsigned long long)g2);
+        } else {
+            unaligned_faults += fault_ss + fault_sd;
+            if (!fault_ss) CHECKF(ok_ss, "movntss at +%d (no fault) stored 0x%08x want 0x%08x", off, got, v4[0]);
+            if (!fault_sd) CHECKF(ok_sd, "movntsd at +%d (no fault) stored 0x%016llx", off, (unsigned long long)g2);
+        }
+    }
+    pr_end();
+    t_note("movntss/movntsd at unaligned addresses: %d exceptions", unaligned_faults);
+    sm_vfree(b);
+}
+
 TEST(nt_misaligned_store_load_faults) {
     NEED(F_SSE2);
     /* MOVNTDQ/MOVNTPS/MOVNTPD m128: #GP(0) if not 16-byte aligned (SDM Vol 2, exceptions type 1) */
@@ -997,11 +1044,68 @@ TEST(mp_maskmovdqu_sfence_flag)   { mp_case(K_MASKMOVDQU); }
 TEST(mp_vmovntdq_ymm_sfence_flag) { mp_case(K_VMOVNTDQ_Y); }
 TEST(mp_vmovntdq_zmm_sfence_flag) { mp_case(K_VMOVNTDQ_Z); }
 
+/* NT stores WITHOUT SFENCE, then SetEvent; another thread (on another CPU when possible) wakes from
+ * WaitForSingleObject and must see the data. Contract: Windows synchronization functions (SetEvent,
+ * WaitForSingleObject, ...) are full memory barriers (MSDN "Synchronization and Multiprocessor Issues"), and
+ * the processor drains write-combining buffers on a LOCKed instruction, a serializing instruction or an
+ * interrupt (SDM Vol 3 11.3.1), so a signalling path that goes through the OS cannot overtake the NT data. */
+typedef struct ev_ctx { HANDLE data, ack; uint8_t *buf; size_t n; int iters; volatile LONG bad, first_bad, seen, quit; } ev_ctx;
+static DWORD WINAPI ev_consumer(void *arg) {
+    ev_ctx *c = (ev_ctx *)arg;
+    for (int it = 1; it <= c->iters; it++) {
+        if (WaitForSingleObject(c->data, 3000) != WAIT_OBJECT_0 || c->quit) return 0;
+        const volatile uint32_t *d = (const volatile uint32_t *)c->buf;
+        int bad = 0;
+        for (size_t j = 0; j < c->n / 4; j++) bad |= d[j] != mp_pat((uint32_t)it, (uint32_t)j);
+        if (bad && !c->bad++) c->first_bad = it;
+        c->seen = it;
+        SetEvent(c->ack);
+    }
+    return 0;
+}
+static void ev_case(int ki) {
+    const sm_kernel *k = &g_k[ki];
+    NEED_K(k);
+    static ev_ctx c;
+    memset((void *)&c, 0, sizeof c);
+    c.n = 16384; c.iters = 300;
+    c.buf = sm_valloc(c.n); uint8_t *src = sm_valloc(c.n);
+    c.data = CreateEventA(NULL, FALSE, FALSE, NULL); c.ack = CreateEventA(NULL, FALSE, FALSE, NULL);
+    REQUIRE(c.buf && src && c.data && c.ack);
+    int cpus[64]; int nc = sm_cpu_list(cpus, 64);
+    uintptr_t prev = nc >= 2 ? t_pin_thread(cpus[0]) : 0;
+    HANDLE h = CreateThread(NULL, 65536, ev_consumer, &c, CREATE_SUSPENDED, NULL);
+    if (!h) { t_unpin_thread(prev); CloseHandle(c.data); CloseHandle(c.ack); sm_vfree(c.buf); sm_vfree(src); SKIP("cannot create a thread (%lu)", GetLastError()); }
+    if (nc >= 2) SetThreadAffinityMask(h, (DWORD_PTR)1 << cpus[1]);
+    ResumeThread(h);
+    int sent = 0;
+    for (int it = 1; it <= c.iters; it++) {
+        uint32_t *s = (uint32_t *)src;
+        for (size_t j = 0; j < c.n / 4; j++) s[j] = mp_pat((uint32_t)it, (uint32_t)j);
+        k->fn(c.buf, src, c.n);          /* deliberately no SFENCE */
+        SetEvent(c.data);
+        sent = it;
+        if (WaitForSingleObject(c.ack, 3000) != WAIT_OBJECT_0) break;
+    }
+    c.quit = 1; SetEvent(c.data);
+    WaitForSingleObject(h, 5000); CloseHandle(h);
+    t_unpin_thread(prev);
+    CHECKF(c.seen == c.iters, "%s: consumer acknowledged %ld of %d messages (sent %d)", k->name, c.seen, c.iters, sent);
+    CHECKF(c.bad == 0, "%s: consumer saw stale NT data after SetEvent/WaitForSingleObject in %ld messages (first %ld)",
+           k->name, c.bad, c.first_bad);
+    t_info("cross_cpu", "%d", nc >= 2);
+    CloseHandle(c.data); CloseHandle(c.ack); sm_vfree(c.buf); sm_vfree(src);
+}
+TEST(ev_movntdq_nofence_setevent)      { ev_case(K_MOVNTDQ); }
+TEST(ev_movnti32_nofence_setevent)     { ev_case(K_MOVNTI32); }
+TEST(ev_vmovntdq_ymm_nofence_setevent) { ev_case(K_VMOVNTDQ_Y); }
+
 /* ======================================================================== */
 /* litmus tests (two worker threads, main thread sequences iterations)        */
 /* ======================================================================== */
 enum { LIT_SB_PLAIN, LIT_SB_MFENCE, LIT_SB_XCHG, LIT_SB_LOCKOR, LIT_SB_SFENCE, LIT_SB_LFENCE,
-       LIT_MP_PLAIN, LIT_MP_NT_SFENCE, LIT_MP_NT_NOFENCE, LIT_LB_PLAIN };
+       LIT_MP_PLAIN, LIT_MP_NT_SFENCE, LIT_MP_NT_NOFENCE, LIT_LB_PLAIN,
+       LIT_MP_NT_MFENCE, LIT_MP_NT_LOCK, LIT_MP_NTDQ_SFENCE, LIT_MP_NT_XCHGFLAG };
 typedef struct lit_ctx {
     int variant, iters; volatile LONG stop;
     __attribute__((aligned(64))) volatile LONG gen;
@@ -1026,11 +1130,17 @@ static LONG lit_op(lit_ctx *c, int me) {
     case LIT_SB_XCHG:   __asm__ volatile("xchgl %0, %1" : "+r"(one), "+m"(*mine) :: "memory"); r = l_ld(other); break;
     case LIT_SB_LOCKOR: l_st1(mine); __asm__ volatile("lock orl $0, (%%" SM_SP ")" ::: "memory", "cc"); r = l_ld(other); break;
     case LIT_MP_PLAIN: case LIT_MP_NT_SFENCE: case LIT_MP_NT_NOFENCE:
+    case LIT_MP_NT_MFENCE: case LIT_MP_NT_LOCK: case LIT_MP_NTDQ_SFENCE: case LIT_MP_NT_XCHGFLAG:
         if (me == 0) {   /* writer: data = x, flag = y */
             if (c->variant == LIT_MP_PLAIN) l_st1(&c->x);
+            else if (c->variant == LIT_MP_NTDQ_SFENCE)   /* x is 64-byte aligned with 60 spare bytes after it */
+                __asm__ volatile("movd %1, %%xmm0\n\tmovntdq %%xmm0, %0" : "=m"(*(volatile __m128i *)&c->x) : "r"(one) : "xmm0", "memory");
             else __asm__ volatile("movnti %1, %0" : "=m"(c->x) : "r"(one) : "memory");
-            if (c->variant == LIT_MP_NT_SFENCE) __asm__ volatile("sfence" ::: "memory");
-            l_st1(&c->y);
+            if (c->variant == LIT_MP_NT_SFENCE || c->variant == LIT_MP_NTDQ_SFENCE) __asm__ volatile("sfence" ::: "memory");
+            if (c->variant == LIT_MP_NT_MFENCE) __asm__ volatile("mfence" ::: "memory");
+            if (c->variant == LIT_MP_NT_LOCK) __asm__ volatile("lock orl $0, (%%" SM_SP ")" ::: "memory", "cc");
+            if (c->variant == LIT_MP_NT_XCHGFLAG) __asm__ volatile("xchgl %0, %1" : "+r"(one), "+m"(c->y) :: "memory");
+            else l_st1(&c->y);
         } else {         /* reader: flag then data */
             LONG f = l_ld(&c->y), d = l_ld(&c->x);
             r = f | (d << 1);
@@ -1085,6 +1195,7 @@ static int lit_run(int variant, int iters, long *forbidden, long *relaxed_any) {
         case LIT_SB_PLAIN: case LIT_SB_MFENCE: case LIT_SB_SFENCE: case LIT_SB_LFENCE: case LIT_SB_XCHG: case LIT_SB_LOCKOR:
             bad = r0 == 0 && r1 == 0; break;
         case LIT_MP_PLAIN: case LIT_MP_NT_SFENCE: case LIT_MP_NT_NOFENCE:
+        case LIT_MP_NT_MFENCE: case LIT_MP_NT_LOCK: case LIT_MP_NTDQ_SFENCE: case LIT_MP_NT_XCHGFLAG:
             bad = (r1 & 1) && !(r1 & 2); break;
         case LIT_LB_PLAIN: bad = r0 == 1 && r1 == 1; break;
         }
@@ -1119,6 +1230,15 @@ TEST(litmus_mp_plain)                 { lit_case(LIT_MP_PLAIN, "MP plain", 1); }
 TEST(litmus_mp_movnti_sfence)         { lit_case(LIT_MP_NT_SFENCE, "MP movnti+sfence", 1); }
 TEST(litmus_mp_movnti_nofence_info)   { lit_case(LIT_MP_NT_NOFENCE, "MP movnti no fence", 0); }
 TEST(litmus_lb_plain)                 { lit_case(LIT_LB_PLAIN, "LB plain", 1); }
+/* NT (weakly ordered) stores are ordered before later stores by MFENCE (SDM Vol 2 MFENCE: "serializing
+ * operation on all load-from-memory and store-to-memory instructions issued prior"), and by any LOCKed
+ * instruction: "Reads or writes cannot be reordered with I/O instructions, locked instructions, or
+ * serializing instructions" (SDM Vol 3 8.2.2) and WC buffers are drained by "an execution of a LOCK
+ * instruction" (SDM Vol 3 11.3.1). XCHG with memory is implicitly locked. */
+TEST(litmus_mp_movnti_mfence)         { lit_case(LIT_MP_NT_MFENCE, "MP movnti+mfence", 1); }
+TEST(litmus_mp_movnti_lock_or)        { lit_case(LIT_MP_NT_LOCK, "MP movnti+lock or", 1); }
+TEST(litmus_mp_movnti_xchg_flag)      { lit_case(LIT_MP_NT_XCHGFLAG, "MP movnti+xchg flag", 1); }
+TEST(litmus_mp_movntdq_sfence)        { lit_case(LIT_MP_NTDQ_SFENCE, "MP movntdq+sfence", 1); }
 
 /* ======================================================================== */
 /* fences, serialize, pause                                                   */
@@ -1417,7 +1537,9 @@ static int pf_avail(int h) {
     switch (h) {
     case PF_W: return cpu_hw(F_PREFETCHW) || cpu_hw(F_AMD3DNOW);
     case PF_WT1: return cpu_hw(F_PREFETCHWT1);
-    case PF_3DNOW: return cpu_hw(F_AMD3DNOW) || cpu_hw(F_PREFETCHW);
+    /* 0F 0D /0 (PREFETCH): AMD defines it under 3DNow! or 3DNowPrefetch (CPUID 80000001h:ECX[8]); Intel's
+     * same CPUID bit documents only PREFETCHW (0F 0D /1), so /0 is not part of Intel's contract. */
+    case PF_3DNOW: return cpu_hw(F_AMD3DNOW) || (cpu_hw(F_PREFETCHW) && !strcmp(cpu()->vendor, "AuthenticAMD"));
     default: return cpu_has(F_SSE);
     }
 }
@@ -1727,7 +1849,7 @@ static int mop_check(const mop *m, uint8_t *p, uint64_t bits, uint8_t *wlo, uint
     if (g_pr.nexc) {
         char d[160]; pr_desc(d, sizeof d);
         snprintf(why, cap, "%s (p=%p bits=0x%llx)", d, (void *)p, (unsigned long long)bits);
-        pr_clear(); return 0;
+        pr_clear(); return -1;
     }
     if (m->op == MO_ST) {
         memcpy(exp, snap, wn);
@@ -1754,8 +1876,28 @@ static int mop_check(const mop *m, uint8_t *p, uint64_t bits, uint8_t *wlo, uint
     }
     return 1;
 }
+/* Fault suppression for masked-off elements of the VEX forms (VMASKMOVPS/PD, VPMASKMOVD/Q) is an Intel SDM
+ * guarantee ("Faults will not occur due to referencing any memory location if the corresponding mask bit
+ * for that memory location is 0"). The AMD APM entries for the same instructions say instead: "Exception
+ * and trap behavior for elements not selected for loading or storing from/to memory is implementation
+ * dependent", e.g. a page fault for a zero-masked element. On non-Intel processors an exception on a
+ * masked-off VEX element is therefore recorded as NOTE (processor behaviour, not an OS contract).
+ * EVEX (AVX-512) fault suppression is architectural for both vendors and stays a hard check. */
+static int sm_vex_mask_fault_impl_dep(const mop *m) { return !m->kmask && strcmp(cpu()->vendor, "GenuineIntel") != 0; }
+static int g_mo_notes;
+/* res from mop_check: 1 ok, 0 wrong data, -1 exception. allow_dep: the exception hit masked-off elements only */
+static int mo_ok(const mop *m, int res, int allow_dep, const char *why) {
+    if (res == 1) return 1;
+    if (res == -1 && allow_dep && sm_vex_mask_fault_impl_dep(m)) {
+        if (g_mo_notes++ < 4) t_note("%s %s: masked-off element raised %s (implementation dependent on %s per AMD APM)",
+                                     m->group, m->form, why, cpu()->vendor);
+        return 1;
+    }
+    return 0;
+}
 static void masked_group(const char *group) {
     sm_region rg; int any = 0, skipped = 0;
+    g_mo_notes = 0;
     for (size_t mi = 0; mi < T_COUNTOF(g_mops); mi++) if (!strcmp(g_mops[mi].group, group)) { if (mop_avail(&g_mops[mi])) any++; else skipped++; }
     if (!any) SKIP("%s: no form usable on this CPU/OS", group);
     REGION4(rg);
@@ -1775,7 +1917,7 @@ static void masked_group(const char *group) {
             uint64_t bits = t_rng_next(&r) & full;
             if (it == 0) bits = 0;
             if (it == 1) bits = full;
-            ok = mop_check(m, p, bits, p - 16, p + m->vb + 16, &r, why, sizeof why);
+            ok = mop_check(m, p, bits, p - 16, p + m->vb + 16, &r, why, sizeof why) == 1;
             CHECKF(ok, "%s %s valid memory: %s", group, m->form, why);
         }
         /* B: trailing elements in the PAGE_NOACCESS page, masked off */
@@ -1786,7 +1928,7 @@ static void masked_group(const char *group) {
                 uint64_t bits = t_rng_next(&r) & lowbits(k);
                 if (k > 0 && (t_rng_next(&r) & 1)) bits |= 1ull << (k - 1);
                 uint8_t *wlo = p - 16 < P0 ? P0 : p - 16;
-                ok = mop_check(m, p, bits, wlo, P1, &r, why, sizeof why);
+                ok = mo_ok(m, mop_check(m, p, bits, wlo, P1, &r, why, sizeof why), 1, why);
                 CHECKF(ok, "%s %s: %d elements before PAGE_NOACCESS (+%d straddle), inactive beyond: %s", group, m->form, k, dd, why);
             }
         /* C: leading elements in the PAGE_NOACCESS page, masked off */
@@ -1795,27 +1937,27 @@ static void masked_group(const char *group) {
                 int dd = d ? m->es / 2 : 0;
                 uint8_t *p = P2 - (size_t)j * m->es + dd;
                 uint64_t bits = t_rng_next(&r) & full & ~lowbits(j);
-                ok = mop_check(m, p, bits, P2, p + m->vb + 16, &r, why, sizeof why);
+                ok = mo_ok(m, mop_check(m, p, bits, P2, p + m->vb + 16, &r, why, sizeof why), 1, why);
                 CHECKF(ok, "%s %s: %d leading elements in PAGE_NOACCESS (+%d straddle), inactive: %s", group, m->form, j, dd, why);
             }
         /* D: entire vector inside PAGE_NOACCESS with an all-zero mask */
         if (ok) {
-            ok = mop_check(m, P1 + 64, 0, P0, P0, &r, why, sizeof why);
+            ok = mo_ok(m, mop_check(m, P1 + 64, 0, P0, P0, &r, why, sizeof why), 1, why);
             CHECKF(ok, "%s %s: all-zero mask entirely in PAGE_NOACCESS: %s", group, m->form, why);
         }
         if (m->op == MO_ST && ok) {
             /* E: stores into PAGE_READONLY with the mask clear there */
-            ok = mop_check(m, P3 + 40, 0, P3 + 32, P3 + 32 + m->vb + 16, &r, why, sizeof why);
+            ok = mo_ok(m, mop_check(m, P3 + 40, 0, P3 + 32, P3 + 32 + m->vb + 16, &r, why, sizeof why), 1, why);
             CHECKF(ok, "%s %s: zero-mask store onto PAGE_READONLY: %s", group, m->form, why);
             for (int k = 1; k < n && ok; k++) {
                 uint8_t *p = P3 - (size_t)k * m->es;
                 uint64_t bits = (t_rng_next(&r) & lowbits(k)) | (1ull << (k - 1));
-                ok = mop_check(m, p, bits, p - 8, P3 + 16, &r, why, sizeof why);
+                ok = mo_ok(m, mop_check(m, p, bits, p - 8, P3 + 16, &r, why, sizeof why), 1, why);
                 CHECKF(ok, "%s %s: store RW->READONLY, active only in RW (%d): %s", group, m->form, k, why);
             }
         } else if (ok) {
             /* E: full-mask load from PAGE_READONLY */
-            ok = mop_check(m, P3 + 40, full, P3, P3, &r, why, sizeof why);
+            ok = mop_check(m, P3 + 40, full, P3, P3, &r, why, sizeof why) == 1;
             CHECKF(ok, "%s %s: load from PAGE_READONLY: %s", group, m->form, why);
         }
     }
@@ -2193,6 +2335,12 @@ static void resume_masked_case(mfn fn, int es, int vb, int kmask, int is_store, 
         fn(p, mb, io);
         CHECKF(g_pr.nexc == 0, "%s phase %d: not resumed (exception 0x%08lx)", name, phase, (unsigned long)g_pr.code);
         pr_clear();
+        if (sm_vex_mask_fault_impl_dep(&m) && (g_pr.nguard != phase + 1 || (phase == 0 && !sm_is_guard(sm_page(&rg, 1))))) {
+            /* masked-off elements touched the guard page: allowed on this vendor (see sm_vex_mask_fault_impl_dep) */
+            t_note("%s phase %d: %ld guard violations (masked-off elements accessed; implementation dependent on %s)",
+                   name, phase, g_pr.nguard, cpu()->vendor);
+            break;
+        }
         CHECKF(g_pr.nguard == phase + 1, "%s phase %d: %ld guard violations, want %d", name, phase, g_pr.nguard, phase + 1);
         if (phase == 0) CHECKF(sm_is_guard(sm_page(&rg, 1)), "%s: masked-off half consumed PAGE_GUARD of the next page", name);
         for (int i = 0; i < n; i++) {
@@ -2239,6 +2387,177 @@ TEST(resume_nt_movntdq_commit_on_demand)      { resume_nt_case(K_MOVNTDQ); }
 TEST(resume_nt_movnti32_commit_on_demand)     { resume_nt_case(K_MOVNTI32); }
 TEST(resume_nt_vmovntdq_ymm_commit_on_demand) { resume_nt_case(K_VMOVNTDQ_Y); }
 TEST(resume_nt_vmovntdq_zmm_commit_on_demand) { resume_nt_case(K_VMOVNTDQ_Z); }
+
+/* ---- the exception CONTEXT of a gather that faults part-way shows the architectural partial progress ----
+ * SDM Vol 2 VPGATHERDD / VPGATHERDD(EVEX): "If a fault is triggered by an element and delivered, all elements
+ * closer to the LSB of the destination will be completed (and non-faulting). Individual elements closer to
+ * the MSB may or may not be completed." Completed elements are written to the destination and their mask
+ * element (AVX2) / mask bit (AVX-512) is cleared; the faulting element keeps its mask. The fault is a fault:
+ * the context IP is the gather itself. Windows hands this state to the handler in the exception CONTEXT
+ * (XMM part in the legacy FXSAVE area; YMM upper halves and opmasks only when the context carries
+ * CONTEXT_XSTATE, located with LocateXStateFeature - kernelbase decomp: NULL unless ContextFlags has
+ * CONTEXT_XSTATE, features 0/1 map to the legacy area). The gather runs on a PAGE_GUARD page, so the
+ * handler simply continues and the OS-restored state lets the instruction finish. */
+typedef struct gc_cap {
+    volatile LONG hits; volatile DWORD tid; uint8_t *lo, *hi;
+    DWORD code, flags; ULONG_PTR ip, addr;
+    int have_xmm, have_ymmh, have_k;
+    uint8_t x1[16], x3[16], yh1[16], yh3[16]; uint64_t k1;
+} gc_cap;
+static gc_cap g_gc;
+static volatile ULONG_PTR g_gc_insn;
+static LONG CALLBACK gc_veh(PEXCEPTION_POINTERS ep) {
+    if (!g_gc.tid || GetCurrentThreadId() != g_gc.tid) return EXCEPTION_CONTINUE_SEARCH;
+    EXCEPTION_RECORD *er = ep->ExceptionRecord;
+    if (er->ExceptionCode != SM_GUARD || er->NumberParameters < 2) return EXCEPTION_CONTINUE_SEARCH;
+    uint8_t *a = (uint8_t *)er->ExceptionInformation[1];
+    if (a < g_gc.lo || a >= g_gc.hi) return EXCEPTION_CONTINUE_SEARCH;
+    if (InterlockedIncrement(&g_gc.hits) == 1) {
+        CONTEXT *c = ep->ContextRecord;
+        g_gc.code = er->ExceptionCode; g_gc.addr = (ULONG_PTR)a; g_gc.flags = c->ContextFlags;
+#ifdef T_X64
+        g_gc.ip = (ULONG_PTR)c->Rip;
+        if ((c->ContextFlags & CONTEXT_FLOATING_POINT) == CONTEXT_FLOATING_POINT) {
+            memcpy(g_gc.x1, &c->FltSave.XmmRegisters[1], 16); memcpy(g_gc.x3, &c->FltSave.XmmRegisters[3], 16); g_gc.have_xmm = 1;
+        }
+#else
+        g_gc.ip = (ULONG_PTR)c->Eip;
+        if ((c->ContextFlags & CONTEXT_EXTENDED_REGISTERS) == CONTEXT_EXTENDED_REGISTERS) {   /* FXSAVE image: XMMn at 160+16n */
+            memcpy(g_gc.x1, c->ExtendedRegisters + 160 + 16, 16); memcpy(g_gc.x3, c->ExtendedRegisters + 160 + 48, 16); g_gc.have_xmm = 1;
+        }
+#endif
+        __typeof__(&LocateXStateFeature) loc = T_PROC("kernel32.dll", LocateXStateFeature);
+        if (loc) {
+            DWORD len = 0;
+            uint8_t *yh = (uint8_t *)loc(c, XSTATE_AVX, &len);
+            if (yh && len >= 64) { memcpy(g_gc.yh1, yh + 16, 16); memcpy(g_gc.yh3, yh + 48, 16); g_gc.have_ymmh = 1; }
+            len = 0;
+            uint8_t *km = (uint8_t *)loc(c, 5 /* XSTATE_AVX512_KMASK */, &len);
+            if (km && len >= 16) { memcpy(&g_gc.k1, km + 8, 8); g_gc.have_k = 1; }
+        }
+    }
+    return EXCEPTION_CONTINUE_EXECUTION;   /* the OS already removed PAGE_GUARD: the gather re-executes and completes */
+}
+#ifdef T_X64
+#define GC_ARM "lea 8f(%%rip), %%r10\n\tmov %%r10, %[ia]\n\t"
+#define GC_CLOB , "r10"
+#else
+#define GC_ARM "movl $8f, %[ia]\n\t"
+#define GC_CLOB
+#endif
+T_NOINLINE static void gcf_dd_y_avx2(const void *b, const void *idx, void *m, void *d) {
+    __asm__ volatile("vmovdqu (%[d]), %%ymm1\n\tvmovdqu (%[i]), %%ymm2\n\tvmovdqu (%[m]), %%ymm3\n\t" GC_ARM
+                     "8:\n\tvpgatherdd %%ymm3, (%[b],%%ymm2,4), %%ymm1\n\t"
+                     "vmovdqu %%ymm1, (%[d])\n\tvmovdqu %%ymm3, (%[m])\n\tvzeroupper\n\t"
+                     : [ia] "=m"(g_gc_insn) : [b] "r"(b), [i] "r"(idx), [m] "r"(m), [d] "r"(d)
+                     : "xmm1", "xmm2", "xmm3", "memory" GC_CLOB);
+}
+T_TARGET("avx512f") T_NOINLINE static void gcf_dd_z_512(const void *b, const void *idx, void *k, void *d) {
+    __asm__ volatile("kmovw (%[k]), %%k1\n\tvmovdqu64 (%[d]), %%zmm1\n\tvmovdqu64 (%[i]), %%zmm2\n\t" GC_ARM
+                     "8:\n\tvpgatherdd (%[b],%%zmm2,4), %%zmm1%{%%k1%}\n\t"
+                     "vmovdqu64 %%zmm1, (%[d])\n\tkmovw %%k1, (%[k])\n\tvzeroupper\n\t"
+                     : [ia] "=m"(g_gc_insn) : [b] "r"(b), [i] "r"(idx), [k] "r"(k), [d] "r"(d)
+                     : "xmm1", "xmm2", "k1", "memory" GC_CLOB);
+}
+static void gather_fault_context_case(int evex) {
+    if (evex) NEED(F_AVX512F); else NEED(F_AVX2);
+    static const DWORD prot[2] = { PAGE_READWRITE, PAGE_READWRITE | PAGE_GUARD };
+    sm_region rg; REQUIRE(sm_region_alloc(&rg, 2, prot));
+    REQUIRE(sm_is_guard(sm_page(&rg, 1)));
+    size_t pg = rg.pg; int32_t epp = (int32_t)(pg / 4);
+    int nl = evex ? 16 : 8;
+    /* lanes 3 and 5 (and 9, 14 for EVEX) in the guard page, everything else in page 0 */
+    __attribute__((aligned(64))) int32_t idx[16];
+    __attribute__((aligned(64))) uint32_t m[16], d[16], d0[16];
+    uint16_t k = (uint16_t)((1u << nl) - 1);
+    int guard_lane[16] = { 0 };
+    guard_lane[3] = guard_lane[5] = 1; if (evex) guard_lane[9] = guard_lane[14] = 1;
+    for (int l = 0; l < 16; l++) {
+        idx[l] = guard_lane[l] ? epp + 40 + 7 * l : 100 + 13 * l;
+        m[l] = l < nl ? 0xFFFFFFFFu : 0;
+        d[l] = d0[l] = 0xD0D00000u + (uint32_t)l;
+    }
+    const uint32_t *base = (const uint32_t *)rg.base;
+    uint32_t want[16];
+    for (int l = 0; l < nl; l++) want[l] = sm_pat32((uint64_t)idx[l] * 4, 0x5EED);
+    pr_end();
+    memset((void *)&g_gc, 0, sizeof g_gc);
+    g_gc.lo = rg.base; g_gc.hi = rg.base + 2 * pg;
+    PVOID vh = AddVectoredExceptionHandler(1, gc_veh);
+    REQUIRE(vh);
+    g_gc.tid = GetCurrentThreadId();
+    if (evex) gcf_dd_z_512(base, idx, &k, d); else gcf_dd_y_avx2(base, idx, m, d);
+    g_gc.tid = 0;
+    RemoveVectoredExceptionHandler(vh);
+    const char *nm = evex ? "vpgatherdd zmm" : "vpgatherdd ymm";
+    /* after the restart: complete */
+    for (int l = 0; l < nl; l++) CHECKF(d[l] == want[l], "%s: lane %d = 0x%08x want 0x%08x after the restart", nm, l, d[l], want[l]);
+    if (evex) CHECKF(k == 0, "%s: k1 = 0x%04x after completion", nm, k);
+    else for (int l = 0; l < nl; l++) CHECKF(m[l] == 0, "%s: mask lane %d = 0x%08x after completion", nm, l, m[l]);
+    CHECKF(!sm_is_guard(sm_page(&rg, 1)), "%s: PAGE_GUARD still set", nm);
+    REQUIREF(g_gc.hits == 1, "%s: %ld guard-page exceptions, want exactly 1", nm, g_gc.hits);
+    CHECKF(g_gc.ip == g_gc_insn, "%s: context IP %p is not the gather at %p (a fault must report the faulting instruction)",
+           nm, (void *)g_gc.ip, (void *)g_gc_insn);
+    /* The right-to-left delivery order is stated by the Intel SDM; on other vendors only per-lane consistency
+     * (each lane either complete with its mask cleared, or pending and untouched) is checked. */
+    int strict = !strcmp(cpu()->vendor, "GenuineIntel");
+    ULONG_PTR a3 = (ULONG_PTR)(base + idx[3]);
+    if (strict) CHECKF(g_gc.addr == a3, "%s: fault address %p, want lane 3 element %p (lowest faulting lane is delivered first)",
+                       nm, (void *)g_gc.addr, (void *)a3);
+    else {
+        CHECKF(g_gc.addr >= (ULONG_PTR)sm_page(&rg, 1), "%s: fault address %p outside the guard page", nm, (void *)g_gc.addr);
+        if (g_gc.addr != a3) t_note("%s: fault reported at %p, not the lowest faulting lane %p", nm, (void *)g_gc.addr, (void *)a3);
+    }
+    t_info("context_flags", "0x%lx", (unsigned long)g_gc.flags);
+    if (!g_gc.have_xmm) {
+#ifdef T_X64
+        /* x64: CONTEXT_FULL includes CONTEXT_FLOATING_POINT; an exception context always carries XMM0-15 */
+        CHECKF(0, "%s: x64 exception CONTEXT without CONTEXT_FLOATING_POINT (flags 0x%lx)", nm, (unsigned long)g_gc.flags);
+#else
+        t_note("%s: x86 exception CONTEXT without CONTEXT_EXTENDED_REGISTERS (flags 0x%lx): XMM not inspected", nm, (unsigned long)g_gc.flags);
+#endif
+        goto out;
+    }
+    {
+        uint32_t x1[4], x3[4]; memcpy(x1, g_gc.x1, 16); memcpy(x3, g_gc.x3, 16);
+        if (strict) {
+            for (int l = 0; l < 3; l++) CHECKF(x1[l] == want[l], "%s: in the fault context, completed lane %d of the destination = 0x%08x want 0x%08x", nm, l, x1[l], want[l]);
+            CHECKF(x1[3] == d0[3], "%s: in the fault context, faulting lane 3 destination = 0x%08x want unchanged 0x%08x", nm, x1[3], d0[3]);
+            if (!evex) {
+                for (int l = 0; l < 3; l++) CHECKF(x3[l] == 0, "%s: in the fault context, mask lane %d = 0x%08x want 0 (completed)", nm, l, x3[l]);
+                CHECKF(x3[3] == 0xFFFFFFFFu, "%s: in the fault context, mask lane 3 = 0x%08x want 0xFFFFFFFF (faulting element)", nm, x3[3]);
+            }
+        } else if (!evex) {
+            for (int l = 0; l < 4; l++) {
+                CHECKF(x3[l] == 0 || x3[l] == 0xFFFFFFFFu, "%s: fault context mask lane %d = 0x%08x", nm, l, x3[l]);
+                CHECKF(x1[l] == (x3[l] == 0 ? want[l] : d0[l]), "%s: fault context lane %d = 0x%08x inconsistent with its mask", nm, l, x1[l]);
+            }
+            CHECKF(x3[3] != 0, "%s: lane 3 in the not-present page reported complete", nm);
+        }
+    }
+    /* upper lanes: each is either complete (mask clear + new value) or untouched; guard-page lanes untouched */
+    if (g_gc.have_ymmh) {
+        uint32_t yd[4], ym[4]; memcpy(yd, g_gc.yh1, 16); memcpy(ym, g_gc.yh3, 16);
+        for (int j = 0; j < 4; j++) {
+            int l = 4 + j;
+            int done = evex ? !(g_gc.have_k && ((g_gc.k1 >> l) & 1)) : ym[j] == 0;
+            if (!evex) CHECKF(ym[j] == 0 || ym[j] == 0xFFFFFFFFu, "%s: fault context mask lane %d = 0x%08x", nm, l, ym[j]);
+            if (evex && !g_gc.have_k) break;
+            CHECKF(yd[j] == (done ? want[l] : d0[l]), "%s: fault context lane %d = 0x%08x inconsistent with its mask (%s)", nm, l, yd[j], done ? "complete" : "pending");
+            if (guard_lane[l]) CHECKF(!done, "%s: lane %d in the not-present page reported complete", nm, l);
+        }
+    } else t_note("%s: exception CONTEXT has no XSTATE (AVX) area (flags 0x%lx): upper lanes not inspected", nm, (unsigned long)g_gc.flags);
+    if (evex) {
+        if (g_gc.have_k) {
+            if (strict) CHECKF((g_gc.k1 & 0xF) == 0x8, "%s: fault context k1 = 0x%04llx, want bits 0-2 clear and bit 3 set", nm, (unsigned long long)g_gc.k1);
+            for (int l = 0; l < nl; l++) if (guard_lane[l]) CHECKF((g_gc.k1 >> l) & 1, "%s: k1 bit %d (guard-page lane) cleared in the fault context", nm, l);
+        } else t_note("%s: exception CONTEXT has no AVX-512 opmask state", nm);
+    }
+out:
+    sm_region_free(&rg);
+}
+TEST(gather_fault_context_partial_avx2)   { gather_fault_context_case(0); }
+TEST(gather_fault_context_partial_avx512) { gather_fault_context_case(1); }
 
 /* ======================================================================== */
 /* locked operations                                                          */
