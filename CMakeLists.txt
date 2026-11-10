@@ -24,6 +24,7 @@ endif()
 
 file(GLOB XCR_COMMON_SRC ${CMAKE_SOURCE_DIR}/common/*.c)
 file(GLOB XCR_TESTS ${CMAKE_SOURCE_DIR}/tests/*.c)
+file(GLOB XCR_BENCHES ${CMAKE_SOURCE_DIR}/benchmarks/*.c)   # same harness; they include tests/*.h kernels
 
 add_library(xcr_common STATIC ${XCR_COMMON_SRC})
 target_include_directories(xcr_common PUBLIC ${CMAKE_SOURCE_DIR}/common)
@@ -42,9 +43,10 @@ else()
 endif()
 target_link_libraries(xcr_common PUBLIC kernel32 advapi32 ntdll)
 
-foreach(src ${XCR_TESTS})
+foreach(src ${XCR_TESTS} ${XCR_BENCHES})
   get_filename_component(name ${src} NAME_WE)
   add_executable(${name} ${src})
+  target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/tests)
   # whole-archive is not needed: tests register through constructors in their own TU
   target_link_libraries(${name} PRIVATE xcr_common)
   if(NOT MSVC)
