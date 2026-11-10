@@ -28,18 +28,24 @@ static void drain(HANDLE rd, t_child_result *r) {
  * child's stdout/stderr pipe. Snapshot it around a child run; new text is appended to r->out so that
  * t_sde_killed_child() can see it. Never active outside SDE runs. */
 static size_t sde_errfile_read(char *buf, size_t cap) {
-    char path[MAX_PATH];
+    char list[2 * MAX_PATH];
+    size_t len = 0;
     buf[0] = 0;
     if (!t_sde_model()) return 0;
-    DWORD n = GetEnvironmentVariableA("XCR_SDE_ERRFILE", path, sizeof path);
-    if (n == 0 || n >= sizeof path) return 0;
-    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
-    if (h == INVALID_HANDLE_VALUE) return 0;
-    DWORD got = 0;
-    if (!ReadFile(h, buf, (DWORD)cap - 1, &got, NULL)) got = 0;
-    CloseHandle(h);
-    buf[got] = 0;
-    return got;
+    DWORD n = GetEnvironmentVariableA("XCR_SDE_ERRFILE", list, sizeof list);   /* ';'-separated */
+    if (n == 0 || n >= sizeof list) return 0;
+    for (char *path = list, *next; path && *path; path = next) {
+        next = strchr(path, ';');
+        if (next) *next++ = 0;
+        HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        DWORD got = 0;
+        if (len + 2 < cap && !ReadFile(h, buf + len, (DWORD)(cap - 1 - len), &got, NULL)) got = 0;
+        CloseHandle(h);
+        len += got;
+        buf[len] = 0;
+    }
+    return len;
 }
 static void sde_errfile_append(t_child_result *r, const char *before, size_t nb) {
     char after[4096];

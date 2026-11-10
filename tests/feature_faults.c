@@ -909,7 +909,10 @@ TEST(feat_xsave_without_osxsave) {
 }
 
 /* ---- encodings with defined fallback behaviour (no fault) --------------------------------- */
+/* Emulator artifacts (README "Emulated validation"), under tools/sde_run.sh only; checks unchanged. */
+#define FF_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) %s", t_sde_model(), why); } while (0)
 TEST(lzcnt_or_bsr_semantics) {
+    if (!cpu_hw(F_LZCNT)) FF_SDE_XFAIL("runs F3 0F BD as the host's LZCNT although its CPU model has none");
     static fp_res r; fp_expect_nofault("nf_lzcnt_or_bsr", &r);
     if (!r.line || r.fault) return;
     uint32_t v = (uint32_t)r.out0;
@@ -919,6 +922,7 @@ TEST(lzcnt_or_bsr_semantics) {
     else CHECKF(v == 4 || v == 27, "F3 0F BD (0x10) = %u: neither BSR (4) nor LZCNT (27)", v);
 }
 TEST(tzcnt_or_bsf_semantics) {
+    if (!cpu_hw(F_BMI1)) FF_SDE_XFAIL("runs F3 0F BC as the host's TZCNT although its CPU model has no BMI1");
     static fp_res r; fp_expect_nofault("nf_tzcnt_or_bsf", &r);
     if (!r.line || r.fault) return;
     uint32_t v = (uint32_t)r.out0, fl = (uint32_t)r.out1;
@@ -1186,8 +1190,6 @@ TEST(av_null_write) {
         CHECKF(r.p1 == 0, "ExceptionInformation[1]=0x%llx, expected 0", r.p1);
     }
 }
-/* Emulator artifacts (README "Emulated validation"), under tools/sde_run.sh only; checks unchanged. */
-#define FF_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) %s", t_sde_model(), why); } while (0)
 TEST(av_execute_nx_page) {
     if (!cpu_hw(F_NX)) SKIP("no NX");
     FF_SDE_XFAIL("reports an instruction fetch from a no-execute page as a read (ExceptionInformation[0]=0)");

@@ -1701,6 +1701,8 @@ TEST(api_get_enabled_xstate_features_present) {
     uint64_t v = gef();
     char b[256]; hex_bits(b, sizeof b, v);
     t_info("api_enabled", "0x%llx (%s)", (unsigned long long)v, b);
+    if (!v && t_is_wine())   /* known Wine gap (seen with Wine 9 on a CPU model without XSAVE): the API returns 0, Windows returns 3 */
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures returns 0 without XSAVE", t_wine_version());
     CHECKF((v & 3) == 3, "x87 and SSE (bits 0,1) are always reported enabled (got 0x%llx)", (unsigned long long)v);
     CHECK_EQ(v, t_env_get()->api_xstate_features);
     CHECK_EQ(gef(), v);   /* stable */
@@ -1777,6 +1779,8 @@ TEST(api_kernelbase_matches_rtl) {
     /* user-state part must agree whatever the implementation */
     xp_raw x; xp_read(&x);
     uint64_t user = x.has_d ? x.sup : 3;
+    if (!g && t_is_wine())   /* known Wine gap (seen with Wine 9 on a CPU model without XSAVE): the API returns 0, Windows returns 3 */
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures returns 0 without XSAVE", t_wine_version());
     CHECK_EQ(g & user, expect & user);
 }
 

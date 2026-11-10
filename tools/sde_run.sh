@@ -93,10 +93,11 @@ export XCR_TIMEOUT="${XCR_TIMEOUT:-1800}"
 LOGDIR="${XCR_SDE_LOGDIR:-}"
 if [ -z "$LOGDIR" ]; then LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/xcr_sde_log.XXXXXX")"; trap 'rm -rf "$LOGDIR"' EXIT; fi
 mkdir -p "$LOGDIR"; LOGDIR="$(cd "$LOGDIR" && pwd)"
-# SDE reports (chip-check stops, failed emulated accesses) go to this file for every process of the tree;
-# the harness reads it around each child run (XCR_SDE_ERRFILE, Windows path) to attribute a child death.
-export XCR_SDE_ERRFILE="Z:$LOGDIR/sde-error.txt"
-export XCR_WINE_WRAP="$SDE -$CPU -ptr_raise 1 -raise_int3 1 -align_checker_action warn -err_filename $LOGDIR/sde-error.txt ${XCR_SDE_ARGS:-} --"
+# SDE reports (chip-check stops, failed emulated accesses) go to these files for every process of the
+# tree (each Pin process rewrites them at start); the harness reads them around each child run
+# (XCR_SDE_ERRFILE, ';'-separated Windows paths) to attribute a child's death to SDE.
+export XCR_SDE_ERRFILE="Z:$LOGDIR/sde-error.txt;Z:$LOGDIR/sde-chip-check.txt"
+export XCR_WINE_WRAP="$SDE -$CPU -ptr_raise 1 -raise_int3 1 -align_checker_action warn -err_filename $LOGDIR/sde-error.txt -chip_check_emit_file 1 -chip_check_file $LOGDIR/sde-chip-check.txt ${XCR_SDE_ARGS:-} --"
 # SDE writes its logs into the current directory: run from LOGDIR. The lock stays with this shell
 # (fd 9 closed for the children), not with a lingering wineserver.
 (cd "$LOGDIR" && "$HERE/wine_run.sh" "$EXE" "$@") 9>&-

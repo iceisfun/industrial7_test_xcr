@@ -406,6 +406,8 @@ TEST(env_recorder) {
     CHECK(!strcmp(e->process_arch, T_ARCH));
     CHECK(e->ncpu >= 1);
     if (e->api_xstate_present) {
+        if (!e->api_xstate_features && t_is_wine())   /* known Wine gap (seen with Wine 9 on a CPU model without XSAVE): the API returns 0, Windows returns 3 */
+            t_expect_fail("Wine %s: GetEnabledXStateFeatures returns 0 without XSAVE", t_wine_version());
         CHECK(e->api_xstate_features & 1);              /* x87 legacy state always reported */
         t_info("GetEnabledXStateFeatures", "0x%llx", e->api_xstate_features);
     }
