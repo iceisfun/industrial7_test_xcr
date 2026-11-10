@@ -2215,7 +2215,7 @@ CHILD(bogus_ctxex) {
     if (!xctx_new(&s, fl) || !xctx_new(&a, fl) || !xctx_new(&b, fl)) { printf("RESULT=initfail\n"); xw_finish(w); return 0; }
     DWORD err = 0;
     int r = xw_capture(w, &s, ~0ull, &err);
-    printf("GET=%d\n", r);
+    printf("GET=%d\nGET_ERR=%lu\n", r, (unsigned long)err);
     if (r == 1) {
         memcpy(a.ctx, s.ctx, sizeof(CONTEXT));                 /* valid legacy part: an accepted Set cannot derail the thread */
         memcpy(b.ctx, s.ctx, sizeof(CONTEXT));
