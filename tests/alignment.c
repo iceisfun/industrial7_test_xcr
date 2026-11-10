@@ -31,6 +31,10 @@
  *     decomp, Win10 19041): a NULL buffer returns FALSE / ERROR_INSUFFICIENT_BUFFER (0x7a) with the
  *     length; the length covers any buffer alignment; the CONTEXT is placed at (buf+15)&~15 on x64
  *     (CONTEXT_AMD64) / (buf+3)&~3 on x86 (CONTEXT_i386), the XSAVE header region at a 64-byte boundary.
+ *   - Misaligned CONTEXT / XState chunk (pinned against the 19041 decomp, citations above CHILD(al_ctxmisalign)):
+ *     Get/SetThreadContext -> FALSE / ERROR_NOACCESS (STATUS_DATATYPE_MISALIGNMENT), buffer untouched;
+ *     NtContinue -> STATUS_DATATYPE_MISALIGNMENT returned; x64 RtlCaptureContext faults (FXSAVE);
+ *     CopyContext does not check the destination chunk's alignment.
  *   - Accesses that START in an inaccessible page report an address in that page; FXSAVE/XSAVE areas
  *     running into one fault as writes (only bytes the instruction must write are hard-checked).
  *   - VPGATHERDD into an inaccessible page: restartable after the handler fixes the page; on Intel the
@@ -643,36 +647,226 @@ CHILD(al_gatherfault) {
     return 0;
 }
 
-/* --child=al_ctxmisalign : GetThreadContext into a CONTEXT that is not 16-byte aligned (x64 requires
- * 16; Windows documents the alignment but no error code). Prints: CM off ok err outside_written rip_ok */
+/* ---- Misaligned CONTEXT / CONTEXT_EX contract ------------------------------------------------------
+ * Pinned against the Windows 10 22H2 (19041) reference decompilation (docker1 corpus explorer, 2026-11):
+ *   kernelbase!GetThreadContext / SetThreadContext: NtGet/NtSetContextThread, failure -> BaseSetLastNTError.
+ *   ntoskrnl!PspGet/PspSetContextThreadInternal (user mode) -> RtlpReadExtendedContext BEFORE any APC / write:
+ *     legacy CONTEXT start must be a multiple of 16 (CONTEXT_AMD64) / 4 (CONTEXT_i386); with CONTEXT_XSTATE
+ *     the XState chunk (CONTEXT_EX + XState.Offset) must be a multiple of 64; otherwise
+ *     ExRaiseDatatypeMisalignment, caught by the function's own handler -> STATUS_DATATYPE_MISALIGNMENT
+ *     (0x80000002) -> ERROR_NOACCESS (998). Nothing is written to the caller's buffer.
+ *     RtlpReadExtendedContextLayout validates the CONTEXT_EX first (Legacy.Offset == -sizeof(CONTEXT), the
+ *     XState chunk inside All), so a shifted chunk with All.Length grown by the shift is a VALID layout.
+ *   WOW64 (x86 exe on x64): wow64!Wow64NtGet/SetContextThread -> NtQuery/NtSetInformationThread
+ *     (ThreadWow64Context, 0x2cc bytes), whose probe requires 4-byte alignment -> the same 998 for a CONTEXT
+ *     not 4-aligned; 4-aligned (the natural alignment of the x86 CONTEXT) succeeds. XSTATE is not pinned there.
+ *   ntoskrnl!KiContinueEx (NtContinue, user mode): CONTEXT & 0xF != 0 -> STATUS_DATATYPE_MISALIGNMENT returned
+ *     to the caller (no resume).
+ *   ntdll!RtlCaptureContext (x64): FXSAVE [rcx+0x100] -> #GP on a CONTEXT that is not 16-aligned (SDM FXSAVE).
+ *   ntdll!RtlCopyContext -> RtlpCopyXStateChunk: no alignment check at all (memset/RtlCopyMemory at
+ *     CONTEXT_EX + XState.Offset); header Mask = source Mask & enabled & ~3. LocateXStateFeature ->
+ *     RtlLocateExtendedFeature2 / RtlpLocateXStateChunk only bounds-check the chunk.
+ *   ntdll!RtlInitializeExtendedContext2: CONTEXT at round_up(buf, 16 / 4), XState chunk at
+ *     round_up(CONTEXT_EX + 0x18, 64), length from RtlGetExtendedContextLength2 covers any buffer alignment. */
+#ifdef T_X64
+#define AL_CTX_ALIGN 16
+#else
+#define AL_CTX_ALIGN 4
+#endif
+#define AL_ERROR_NOACCESS 998ul
+typedef struct { LONG Offset; DWORD Length; } al_ctxchunk;
+typedef struct { al_ctxchunk All, Legacy, XState; } al_ctxex;      /* winnt.h CONTEXT_EX */
+typedef LONG (NTAPI *al_ntcontinue_fn)(CONTEXT *, BOOLEAN);
+static al_ctxex *al_ctx_ex(CONTEXT *c) { return (al_ctxex *)((uint8_t *)c + sizeof(CONTEXT)); }
+static uint8_t *al_ctx_chunk(CONTEXT *c) { al_ctxex *e = al_ctx_ex(c); return (uint8_t *)e + e->XState.Offset; }
+/* Move the XState chunk d bytes up and grow All so the CONTEXT_EX stays a valid layout */
+static void al_ctx_shift_chunk(CONTEXT *c, int d, uint8_t fill) {
+    al_ctxex *e = al_ctx_ex(c);
+    uint8_t *old = al_ctx_chunk(c);
+    if (!d) return;
+    memmove(old + d, old, e->XState.Length);
+    memset(old, fill, (size_t)d);
+    e->XState.Offset += d;
+    e->All.Length += (DWORD)d;
+}
+static int al_xapi(void) {
+    return T_PROC("kernel32.dll", InitializeContext) && T_PROC("kernel32.dll", SetXStateFeaturesMask) &&
+           T_PROC("kernel32.dll", LocateXStateFeature) && T_PROC("kernel32.dll", CopyContext) &&
+           T_PROC("kernel32.dll", GetEnabledXStateFeatures);
+}
+static int al_xavx(void) {
+    return al_xapi() && cpu_has(F_AVX) && (T_PROC("kernel32.dll", GetEnabledXStateFeatures)() & T_XS_AVX);
+}
+#define AL_CTXF (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT)
+/* A check of a pinned Windows contract that Wine is known not to implement: XFAIL with a reason on Wine,
+ * an ordinary CHECK everywhere else (never weakened). */
+#define AL_CHECK_WGAP(gap, c, ...) do { int ok_ = !!(c); \
+    if (!ok_ && t_is_wine()) t_expect_fail("wine %s: %s", t_wine_version(), gap); \
+    CHECKF(ok_, __VA_ARGS__); } while (0)
+
 static DWORD WINAPI al_sleeper(void *a) { (void)a; for (;;) Sleep(50); return 0; }
+static int al_any_ne(const uint8_t *p, size_t n, uint8_t v) { for (size_t i = 0; i < n; i++) if (p[i] != v) return 1; return 0; }
+
+/* --child=al_ctxmisalign legacy|xstate
+ *   legacy: Get/SetThreadContext(CONTEXT_FULL) with the CONTEXT at +off of a 64-aligned buffer.
+ *     Prints  CM get off ok err unchanged outside ipok   /   CM set off ok err
+ *     unchanged = the whole buffer equals the snapshot taken before the call (meaningful on failure);
+ *     outside   = a byte outside [ctx, ctx+sizeof(CONTEXT)) changed.
+ *   xstate: InitializeContext(CONTEXT_XSTATE) layout with the XState chunk shifted by d bytes.
+ *     Prints  CX get d ok err unchanged outside ipok  /  CX set d ok err  /  CX loc d ok   */
 CHILD(al_ctxmisalign) {
+    if (argc < 2) return 3;
     HANDLE th = CreateThread(NULL, 0, al_sleeper, NULL, 0, NULL);
     if (!th) return 6;
     Sleep(20);
     if (SuspendThread(th) == (DWORD)-1) return 7;
-    static T_ALIGN(64) uint8_t buf[sizeof(CONTEXT) + 256];
-    static const int offs[] = { 0, 4, 8, 12 };
-    for (size_t i = 0; i < T_COUNTOF(offs); i++) {
-        memset(buf, 0xCD, sizeof buf);
-        CONTEXT *c = (CONTEXT *)(buf + 64 + offs[i]);
-        c->ContextFlags = CONTEXT_FULL;
-        SetLastError(0);
-        BOOL ok = GetThreadContext(th, c);
-        DWORD err = ok ? 0 : GetLastError();
-        int outside = 0;
-        for (int k = 0; k < 64 + offs[i]; k++) if (buf[k] != 0xCD) outside = 1;
-        for (size_t k = 64 + offs[i] + sizeof(CONTEXT); k < sizeof buf; k++) if (buf[k] != 0xCD) outside = 1;
+    if (!strcmp(argv[1], "legacy")) {
+        static T_ALIGN(64) uint8_t buf[sizeof(CONTEXT) + 256], snap[sizeof buf];
+        static T_ALIGN(64) CONTEXT good;
+        static const int offs[] = { 0, 1, 2, 4, 8, 12, 16, 32 };
+        for (size_t i = 0; i < T_COUNTOF(offs); i++) {
+            int off = offs[i];
+            memset(buf, 0xCD, sizeof buf);
+            CONTEXT *c = (CONTEXT *)(buf + 64 + off);
+            DWORD fl = CONTEXT_FULL;
+            memcpy((uint8_t *)c + offsetof(CONTEXT, ContextFlags), &fl, sizeof fl);
+            memcpy(snap, buf, sizeof buf);
+            SetLastError(0);
+            BOOL ok = GetThreadContext(th, c);
+            DWORD err = ok ? 0 : GetLastError();
+            int unchanged = !memcmp(buf, snap, sizeof buf);
+            int outside = al_any_ne(buf, (size_t)(64 + off), 0xCD) ||
+                          al_any_ne(buf + 64 + off + sizeof(CONTEXT), sizeof buf - 64 - (size_t)off - sizeof(CONTEXT), 0xCD);
+            int ipok = -1;
+            if (ok) {
+                CONTEXT tmp; memcpy(&tmp, c, sizeof tmp);
 #ifdef T_X64
-        int ipok = ok ? c->Rip != 0 && c->Rsp != 0 : -1;
+                ipok = tmp.Rip != 0 && tmp.Rsp != 0;
 #else
-        int ipok = ok ? c->Eip != 0 && c->Esp != 0 : -1;
+                ipok = tmp.Eip != 0 && tmp.Esp != 0;
 #endif
-        printf("CM %d %d %lu %d %d\n", offs[i], ok ? 1 : 0, (unsigned long)err, outside, ipok);
-    }
+            }
+            printf("CM get %d %d %lu %d %d %d\n", off, ok ? 1 : 0, (unsigned long)err, unchanged, outside, ipok);
+            /* identity SetThreadContext from the same (misaligned) location: harmless if wrongly accepted */
+            good.ContextFlags = CONTEXT_FULL;
+            if (!GetThreadContext(th, &good)) { printf("GOODGET_FAILED %lu\n", GetLastError()); return 8; }
+            memcpy(c, &good, sizeof good);
+            SetLastError(0);
+            ok = SetThreadContext(th, c);
+            err = ok ? 0 : GetLastError();
+            printf("CM set %d %d %lu\n", off, ok ? 1 : 0, (unsigned long)err);
+        }
+    } else if (!strcmp(argv[1], "xstate")) {
+        if (!al_xavx()) { printf("UNSUPPORTED\n"); TerminateThread(th, 0); return 0; }
+        __typeof__(&InitializeContext) init = T_PROC("kernel32.dll", InitializeContext);
+        __typeof__(&SetXStateFeaturesMask) setm = T_PROC("kernel32.dll", SetXStateFeaturesMask);
+        __typeof__(&LocateXStateFeature) loc = T_PROC("kernel32.dll", LocateXStateFeature);
+        DWORD need = 0, fl = AL_CTXF | CONTEXT_XSTATE;
+        init(NULL, fl, NULL, &need);
+        if (need < sizeof(CONTEXT)) return 9;
+        size_t total = (size_t)need + 256;
+        uint8_t *buf = (uint8_t *)VirtualAlloc(NULL, total, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        uint8_t *snap = (uint8_t *)malloc(total);
+        if (!buf || !snap) return 10;
+        static const int ds[] = { 0, 64, 4, 8, 16, 32, 48 };
+        for (size_t i = 0; i < T_COUNTOF(ds); i++) {
+            int d = ds[i];
+            for (int pass = 0; pass < 2; pass++) {               /* 0 = Get, 1 = Set */
+                memset(buf, 0xCD, total);
+                DWORD len = need; CONTEXT *c = NULL;
+                if (!init(buf, fl, &c, &len) || !setm(c, T_XS_AVX)) { printf("INIT_FAILED %lu\n", GetLastError()); return 11; }
+                if (pass == 1 && !GetThreadContext(th, c)) { printf("GOODGET_FAILED %lu\n", GetLastError()); return 12; }
+                al_ctx_shift_chunk(c, d, 0xCD);
+                al_ctxex *e = al_ctx_ex(c);
+                uint8_t *ch = al_ctx_chunk(c), *end = ch + e->XState.Length;
+                memcpy(snap, buf, total);
+                SetLastError(0);
+                BOOL ok = pass ? SetThreadContext(th, c) : GetThreadContext(th, c);
+                DWORD err = ok ? 0 : GetLastError();
+                if (pass) { printf("CX set %d %d %lu\n", d, ok ? 1 : 0, (unsigned long)err); continue; }
+                int unchanged = !memcmp(buf, snap, total);
+                int outside = memcmp(end, snap + (end - buf), total - (size_t)(end - buf)) != 0 ||
+                              memcmp(buf, snap, (size_t)((uint8_t *)c - buf)) != 0;
+#ifdef T_X64
+                int ipok = ok ? c->Rip != 0 : -1;
+#else
+                int ipok = ok ? c->Eip != 0 : -1;
+#endif
+                printf("CX get %d %d %lu %d %d %d\n", d, ok ? 1 : 0, (unsigned long)err, unchanged, outside, ipok);
+                if (ok) {
+                    DWORD l2 = 0;
+                    uint8_t *p = (uint8_t *)loc(c, 2, &l2);
+                    printf("CX loc %d %d\n", d, p == ch + 64 && l2 == 256);
+                }
+            }
+        }
+        VirtualFree(buf, 0, MEM_RELEASE);
+        free(snap);
+    } else return 4;
     TerminateThread(th, 0);
     CloseHandle(th);
     printf("DONE\n");
+    fflush(stdout);
+    return 0;
+}
+
+/* --child=al_capmisalign off : RtlCaptureContext into a CONTEXT at +off of a 64-aligned buffer.
+ * Prints RETURNED flags outside ipok when it returns; an exception ends the child (T_CHILD_EXCEPTION). */
+CHILD(al_capmisalign) {
+    if (argc < 2) return 3;
+    int off = atoi(argv[1]);
+    static T_ALIGN(64) uint8_t buf[sizeof(CONTEXT) + 256];
+    memset(buf, 0xCD, sizeof buf);
+    printf("START %d\n", off);
+    fflush(stdout);
+    RtlCaptureContext((CONTEXT *)(buf + 64 + off));
+    CONTEXT tmp; memcpy(&tmp, buf + 64 + off, sizeof tmp);
+    int outside = al_any_ne(buf, (size_t)(64 + off), 0xCD) ||
+                  al_any_ne(buf + 64 + off + sizeof(CONTEXT), sizeof buf - 64 - (size_t)off - sizeof(CONTEXT), 0xCD);
+#ifdef T_X64
+    int ipok = tmp.Rip != 0 && tmp.Rsp != 0;
+#else
+    int ipok = tmp.Eip != 0 && tmp.Esp != 0;
+#endif
+    printf("RETURNED 0x%lx %d %d\n", (unsigned long)tmp.ContextFlags, outside, ipok);
+    fflush(stdout);
+    return 0;
+}
+
+/* --child=al_ntcontinue off : RtlCaptureContext into an aligned CONTEXT, redirect it to al_nc_landing on a
+ * private stack, copy it to +off and NtContinue it. Accepted -> al_nc_landing prints RESUMED and exits;
+ * rejected -> NtContinue returns and the child prints NC off status. */
+static T_ALIGN(64) uint8_t g_al_nc_buf[sizeof(CONTEXT) + 128];
+static T_ALIGN(64) CONTEXT g_al_nc_ctx;
+static T_ALIGN(64) uint8_t g_al_nc_stack[65536];
+static volatile int g_al_nc_off;
+static __attribute__((noreturn, noinline)) void al_nc_landing(void) {
+    printf("RESUMED %d\n", g_al_nc_off);
+    fflush(stdout);
+    ExitProcess(0);
+}
+CHILD(al_ntcontinue) {
+    if (argc < 2) return 3;
+    int off = atoi(argv[1]);
+    g_al_nc_off = off;
+    al_ntcontinue_fn ntc = (al_ntcontinue_fn)(void *)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtContinue");
+    if (!ntc) { printf("UNSUPPORTED\n"); return 0; }
+    RtlCaptureContext(&g_al_nc_ctx);
+    uintptr_t top = (uintptr_t)(g_al_nc_stack + sizeof g_al_nc_stack - 256);
+#ifdef T_X64
+    g_al_nc_ctx.Rip = (DWORD64)(uintptr_t)al_nc_landing;
+    g_al_nc_ctx.Rsp = (DWORD64)(top - 8);             /* as after a CALL: RSP % 16 == 8 at entry */
+#else
+    g_al_nc_ctx.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS;
+    g_al_nc_ctx.Eip = (DWORD)(uintptr_t)al_nc_landing;
+    g_al_nc_ctx.Esp = (DWORD)(top - 4);
+    g_al_nc_ctx.Ebp = 0;
+#endif
+    memcpy(g_al_nc_buf + 64 + off, &g_al_nc_ctx, sizeof(CONTEXT));
+    printf("CALL %d\n", off);
+    fflush(stdout);
+    LONG st = ntc((CONTEXT *)(g_al_nc_buf + 64 + off), FALSE);
+    printf("NC %d 0x%08lx\n", off, (unsigned long)st);
     fflush(stdout);
     return 0;
 }
@@ -2115,28 +2309,284 @@ TEST(stack_alignment_tls_callback) {
     if (!total) SKIP("TLS callback never invoked (no TLS directory processing)");
     CHECKF(bad == 0, "%ld of %ld TLS callback entries with misaligned stack (%s)", bad, total, hist);
 }
-TEST(context_misaligned_buffer_info) {
-    /* GetThreadContext into a CONTEXT that violates DECLSPEC_ALIGN(16) (x64): no documented error code, so
-     * only record the result; it must never write outside the CONTEXT */
-    t_child_run("al_ctxmisalign", NULL, 15000, &g_cr);
-    if (g_cr.started && g_cr.exc_code) {
-        t_info("result", "child died of exception 0x%08lx", g_cr.exc_code);
-        t_note("GetThreadContext on a misaligned CONTEXT raised 0x%08lx", g_cr.exc_code);
-        return;
-    }
-    al_child_ok("al_ctxmisalign");
+/* Misaligned CONTEXT / CONTEXT_EX contract: see the comment block above CHILD(al_ctxmisalign) for the
+ * reference-decomp citations. */
+#define AL_WGAP_MIS "accepts a misaligned CONTEXT / XState chunk (Windows: STATUS_DATATYPE_MISALIGNMENT -> ERROR_NOACCESS)"
+TEST(context_misaligned_getset_thread_context) {
+    /* x64: CONTEXT not 16-aligned -> FALSE / ERROR_NOACCESS (998) and the buffer untouched; x86 (native or
+     * WOW64): the same for a CONTEXT not 4-aligned, while 4-aligned offsets are the struct's natural
+     * alignment and must work. */
+    t_child_run("al_ctxmisalign", "legacy", 15000, &g_cr);
+    al_child_ok("al_ctxmisalign legacy");
     int rows = 0;
     for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
-        int off, ok, outside, ipok; unsigned long err;
-        if (strncmp(l, "CM ", 3) || sscanf(l + 3, "%d %d %lu %d %d", &off, &ok, &err, &outside, &ipok) != 5) continue;
-        rows++;
-        char k[32]; snprintf(k, sizeof k, "offset_%d", off);
-        t_info(k, "ok=%d error=%lu", ok, err);
-        CHECKF(!outside, "GetThreadContext(CONTEXT at +%d) wrote outside the CONTEXT", off);
-        if (off == 0) CHECKF(ok == 1 && ipok == 1, "GetThreadContext on an aligned CONTEXT failed (error %lu)", err);
-        else if (ok) CHECKF(ipok == 1, "GetThreadContext(CONTEXT at +%d) succeeded with empty RIP/RSP", off);
+        int off, ok, unchanged, outside, ipok; unsigned long err;
+        char k[32];
+        if (!strncmp(l, "CM get ", 7) && sscanf(l + 7, "%d %d %lu %d %d %d", &off, &ok, &err, &unchanged, &outside, &ipok) == 6) {
+            rows++;
+            snprintf(k, sizeof k, "get_offset_%d", off);
+            t_info(k, "ok=%d error=%lu", ok, err);
+            CHECKF(!outside, "GetThreadContext(CONTEXT at +%d) wrote outside the CONTEXT", off);
+            if (off % AL_CTX_ALIGN == 0) {
+                CHECKF(ok == 1 && ipok == 1, "GetThreadContext(CONTEXT at +%d, %d-aligned) failed (error %lu) or empty IP/SP",
+                       off, AL_CTX_ALIGN, err);
+            } else {
+                AL_CHECK_WGAP(AL_WGAP_MIS, !ok && err == AL_ERROR_NOACCESS,
+                              "GetThreadContext(CONTEXT at +%d, not %d-aligned): ok=%d error=%lu, want FALSE / ERROR_NOACCESS (998)",
+                              off, AL_CTX_ALIGN, ok, err);
+                if (!ok) CHECKF(unchanged, "failed GetThreadContext(CONTEXT at +%d) modified the buffer", off);
+            }
+        } else if (!strncmp(l, "CM set ", 7) && sscanf(l + 7, "%d %d %lu", &off, &ok, &err) == 3) {
+            rows++;
+            snprintf(k, sizeof k, "set_offset_%d", off);
+            t_info(k, "ok=%d error=%lu", ok, err);
+            if (off % AL_CTX_ALIGN == 0)
+                CHECKF(ok == 1, "SetThreadContext(CONTEXT at +%d, %d-aligned) failed (error %lu)", off, AL_CTX_ALIGN, err);
+            else
+                AL_CHECK_WGAP(AL_WGAP_MIS, !ok && err == AL_ERROR_NOACCESS,
+                              "SetThreadContext(CONTEXT at +%d, not %d-aligned): ok=%d error=%lu, want FALSE / ERROR_NOACCESS (998)",
+                              off, AL_CTX_ALIGN, ok, err);
+        }
     }
-    CHECK_EQ(rows, 4);
+    CHECK_EQ(rows, 16);
+}
+
+TEST(context_misaligned_xstate_chunk_getset) {
+    /* A valid CONTEXT_EX whose XState chunk is moved by d bytes (All grown accordingly): d % 64 == 0 is
+     * accepted and the chunk is used where XState.Offset says; otherwise FALSE / ERROR_NOACCESS, buffer
+     * untouched (x64, pinned). x86: the WOW64 path does not carry the chunk, so only recorded. */
+    if (!al_xapi()) SKIP("XSTATE context API not exported");
+    if (!al_xavx()) SKIP("AVX not usable or not in GetEnabledXStateFeatures");
+    t_child_run("al_ctxmisalign", "xstate", 15000, &g_cr);
+    al_child_ok("al_ctxmisalign xstate");
+    REQUIREF(!strstr(g_cr.out, "UNSUPPORTED"), "child found no XSTATE support although the parent did");
+    int rows = 0;
+#ifdef T_X64
+    const int pinned = 1;
+#else
+    const int pinned = 0;
+#endif
+    for (const char *l = g_cr.out; l && *l; l = strchr(l, '\n'), l = l ? l + 1 : NULL) {
+        int d, ok, unchanged, outside, ipok; unsigned long err;
+        char k[32];
+        if (!strncmp(l, "CX get ", 7) && sscanf(l + 7, "%d %d %lu %d %d %d", &d, &ok, &err, &unchanged, &outside, &ipok) == 6) {
+            rows++;
+            snprintf(k, sizeof k, "xstate_get_shift_%d", d);
+            t_info(k, "ok=%d error=%lu", ok, err);
+            CHECKF(!outside, "GetThreadContext(XState chunk shifted by %d) wrote outside the CONTEXT .. chunk end", d);
+            if (!pinned) continue;
+            if (d % 64 == 0) {
+                CHECKF(ok == 1 && ipok == 1, "GetThreadContext(XState chunk shifted by %d, 64-aligned) failed (error %lu)", d, err);
+            } else {
+                AL_CHECK_WGAP(AL_WGAP_MIS, !ok && err == AL_ERROR_NOACCESS,
+                              "GetThreadContext(XState chunk at 64*n+%d): ok=%d error=%lu, want FALSE / ERROR_NOACCESS (998)", d % 64, ok, err);
+                if (!ok) CHECKF(unchanged, "failed GetThreadContext(XState chunk shifted by %d) modified the buffer", d);
+            }
+        } else if (!strncmp(l, "CX set ", 7) && sscanf(l + 7, "%d %d %lu", &d, &ok, &err) == 3) {
+            rows++;
+            snprintf(k, sizeof k, "xstate_set_shift_%d", d);
+            t_info(k, "ok=%d error=%lu", ok, err);
+            if (!pinned) continue;
+            if (d % 64 == 0)
+                CHECKF(ok == 1, "SetThreadContext(XState chunk shifted by %d, 64-aligned) failed (error %lu)", d, err);
+            else
+                AL_CHECK_WGAP(AL_WGAP_MIS, !ok && err == AL_ERROR_NOACCESS,
+                              "SetThreadContext(XState chunk at 64*n+%d): ok=%d error=%lu, want FALSE / ERROR_NOACCESS (998)", d % 64, ok, err);
+        } else if (!strncmp(l, "CX loc ", 7) && sscanf(l + 7, "%d %d", &d, &ok) == 2) {
+            CHECKF(ok == 1, "LocateXStateFeature(AVX) after a shift by %d is not XState chunk + 64 / 256 bytes", d);
+        }
+    }
+    CHECK_EQ(rows, 14);
+}
+
+TEST(context_misaligned_rtlcapturecontext) {
+    /* x64 RtlCaptureContext stores with FXSAVE [ctx+0x100]: a CONTEXT that is not 16-aligned raises #GP
+     * (SDM FXSAVE) and the process sees an exception. x86 stores only GPR/segment dwords: any 4-aligned
+     * CONTEXT works; byte offsets are recorded only. */
+#ifdef T_X64
+    static const int offs[] = { 0, 16, 8, 4 };
+#else
+    static const int offs[] = { 0, 4, 8, 1 };
+#endif
+    for (size_t i = 0; i < T_COUNTOF(offs); i++) {
+        int off = offs[i];
+        char a[16], k[32], v[64];
+        snprintf(a, sizeof a, "%d", off);
+        snprintf(k, sizeof k, "capture_offset_%d", off);
+        t_child_run("al_capmisalign", a, 15000, &g_cr);
+        REQUIREF(g_cr.started && !g_cr.timed_out, "al_capmisalign %d did not run to completion", off);
+        int ret = t_child_find(&g_cr, "RETURNED ", v, sizeof v);
+        unsigned long fl = 0; int outside = 0, ipok = 0;
+        if (ret) sscanf(v, "%lx %d %d", &fl, &outside, &ipok);
+        t_info(k, "%s", ret ? v : "exception");
+        if (g_cr.exc_code) t_info("capture_exception", "offset %d: 0x%08lx", off, g_cr.exc_code);
+        if (ret) CHECKF(!outside, "RtlCaptureContext(CONTEXT at +%d) wrote outside the CONTEXT", off);
+        if (off % AL_CTX_ALIGN == 0) {
+            CHECKF(ret && g_cr.exc_code == 0 && ipok == 1, "RtlCaptureContext(CONTEXT at +%d, aligned) failed (exception 0x%08lx)",
+                   off, g_cr.exc_code);
+        } else if (AL_CTX_ALIGN == 16) {
+            AL_CHECK_WGAP("RtlCaptureContext does not use FXSAVE on the CONTEXT", !ret && g_cr.exc_code,
+                          "RtlCaptureContext(CONTEXT at +%d) returned normally; want the FXSAVE #GP exception", off);
+            if (g_cr.exc_code)
+                CHECKF(g_cr.exc_code == 0xC0000005ul || g_cr.exc_code == 0x80000002ul,
+                       "misaligned RtlCaptureContext raised 0x%08lx, want ACCESS_VIOLATION or DATATYPE_MISALIGNMENT", g_cr.exc_code);
+        }
+    }
+}
+
+TEST(context_misaligned_ntcontinue) {
+    /* ntoskrnl!KiContinueEx: a user CONTEXT with (ctx & 0xF) != 0 -> STATUS_DATATYPE_MISALIGNMENT returned
+     * (x64). An aligned CONTEXT resumes at its RIP/EIP. x86: 4-aligned works, byte offsets recorded only. */
+#ifdef T_X64
+    static const int offs[] = { 0, 16, 8, 4 };
+#else
+    static const int offs[] = { 0, 4, 1 };
+#endif
+    for (size_t i = 0; i < T_COUNTOF(offs); i++) {
+        int off = offs[i];
+        char a[16], k[32], v[64];
+        snprintf(a, sizeof a, "%d", off);
+        snprintf(k, sizeof k, "ntcontinue_offset_%d", off);
+        t_child_run("al_ntcontinue", a, 15000, &g_cr);
+        REQUIREF(g_cr.started && !g_cr.timed_out, "al_ntcontinue %d did not run to completion", off);
+        if (strstr(g_cr.out, "UNSUPPORTED")) SKIP("ntdll!NtContinue not exported");
+        int resumed = t_child_find(&g_cr, "RESUMED ", v, sizeof v);
+        unsigned long st = 0;
+        int ret = t_child_find(&g_cr, "NC ", v, sizeof v) && sscanf(v, "%*d %lx", &st) == 1;
+        t_info(k, "%s", resumed ? "resumed" : ret ? v : "neither (exception?)");
+        CHECKF(g_cr.exc_code == 0, "NtContinue(CONTEXT at +%d): child died of exception 0x%08lx", off, g_cr.exc_code);
+        if (off % AL_CTX_ALIGN == 0)
+            CHECKF(resumed, "NtContinue(CONTEXT at +%d, aligned) did not resume at the CONTEXT's IP (status 0x%08lx)", off, st);
+        else if (AL_CTX_ALIGN == 16)
+            AL_CHECK_WGAP(AL_WGAP_MIS, !resumed && ret && st == 0x80000002ul,
+                          "NtContinue(CONTEXT at +%d): resumed=%d status 0x%08lx, want STATUS_DATATYPE_MISALIGNMENT returned", off, resumed, st);
+    }
+}
+
+static DWORD WINAPI al_evwait(void *ev) { WaitForSingleObject((HANDLE)ev, 10000); return 0; }
+TEST(context_initialize_misaligned_buffer_xstate_chunk) {
+    /* InitializeContext on a buffer at every start residue 0..63: the CONTEXT is AL_CTX_ALIGN-aligned, the
+     * XState chunk (CONTEXT_EX + XState.Offset) 64-aligned, both inside the buffer, and the result is
+     * accepted by GetThreadContext (x64 pinned; x86 recorded). */
+    if (!al_xapi()) SKIP("XSTATE context API not exported");
+    if (!al_xavx()) SKIP("AVX not usable or not in GetEnabledXStateFeatures");
+    __typeof__(&InitializeContext) init = T_PROC("kernel32.dll", InitializeContext);
+    __typeof__(&SetXStateFeaturesMask) setm = T_PROC("kernel32.dll", SetXStateFeaturesMask);
+    DWORD need = 0, fl = AL_CTXF | CONTEXT_XSTATE;
+    init(NULL, fl, NULL, &need);
+    REQUIRE(need > sizeof(CONTEXT));
+    uint8_t *mem = (uint8_t *)VirtualAlloc(NULL, (size_t)need + 128, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    REQUIRE(mem);
+    HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
+    HANDLE th = ev ? CreateThread(NULL, 0, al_evwait, ev, 0, NULL) : NULL;
+    if (!th) { VirtualFree(mem, 0, MEM_RELEASE); if (ev) CloseHandle(ev); SKIP("CreateThread failed (%lu)", GetLastError()); }
+    Sleep(10);
+    int susp = SuspendThread(th) != (DWORD)-1;
+    int bad = 0, notround = 0, getfail = 0;
+    for (int mis = 0; mis < 64 && bad < 4; mis++) {
+        uint8_t *b = mem + mis;
+        memset(mem, 0xCD, (size_t)need + 128);
+        DWORD len = need; CONTEXT *c = NULL;
+        if (!init(b, fl, &c, &len)) { CHECKF(0, "misalign %d: InitializeContext failed (%lu)", mis, GetLastError()); bad++; continue; }
+        uint8_t *ch = al_ctx_chunk(c);
+        al_ctxex *e = al_ctx_ex(c);
+        int ok = 1;
+        if (((uintptr_t)c % AL_CTX_ALIGN) != 0) { CHECKF(0, "misalign %d: CONTEXT %p not %d-aligned", mis, (void *)c, AL_CTX_ALIGN); ok = 0; }
+        if (((uintptr_t)ch & 63) != 0) { CHECKF(0, "misalign %d: XState chunk %p not 64-aligned", mis, (void *)ch); ok = 0; }
+        if ((uint8_t *)c < b || ch + e->XState.Length > b + need) {
+            CHECKF(0, "misalign %d: CONTEXT %p .. chunk end %p outside buffer [%p,+%lu)", mis, (void *)c,
+                   (void *)(ch + e->XState.Length), (void *)b, (unsigned long)need);
+            ok = 0;
+        }
+        CHECKF(!al_any_ne(b + need, 128 - (size_t)mis, 0xCD) && !al_any_ne(mem, (size_t)mis, 0xCD),
+               "misalign %d: InitializeContext wrote outside the buffer", mis);
+        if ((uintptr_t)c != (((uintptr_t)b + AL_CTX_ALIGN - 1) & ~(uintptr_t)(AL_CTX_ALIGN - 1))) notround++;
+        if (!ok) { bad++; continue; }
+        if (susp && setm(c, T_XS_AVX) && !GetThreadContext(th, c)) {
+            getfail++;
+#ifdef T_X64
+            CHECKF(0, "misalign %d: GetThreadContext rejected an InitializeContext layout (error %lu)", mis, GetLastError());
+            bad++;
+#endif
+        }
+    }
+    if (susp) ResumeThread(th);
+    SetEvent(ev);
+    WaitForSingleObject(th, 10000);
+    CloseHandle(th);
+    CloseHandle(ev);
+    VirtualFree(mem, 0, MEM_RELEASE);
+    t_info("context_not_at_round_up", "%d of 64", notround);
+    if (notround) t_note("InitializeContext placed the CONTEXT elsewhere than round_up(buffer, %d) (Windows 19041 does)", AL_CTX_ALIGN);
+    t_info("getthreadcontext_failures", "%d of 64", getfail);
+    if (!susp) t_note("SuspendThread failed; GetThreadContext acceptance not tested");
+}
+
+TEST(context_copycontext_misaligned_dest_xstate) {
+    /* ntdll!RtlCopyContext / RtlpCopyXStateChunk do no alignment check: a destination whose XState chunk is
+     * not 64-aligned (valid CONTEXT_EX layout) receives the header (Mask = source Mask & enabled & ~3) and
+     * the AVX bytes at CONTEXT_EX + XState.Offset; nothing outside the chunk is written. */
+    if (!al_xapi()) SKIP("XSTATE context API not exported");
+    if (!al_xavx()) SKIP("AVX not usable or not in GetEnabledXStateFeatures");
+    __typeof__(&InitializeContext) init = T_PROC("kernel32.dll", InitializeContext);
+    __typeof__(&SetXStateFeaturesMask) setm = T_PROC("kernel32.dll", SetXStateFeaturesMask);
+    __typeof__(&LocateXStateFeature) loc = T_PROC("kernel32.dll", LocateXStateFeature);
+    __typeof__(&CopyContext) copy = T_PROC("kernel32.dll", CopyContext);
+    DWORD need = 0, fl = AL_CTXF | CONTEXT_XSTATE;
+    init(NULL, fl, NULL, &need);
+    REQUIRE(need > sizeof(CONTEXT));
+    size_t total = (size_t)need + 128;
+    uint8_t *sb = (uint8_t *)VirtualAlloc(NULL, total, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    uint8_t *db = (uint8_t *)VirtualAlloc(NULL, total, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    REQUIRE(sb && db);
+    DWORD len = need; CONTEXT *s = NULL;
+    REQUIREF(init(sb, fl, &s, &len), "InitializeContext(source) failed (%lu)", GetLastError());
+    REQUIREF(setm(s, T_XS_AVX), "SetXStateFeaturesMask(source, AVX) failed (%lu)", GetLastError());
+    DWORD avxlen = 0;
+    uint8_t *savx = (uint8_t *)loc(s, 2, &avxlen);
+    REQUIREF(savx && avxlen == 256, "LocateXStateFeature(source, AVX) = %p len %lu", (void *)savx, (unsigned long)avxlen);
+    t_pattern_reg(savx, 256, 0x5A1, 2);
+#ifdef T_X64
+    s->Rax = 0x1122334455667788ull; s->R15 = 0x0F0E0D0C0B0A0908ull;
+#else
+    s->Eax = 0x11223344u; s->Edi = 0x0B0A0908u;
+#endif
+    static const int ds[] = { 4, 16, 32, 48, 64 };
+    for (size_t i = 0; i < T_COUNTOF(ds); i++) {
+        int d = ds[i];
+        memset(db, 0xCD, total);
+        CONTEXT *c = NULL; len = need;
+        REQUIREF(init(db, fl, &c, &len), "InitializeContext(destination) failed (%lu)", GetLastError());
+        al_ctx_shift_chunk(c, d, 0xCD);
+        al_ctxex *e = al_ctx_ex(c);
+        uint8_t *ch = al_ctx_chunk(c), *end = ch + e->XState.Length;
+        /* sentinel the gap between CONTEXT_EX and the shifted chunk, and everything after the chunk */
+        memset((uint8_t *)e + sizeof *e, 0xCD, (size_t)(ch - ((uint8_t *)e + sizeof *e)));
+        memset(end, 0xCD, total - (size_t)(end - db));
+        SetLastError(0);
+        BOOL ok = copy(c, fl, s);
+        DWORD err = ok ? 0 : GetLastError();
+        CHECKF(ok, "CopyContext into a destination with the XState chunk at 64*n+%d failed (error %lu)", d % 64, (unsigned long)err);
+        if (!ok) continue;
+        uint64_t mask; memcpy(&mask, ch, 8);
+        CHECKF(mask == T_XS_AVX, "shift %d: destination header Mask 0x%llx, want 0x%x (source Mask & enabled & ~3)", d,
+               (unsigned long long)mask, (unsigned)T_XS_AVX);
+        DWORD l2 = 0;
+        uint8_t *davx = (uint8_t *)loc(c, 2, &l2);
+        CHECKF(davx == ch + 64 && l2 == 256, "shift %d: LocateXStateFeature(dest, AVX) = %p len %lu, want chunk+64 = %p / 256", d,
+               (void *)davx, (unsigned long)l2, (void *)(ch + 64));
+        CHECK_MEM(ch + 64, savx, 256);
+        CHECKF(!al_any_ne((uint8_t *)e + sizeof *e, (size_t)(ch - ((uint8_t *)e + sizeof *e)), 0xCD),
+               "shift %d: CopyContext wrote between CONTEXT_EX and the XState chunk", d);
+        CHECKF(!al_any_ne(end, total - (size_t)(end - db), 0xCD), "shift %d: CopyContext wrote past the XState chunk", d);
+#ifdef T_X64
+        CHECK_EQ(c->Rax, s->Rax); CHECK_EQ(c->R15, s->R15);
+#else
+        CHECK_EQ(c->Eax, s->Eax); CHECK_EQ(c->Edi, s->Edi);
+#endif
+    }
+    VirtualFree(sb, 0, MEM_RELEASE);
+    VirtualFree(db, 0, MEM_RELEASE);
 }
 
 /* ======================================================================================
