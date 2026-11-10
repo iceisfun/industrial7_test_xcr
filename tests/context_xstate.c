@@ -35,7 +35,9 @@
  *     from the call itself; both readings are accepted, nothing else.
  *   - WOW64: the x86 build exercises the WOW64 context path when it runs on a 64-bit OS; the x64 build
  *     drives Wow64SuspendThread / Wow64GetThreadContext / Wow64SetThreadContext against the sibling x86
- *     build (build/x86/context_xstate.exe) when it exists.
+ *     build (build/x86/context_xstate.exe) when it exists, falling back to the documented ntdll implementations
+ *     (RtlWow64SuspendThread, NtQuery/SetInformationThread(ThreadWow64Context)) when kernel32 lacks an export;
+ *     the WOW64_CONTEXT contract is pinned in section 11.
  * Result policy: feature absent -> SKIP; advertised but wrong -> FAIL; observed-but-variable -> t_note/t_info.
  * Deliberately invalid pointers run in CHILD() processes via t_child_run(). See common/API.md. */
 #include "t.h"
@@ -3628,6 +3630,12 @@ TEST(wow64_own_threads) {
                     CHECK_MEM(wc.ExtendedRegisters + 160, c->ExtendedRegisters + 160, 128);
                 }
             } else t_note("Wow64GetThreadContext not exported to 32-bit code");
+            /* the worker is suspended once (cx_suspend): Wow64SuspendThread shares the documented count */
+            if (X.Wow64SuspendThread) {
+                DWORD sc = X.Wow64SuspendThread(w.h);
+                CHECKF(sc == 1, "Wow64SuspendThread previous count %lu want 1 (GLE=%lu)", (unsigned long)sc, (unsigned long)GetLastError());
+                if (sc != (DWORD)-1) { DWORD rc = ResumeThread(w.h); CHECKF(rc == 2, "ResumeThread previous count %lu want 2", (unsigned long)rc); }
+            } else t_note("Wow64SuspendThread not exported to 32-bit code");
             cx_free(c);
         }
     } else CHECKF(ok, "worker did not start");
@@ -3638,15 +3646,76 @@ TEST(wow64_own_threads) {
 #endif
 }
 
-/* Child (x86 build): worker with a known state; parent drives it through the Wow64* API. */
+/* WOW64 cross-architecture contract, pinned against the Windows 10 22H2 (19041) reference decompilation
+ * (docker1 corpus explorer, checked 2026-11):
+ *   kernelbase!Wow64GetThreadContext -> ntdll!RtlWow64GetThreadContext = NtQueryInformationThread(h,
+ *     ThreadWow64Context (0x1d), ctx, 0x2cc, NULL); failure -> BaseSetLastNTError, FALSE.
+ *   kernelbase!Wow64SetThreadContext -> ntdll!RtlWow64SetThreadContext = NtSetInformationThread(h, 0x1d, ctx, 0x2cc).
+ *   kernelbase!Wow64SuspendThread -> ntdll!RtlWow64SuspendThread(h, &prev) (NtSuspendThread for an ordinary
+ *     x86 target); failure -> BaseSetLastNTError and (DWORD)-1, else the previous suspend count.
+ *   ntoskrnl!PspWow64SetContextThread: length != 0x2cc -> STATUS_INFO_LENGTH_MISMATCH (0xc0000004); target
+ *     process without an x86 (0x14c) WOW64 machine -> STATUS_INVALID_PARAMETER (0xc000000d).
+ *     PspWow64GetContextThread: same length / machine gates (error status not visible in the decompile).
+ *   ntoskrnl!RtlpWow64SanitizeContextFlags: user-mode flags are sanitized (| CONTEXT_i386, & 0xd801007f).
+ *   So the WOW64 view is the fixed 0x2cc-byte WOW64_CONTEXT: FNSAVE FloatSave + 512-byte FXSAVE
+ *   ExtendedRegisters (XMM0-7, MXCSR); it has no room for XSTATE (YMM) components. YMM uppers of an x86
+ *   thread are visible only through GetThreadContext(CONTEXT_XSTATE) inside the x86 process, or through
+ *   the native x64 view of a thread suspended in 32-bit code. */
+#ifndef WOW64_CONTEXT_XSTATE
+#define WOW64_CONTEXT_XSTATE (WOW64_CONTEXT_i386 | 0x40L)
+#endif
+#define CX_W64_CTX_LEN 0x2cc
+_Static_assert(sizeof(WOW64_CONTEXT) == CX_W64_CTX_LEN, "WOW64_CONTEXT is 0x2cc bytes");
+#define CX_W64_NEW_MXCSR_DAZ 0x5FC0u     /* RC = up, DAZ, all exceptions masked */
+#define CX_W64_NEW_MXCSR     0x5F80u     /* without DAZ when MXCSR_MASK lacks it */
+#define CX_W64_NEW_FCW       0x067Fu     /* RC = down, PC = 53 bit, all masked */
+
+static void cx_print_hex(const char *key, const void *p, size_t n) {
+    const uint8_t *b = (const uint8_t *)p;
+    printf("%s", key);
+    for (size_t i = 0; i < n; i++) printf("%02x", b[i]);
+    printf("\n");
+}
+
+/* x86 child: the "self view" of its own YMM worker through GetThreadContext(CONTEXT_XSTATE). Uses no CHECK
+ * (children report KEY=value lines only). */
+static void cx_w64_self_view(cx_worker *w) {
+    cx_xc x;
+    memset(&x, 0, sizeof x);
+    if (!cx_xapi()) { printf("W64_SELF_ERR=noapi\n"); return; }
+    if (!cx_xc_init(&x, CX_STD | CONTEXT_XSTATE)) { printf("W64_SELF_ERR=init gle=%lu\n", (unsigned long)x.err); return; }
+    if (!X.SetXStateFeaturesMask(x.ctx, T_XS_AVX)) { printf("W64_SELF_ERR=setmask gle=%lu\n", (unsigned long)GetLastError()); cx_xc_free(&x); return; }
+    DWORD sc = SuspendThread(w->h);
+    BOOL ok = GetThreadContext(w->h, x.ctx);
+    DWORD gle = GetLastError();
+    ResumeThread(w->h);
+    if (sc != 0 || !ok) { printf("W64_SELF_ERR=get sc=%lu ok=%d gle=%lu\n", (unsigned long)sc, ok, (unsigned long)gle); cx_xc_free(&x); return; }
+    DWORD64 m = 0;
+    X.GetXStateFeaturesMask(x.ctx, &m);
+    printf("W64_SELF_MASK=%llx\n", (unsigned long long)m);
+    cx_print_hex("W64_SELF_X=", cx_xmm(x.ctx, 0), 8 * 16);
+    DWORD len = 0;
+    uint8_t *yh = cx_locate(x.ctx, CX_XS_AVX, &len);
+    if (yh && len >= 8 * 16) cx_print_hex("W64_SELF_YH=", yh, 8 * 16);
+    else printf("W64_SELF_ERR=locate p=%d len=%lu\n", yh != NULL, (unsigned long)len);
+    cx_xc_free(&x);
+}
+
+/* Child (x86 build): worker with a known state; the x64 parent drives it through the WOW64 context API.
+ *   --child=wow64_target [xmm|ymm]   (ymm: YMM worker + self view before W64_INFO) */
 CHILD(wow64_target) {
+    int ymm = argc > 1 && strcmp(argv[1], "ymm") == 0;
+    cx_resolve();
+    if (ymm && !cx_avx_ok()) { printf("W64_ERR=noavx avx=%d api=0x%llx\n", cpu_has(F_AVX), (unsigned long long)cx_enabled()); return 4; }
+    int kind = ymm ? T_VK_YMM : T_VK_XMM;
     cx_args *a = cx_args_new(CX_W64_TAG, 1);
     if (!a) return 3;
     a->fcw_in = 0x0A7F; a->mxcsr_in = 0x3F80;
     cx_worker w;
-    if (!cx_worker_start(&w, a, T_VK_XMM)) { printf("W64_ERR=start\n"); return 3; }
-    printf("W64_INFO=%llx %llx %llx %lu %llx %d\n", (unsigned long long)(uintptr_t)a, (unsigned long long)(uintptr_t)cx_xmm_loop,
-           (unsigned long long)(uintptr_t)cx_xmm_exit, (unsigned long)w.tid, (unsigned long long)a->sp, (int)sizeof(void *));
+    if (!cx_worker_start(&w, a, kind)) { printf("W64_ERR=start\n"); return 3; }
+    if (ymm) cx_w64_self_view(&w);
+    printf("W64_INFO=%llx %llx %llx %lu %llx %d\n", (unsigned long long)(uintptr_t)a, (unsigned long long)(uintptr_t)cx_loop_lo(kind),
+           (unsigned long long)(uintptr_t)cx_loop_hi(kind), (unsigned long)w.tid, (unsigned long long)a->sp, (int)sizeof(void *));
     fflush(stdout);
     DWORD wr = WaitForSingleObject(w.h, 20000);
     if (wr != WAIT_OBJECT_0) printf("W64_TIMEOUT=1\n");
@@ -3654,162 +3723,577 @@ CHILD(wow64_target) {
     printf("W64_GOUT=");
     for (int i = 0; i < CX_NGPR; i++) printf("%llx,", (unsigned long long)a->gout[i]);
     printf("\n");
-    char hx[64];
-    for (int i = 0; i < 16; i++) sprintf(hx + 2 * i, "%02x", a->vout[2][i]);
-    printf("W64_X2=%s\n", hx);
+    uint8_t v[8][16], yh[8][16];
+    for (int i = 0; i < 8; i++) { memcpy(v[i], a->vout[i], 16); memcpy(yh[i], a->vout[i] + 16, 16); }
+    cx_print_hex("W64_V=", v, sizeof v);
+    if (ymm) cx_print_hex("W64_YH=", yh, sizeof yh);
+    int fok = 1;
+    for (int i = 0; i < 8; i++) if (memcmp(a->fout[i].b, a->fin[i].b, 10)) fok = 0;
+    printf("W64_FOK=%d\n", fok);
     printf("W64_MX=%x %x %u\n", a->mxcsr_out, a->fcw_out, a->remaining);
     fflush(stdout);
     return 0;
 }
 
 #ifdef T_X64
+#define CX_ThreadWow64Context 29
+typedef LONG (NTAPI *cx_nqit_t)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+typedef LONG (NTAPI *cx_nsit_t)(HANDLE, ULONG, PVOID, ULONG);
+typedef LONG (NTAPI *cx_rws_t)(HANDLE, PULONG);
+static struct { int resolved; cx_nqit_t nqit; cx_nsit_t nsit; cx_rws_t rws; } N;
+static LONG g_w64_status;            /* NTSTATUS of the last ntdll-path call */
+static void cx_nt_resolve(void) {
+    if (N.resolved) return;
+    N.nqit = (cx_nqit_t)t_proc("ntdll.dll", "NtQueryInformationThread");
+    N.nsit = (cx_nsit_t)t_proc("ntdll.dll", "NtSetInformationThread");
+    N.rws = (cx_rws_t)t_proc("ntdll.dll", "RtlWow64SuspendThread");
+    N.resolved = 1;
+}
+/* Wow64SuspendThread, else its implementation ntdll!RtlWow64SuspendThread, else SuspendThread (which the
+ * 19041 implementation reduces to for an x86 target). Previous suspend count or (DWORD)-1. */
+static DWORD cx_w64_suspend(HANDLE h, const char **via) {
+    if (X.Wow64SuspendThread) { *via = "kernel32!Wow64SuspendThread"; return X.Wow64SuspendThread(h); }
+    if (N.rws) {
+        *via = "ntdll!RtlWow64SuspendThread";
+        ULONG prev = 0xFFFFFFFFu;
+        g_w64_status = N.rws(h, &prev);
+        return g_w64_status < 0 ? (DWORD)-1 : (DWORD)prev;
+    }
+    *via = "SuspendThread";
+    return SuspendThread(h);
+}
+static const char *cx_w64_get_via(void) { return X.Wow64GetThreadContext ? "kernel32!Wow64GetThreadContext" : "ntdll!NtQueryInformationThread(ThreadWow64Context)"; }
+static const char *cx_w64_set_via(void) { return X.Wow64SetThreadContext ? "kernel32!Wow64SetThreadContext" : "ntdll!NtSetInformationThread(ThreadWow64Context)"; }
+static BOOL cx_w64_get(HANDLE h, WOW64_CONTEXT *c) {
+    if (X.Wow64GetThreadContext) return X.Wow64GetThreadContext(h, c);
+    g_w64_status = N.nqit(h, CX_ThreadWow64Context, c, CX_W64_CTX_LEN, NULL);
+    SetLastError((DWORD)g_w64_status);
+    return g_w64_status >= 0;
+}
+static BOOL cx_w64_set(HANDLE h, WOW64_CONTEXT *c) {
+    if (X.Wow64SetThreadContext) return X.Wow64SetThreadContext(h, c);
+    g_w64_status = N.nsit(h, CX_ThreadWow64Context, c, CX_W64_CTX_LEN);
+    SetLastError((DWORD)g_w64_status);
+    return g_w64_status >= 0;
+}
+#define CX_NEED_W64API() do { cx_resolve(); cx_nt_resolve(); \
+    if (!X.Wow64GetThreadContext && !N.nqit) SKIP("neither Wow64GetThreadContext nor NtQueryInformationThread exported"); \
+    if (!X.Wow64SetThreadContext && !N.nsit) SKIP("neither Wow64SetThreadContext nor NtSetInformationThread exported"); } while (0)
+
 static int cx_hexbytes(const char *s, uint8_t *out, int n) {
-    for (int i = 0; i < n; i++) { unsigned v; if (sscanf(s + 2 * i, "%2x", &v) != 1) return 0; out[i] = (uint8_t)v; }
+    for (int i = 0; i < n; i++) { unsigned v; if (!s || sscanf(s + 2 * i, "%2x", &v) != 1) return 0; out[i] = (uint8_t)v; }
     return 1;
 }
 static const char *cx_find_line(const char *buf, const char *prefix) {
     const char *p = strstr(buf, prefix);
     return p ? p + strlen(prefix) : NULL;
 }
+
+/* The x86 sibling (build/x86/context_xstate.exe --child=wow64_target <mode>) */
+typedef struct cx_sib {
+    PROCESS_INFORMATION pi;
+    HANDLE rd;
+    size_t n;
+    int exited;
+    unsigned long long args, lo, hi, sp;
+    unsigned long tid;
+    int psz;
+    char out[32768];
+} cx_sib;
+static cx_sib g_sib;
+static void cx_sib_pump(cx_sib *s) {
+    DWORD avail = 0;
+    while (PeekNamedPipe(s->rd, NULL, 0, NULL, &avail, NULL) && avail) {
+        DWORD got = 0;
+        if (s->n + avail >= sizeof s->out) avail = (DWORD)(sizeof s->out - s->n - 1);
+        if (!avail || !ReadFile(s->rd, s->out + s->n, avail, &got, NULL) || !got) break;
+        s->n += got; s->out[s->n] = 0;
+    }
+}
+static void cx_sib_close(cx_sib *s) {
+    if (s->pi.hProcess) {
+        if (WaitForSingleObject(s->pi.hProcess, 0) != WAIT_OBJECT_0) { TerminateProcess(s->pi.hProcess, 1); WaitForSingleObject(s->pi.hProcess, 2000); }
+        CloseHandle(s->pi.hProcess); CloseHandle(s->pi.hThread);
+    }
+    if (s->rd) CloseHandle(s->rd);
+    s->pi.hProcess = s->pi.hThread = s->rd = NULL;
+}
+/* 1: running, W64_INFO parsed. 0: cannot run here (why = SKIP reason). -1: started but failed (why). */
+static int cx_sib_start(cx_sib *s, const char *mode, char *why, size_t cap) {
+    memset(s, 0, sizeof *s);
+    char path[MAX_PATH * 2];
+    snprintf(path, sizeof path, "%s", t_self_path());
+    char *p = NULL;
+    for (char *q = path; (q = strstr(q, "\\x64\\")) != NULL; q++) p = q;
+    if (!p) for (char *q = path; (q = strstr(q, "/x64/")) != NULL; q++) p = q;
+    if (!p) { snprintf(why, cap, "cannot derive the x86 sibling from %s", path); return 0; }
+    p[1] = 'x'; p[2] = '8'; p[3] = '6';
+    if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) { snprintf(why, cap, "x86 build not found at %s", path); return 0; }
+    SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
+    HANDLE wr = NULL;
+    if (!CreatePipe(&s->rd, &wr, &sa, 1 << 16)) { snprintf(why, cap, "CreatePipe GLE=%lu", (unsigned long)GetLastError()); return -1; }
+    SetHandleInformation(s->rd, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFOA si; memset(&si, 0, sizeof si);
+    si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = wr; si.hStdError = wr; si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    char cmd[MAX_PATH * 2 + 64];
+    snprintf(cmd, sizeof cmd, "\"%s\" --child=wow64_target %s", path, mode);
+    BOOL cp = CreateProcessA(path, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &s->pi);
+    DWORD cerr = GetLastError();
+    CloseHandle(wr);
+    if (!cp) { CloseHandle(s->rd); s->rd = NULL; snprintf(why, cap, "cannot start the x86 sibling (GLE=%lu): WOW64 unavailable", (unsigned long)cerr); return 0; }
+    const char *info = NULL;
+    double t0 = t_now_ms();
+    while (t_now_ms() - t0 < 15000) {
+        cx_sib_pump(s);
+        const char *q = cx_find_line(s->out, "W64_INFO=");
+        if (q && strchr(q, '\n')) { info = q; break; }
+        if (cx_find_line(s->out, "W64_ERR=")) break;
+        if (WaitForSingleObject(s->pi.hProcess, 5) == WAIT_OBJECT_0) { cx_sib_pump(s); s->exited = 1; break; }
+    }
+    if (info) sscanf(info, "%llx %llx %llx %lu %llx %d", &s->args, &s->lo, &s->hi, &s->tid, &s->sp, &s->psz);
+    if (!info || s->psz != 4) {
+        snprintf(why, cap, "x86 sibling did not report (exited=%d psz=%d) output: %.400s", s->exited, s->psz, s->out);
+        cx_sib_close(s);
+        return -1;
+    }
+    return 1;
+}
+static int cx_sib_stop_flag(cx_sib *s) {
+    LONG one = 1;
+    SIZE_T wn = 0;
+    BOOL ok = WriteProcessMemory(s->pi.hProcess, (void *)(uintptr_t)(s->args + CXO_STOP), &one, sizeof one, &wn);
+    CHECKF(ok, "WriteProcessMemory(stop) GLE=%lu", (unsigned long)GetLastError());
+    return ok;
+}
+/* Drain until the sibling exits (bounded); 1 if it exited on its own with code 0. */
+static int cx_sib_finish(cx_sib *s, DWORD ms) {
+    double t0 = t_now_ms();
+    int ok = 0;
+    for (;;) {
+        cx_sib_pump(s);
+        if (WaitForSingleObject(s->pi.hProcess, 5) == WAIT_OBJECT_0) {
+            cx_sib_pump(s);
+            DWORD code = 0;
+            GetExitCodeProcess(s->pi.hProcess, &code);
+            ok = code == 0;
+            CHECKF(ok, "x86 sibling exit code 0x%lx", (unsigned long)code);
+            break;
+        }
+        if (t_now_ms() - t0 > ms) { CHECKF(0, "x86 sibling did not exit within %lu ms", (unsigned long)ms); break; }
+    }
+    cx_sib_close(s);
+    t_log("x86 sibling output:\n%s", s->out);
+    CHECKF(!cx_find_line(s->out, "W64_TIMEOUT="), "x86 worker never observed the stop flag");
+    return ok;
+}
+static HANDLE cx_sib_thread(cx_sib *s) {
+    HANDLE th = OpenThread(THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, FALSE, s->tid);
+    CHECKF(th != NULL, "OpenThread(%lu) GLE=%lu", s->tid, (unsigned long)GetLastError());
+    return th;
+}
+#define CX_SIB_START(s, mode) do { char why_[600]; int st_ = cx_sib_start((s), (mode), why_, sizeof why_); \
+    if (st_ == 0) { SKIP("%s", why_); } \
+    REQUIREF(st_ > 0, "%s", why_); } while (0)
+
+/* The x86 worker's registers through the WOW64 view (x87 stack, FCW, XMM0-7, MXCSR, GPRs, EIP/ESP) */
+static void cx_w64_check_state(WOW64_CONTEXT *wc, const cx_args *exp, const cx_sib *s, const char *what) {
+    static const char *gn[5] = { "ebx", "edx", "esi", "edi", "ebp" };
+    DWORD g[5] = { wc->Ebx, wc->Edx, wc->Esi, wc->Edi, wc->Ebp };
+    for (int i = 0; i < 5; i++)
+        CHECKF(g[i] == (DWORD)exp->gin[i], "%s %s 0x%lx want 0x%lx", what, gn[i], (unsigned long)g[i], (unsigned long)(DWORD)exp->gin[i]);
+    CHECKF(wc->Eip >= s->lo && wc->Eip <= s->hi, "%s Eip 0x%lx outside [0x%llx, 0x%llx]", what, (unsigned long)wc->Eip, s->lo, s->hi);
+    CHECKF(wc->Esp == s->sp, "%s Esp 0x%lx want 0x%llx", what, (unsigned long)wc->Esp, s->sp);
+    CHECKF(wc->Eax == (DWORD)(s->args + CXO_READY), "%s Eax 0x%lx want &ready", what, (unsigned long)wc->Eax);
+    CHECKF((wc->SegCs & 3) == 3 && wc->SegCs != cx_own_cs(), "%s SegCs 0x%lx (64-bit CS is 0x%x)", what, (unsigned long)wc->SegCs, cx_own_cs());
+    char lab[64];
+    for (int i = 0; i < 8; i++) {
+        snprintf(lab, sizeof lab, "%s xmm%d", what, i);
+        CHECK_REG(lab, wc->ExtendedRegisters + 160 + 16 * i, exp->vin[i], 16);
+        snprintf(lab, sizeof lab, "%s ST(%d) FloatSave", what, i);
+        CHECK_REG(lab, wc->FloatSave.RegisterArea + 10 * i, exp->fin[i].b, 10);
+        snprintf(lab, sizeof lab, "%s ST(%d) FXSAVE", what, i);
+        CHECK_REG(lab, wc->ExtendedRegisters + 32 + 16 * i, exp->fin[i].b, 10);
+    }
+    uint16_t fx_fcw; memcpy(&fx_fcw, wc->ExtendedRegisters, 2);
+    CHECKF((wc->FloatSave.ControlWord & CX_FCW_BITS) == (0x0A7F & CX_FCW_BITS), "%s FloatSave FCW 0x%lx want 0x0A7F", what,
+           (unsigned long)wc->FloatSave.ControlWord);
+    CHECKF((fx_fcw & CX_FCW_BITS) == (0x0A7F & CX_FCW_BITS), "%s FXSAVE FCW 0x%x want 0x0A7F", what, fx_fcw);
+    uint32_t mx; memcpy(&mx, wc->ExtendedRegisters + 24, 4);
+    CHECKF(mx == 0x3F80, "%s MXCSR 0x%x want 0x3F80", what, mx);
+}
 #endif
 
 TEST(wow64_cross_process_context) {
 #ifdef T_X64
-    cx_resolve();
-    if (!X.Wow64GetThreadContext || !X.Wow64SetThreadContext || !X.Wow64SuspendThread) SKIP("Wow64*ThreadContext not exported");
-    char path[MAX_PATH * 2];
-    snprintf(path, sizeof path, "%s", t_self_path());
-    char *p = strstr(path, "\\x64\\");
-    if (!p) p = strstr(path, "/x64/");
-    if (!p) SKIP("cannot derive the x86 sibling from %s", path);
-    p[1] = 'x'; p[2] = '8'; p[3] = '6';
-    if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) SKIP("x86 build not found at %s", path);
-    SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
-    HANDLE rd = NULL, wr = NULL;
-    REQUIRE(CreatePipe(&rd, &wr, &sa, 1 << 16));
-    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
-    STARTUPINFOA si; memset(&si, 0, sizeof si);
-    si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = wr; si.hStdError = wr; si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-    PROCESS_INFORMATION pi; memset(&pi, 0, sizeof pi);
-    char cmd[MAX_PATH * 2 + 64];
-    snprintf(cmd, sizeof cmd, "\"%s\" --child=wow64_target", path);
-    BOOL cp = CreateProcessA(path, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
-    CloseHandle(wr);
-    if (!cp) { DWORD e = GetLastError(); CloseHandle(rd); SKIP("cannot start the x86 sibling (GLE=%lu): WOW64 unavailable", (unsigned long)e); }
-    static char out[16384];
-    size_t n = 0;
-    out[0] = 0;
-    const char *info = NULL;
-    double t0 = t_now_ms();
-    int exited = 0;
-    /* read until the INFO line (or 15 s) */
-    while (!info && t_now_ms() - t0 < 15000) {
-        DWORD avail = 0;
-        if (PeekNamedPipe(rd, NULL, 0, NULL, &avail, NULL) && avail) {
-            DWORD got = 0;
-            if (n + avail >= sizeof out) avail = (DWORD)(sizeof out - n - 1);
-            if (avail && ReadFile(rd, out + n, avail, &got, NULL)) { n += got; out[n] = 0; }
-            const char *q = cx_find_line(out, "W64_INFO=");
-            if (q && strchr(q, '\n')) info = q;
-        } else {
-            if (WaitForSingleObject(pi.hProcess, 0) == WAIT_OBJECT_0) { exited = 1; break; }
-            Sleep(5);
-        }
-    }
-    unsigned long long a_args = 0, a_loop = 0, a_exit = 0, a_sp = 0; unsigned long tid = 0; int psz = 0;
-    if (info) sscanf(info, "%llx %llx %llx %lu %llx %d", &a_args, &a_loop, &a_exit, &tid, &a_sp, &psz);
-    if (!info || psz != 4) {
-        TerminateProcess(pi.hProcess, 1);
-        CloseHandle(pi.hProcess); CloseHandle(pi.hThread); CloseHandle(rd);
-        REQUIREF(0, "x86 sibling did not report (exited=%d psz=%d) output: %.300s", exited, psz, out);
-    }
+    CX_NEED_W64API();
+    cx_sib *s = &g_sib;
+    CX_SIB_START(s, "xmm");
+    t_info("api", "get=%s set=%s", cx_w64_get_via(), cx_w64_set_via());
     static cx_args exp;
     cx_args_fill(&exp, CX_W64_TAG, 1);
     uint8_t nx2[16];
     t_pattern_reg(nx2, 16, 0xB1FF, 2);
     const DWORD nebx = 0x13572468;
-    HANDLE th = OpenThread(THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, FALSE, tid);
-    CHECKF(th != NULL, "OpenThread(%lu) GLE=%lu", tid, (unsigned long)GetLastError());
+    const uint32_t nmx = (cx_mxcsr_mask() & 0x40) ? CX_W64_NEW_MXCSR_DAZ : CX_W64_NEW_MXCSR;
+    HANDLE th = cx_sib_thread(s);
     int set_done = 0;
     if (th) {
-        DWORD sc = X.Wow64SuspendThread(th);
-        CHECK_EQ(sc, 0);
+        const char *via = "";
+        DWORD sc = cx_w64_suspend(th, &via);
+        t_info("suspend_via", "%s", via);
+        CHECKF(sc == 0, "%s previous count %lu", via, (unsigned long)sc);
         static WOW64_CONTEXT wc;
         memset(&wc, CX_SENT, sizeof wc);
         wc.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
-        if (X.Wow64GetThreadContext(th, &wc)) {
-            DWORD g[5] = { wc.Ebx, wc.Edx, wc.Esi, wc.Edi, wc.Ebp };
-            for (int i = 0; i < 5; i++)
-                CHECKF(g[i] == (DWORD)exp.gin[i], "WOW64 %s 0x%lx want 0x%lx", i == 0 ? "ebx" : i == 1 ? "edx" : i == 2 ? "esi" : i == 3 ? "edi" : "ebp",
-                       (unsigned long)g[i], (unsigned long)(DWORD)exp.gin[i]);
-            CHECKF(wc.Eip >= a_loop && wc.Eip <= a_exit, "WOW64 Eip 0x%lx outside [0x%llx, 0x%llx]", (unsigned long)wc.Eip, a_loop, a_exit);
-            CHECKF(wc.Esp == a_sp, "WOW64 Esp 0x%lx want 0x%llx", (unsigned long)wc.Esp, a_sp);
-            CHECKF(wc.Eax == (DWORD)(a_args + CXO_READY), "WOW64 Eax 0x%lx want &ready", (unsigned long)wc.Eax);
-            CHECKF((wc.SegCs & 3) == 3 && wc.SegCs != cx_own_cs(), "WOW64 SegCs 0x%lx (64-bit CS is 0x%x)", (unsigned long)wc.SegCs, cx_own_cs());
-            for (int i = 0; i < 8; i++) {
-                char lab[40]; snprintf(lab, sizeof lab, "WOW64 xmm%d", i);
-                CHECK_REG(lab, wc.ExtendedRegisters + 160 + 16 * i, exp.vin[i], 16);
-                snprintf(lab, sizeof lab, "WOW64 ST(%d)", i);
-                CHECK_REG(lab, wc.FloatSave.RegisterArea + 10 * i, exp.fin[i].b, 10);
+        if (cx_w64_get(th, &wc)) {
+            cx_w64_check_state(&wc, &exp, s, "WOW64");
+            /* the documented API and its ntdll implementation (ThreadWow64Context, length 0x2cc) agree exactly */
+            if (X.Wow64GetThreadContext && N.nqit) {
+                static WOW64_CONTEXT w2;
+                memset(&w2, CX_SENT, sizeof w2);
+                w2.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
+                ULONG rl = 0xDEAD;
+                LONG st = N.nqit(th, CX_ThreadWow64Context, &w2, CX_W64_CTX_LEN, &rl);
+                CHECKF(st >= 0, "NtQueryInformationThread(ThreadWow64Context) 0x%lx", (unsigned long)st);
+                t_info("nqit_return_length", "0x%lx", (unsigned long)rl);
+                if (st >= 0) CHECK_MEM(&w2, &wc, sizeof wc);
             }
-            CHECK_EQ(wc.FloatSave.ControlWord & 0xFFFF, 0x0A7F);
-            uint32_t mx; memcpy(&mx, wc.ExtendedRegisters + 24, 4);
-            CHECK_EQ(mx, 0x3F80);
-            /* native view of the same thread: an x64 context somewhere in the WOW64 layer (observation) */
+            /* ThreadWow64Context length is exactly 0x2cc: shorter and longer buffers fail */
+            if (N.nqit) {
+                static uint8_t big[CX_W64_CTX_LEN + 64];
+                memset(big, CX_SENT, sizeof big);
+                ((WOW64_CONTEXT *)big)->ContextFlags = WOW64_CONTEXT_CONTROL;
+                LONG s1 = N.nqit(th, CX_ThreadWow64Context, big, CX_W64_CTX_LEN - 4, NULL);
+                LONG s2 = N.nqit(th, CX_ThreadWow64Context, big, CX_W64_CTX_LEN + 64, NULL);
+                t_info("nqit_bad_length", "0x2c8 -> 0x%lx, 0x30c -> 0x%lx", (unsigned long)s1, (unsigned long)s2);
+                CHECKF(s1 < 0, "ThreadWow64Context with length 0x2c8 succeeded (0x%lx)", (unsigned long)s1);
+                CHECKF(s2 < 0, "ThreadWow64Context with length 0x30c succeeded (0x%lx)", (unsigned long)s2);
+                CHECKF(cx_all_sent(big + CX_W64_CTX_LEN, 64), "ThreadWow64Context wrote past 0x2cc bytes");
+            }
+            /* WOW64_CONTEXT has no XSTATE area: a WOW64_CONTEXT_XSTATE request must not write past 0x2cc bytes;
+             * success or failure is recorded only. */
+            {
+                static uint8_t xb[CX_W64_CTX_LEN + 256];
+                memset(xb, CX_SENT, sizeof xb);
+                ((WOW64_CONTEXT *)xb)->ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_EXTENDED_REGISTERS | WOW64_CONTEXT_XSTATE;
+                SetLastError(0);
+                BOOL r = cx_w64_get(th, (WOW64_CONTEXT *)xb);
+                t_info("wow64_xstate_request", "ok=%d gle=0x%lx flags_out=0x%lx", r, (unsigned long)GetLastError(),
+                       (unsigned long)((WOW64_CONTEXT *)xb)->ContextFlags);
+                CHECKF(cx_all_sent(xb + CX_W64_CTX_LEN, 256), "WOW64_CONTEXT_XSTATE request wrote past the 0x2cc-byte WOW64_CONTEXT");
+                if (r) CHECK_MEM(((WOW64_CONTEXT *)xb)->ExtendedRegisters + 160, wc.ExtendedRegisters + 160, 128);
+            }
+            /* native view of the same thread: an x64 context (observation; see wow64_ymm_views_agree) */
             CONTEXT *nc = cx_plain(CONTEXT_CONTROL);
             if (nc && GetThreadContext(th, nc)) t_info("native_view", "Rip=%p SegCs=0x%x", (void *)(uintptr_t)nc->Rip, (unsigned)nc->SegCs);
             cx_free(nc);
-            /* modify Ebx and XMM2, read back, let the child report */
+            /* modify Ebx, XMM2, MXCSR and the x87 control word (both the FNSAVE and the FXSAVE copy), read back */
             wc.Ebx = nebx;
             memcpy(wc.ExtendedRegisters + 160 + 32, nx2, 16);
-            wc.ContextFlags = WOW64_CONTEXT_INTEGER | WOW64_CONTEXT_EXTENDED_REGISTERS;
-            set_done = X.Wow64SetThreadContext(th, &wc);
-            CHECKF(set_done, "Wow64SetThreadContext GLE=%lu", (unsigned long)GetLastError());
-            memset(&wc, CX_SENT, sizeof wc);
-            wc.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_EXTENDED_REGISTERS;
-            if (X.Wow64GetThreadContext(th, &wc)) {
-                CHECK_EQ(wc.Ebx, nebx);
-                CHECK_MEM(wc.ExtendedRegisters + 160 + 32, nx2, 16);
-                CHECK_EQ(wc.Esi, (DWORD)exp.gin[2]);
+            memcpy(wc.ExtendedRegisters + 24, &nmx, 4);
+            uint16_t nfcw = CX_W64_NEW_FCW;
+            memcpy(wc.ExtendedRegisters, &nfcw, 2);
+            wc.FloatSave.ControlWord = (wc.FloatSave.ControlWord & 0xFFFF0000u) | nfcw;
+            /* two sets, one flag group each: a set must change only the groups named in ContextFlags */
+            static WOW64_CONTEXT chk;
+            wc.ContextFlags = WOW64_CONTEXT_INTEGER;
+            int s_int = cx_w64_set(th, &wc);
+            CHECKF(s_int, "%s(INTEGER) GLE/status=0x%lx", cx_w64_set_via(), (unsigned long)GetLastError());
+            memset(&chk, 0, sizeof chk);
+            chk.ContextFlags = WOW64_CONTEXT_CONTROL | WOW64_CONTEXT_INTEGER;
+            if (s_int && cx_w64_get(th, &chk))
+                CX_CHECK_WGAP("an INTEGER-only Wow64SetThreadContext clears Ebp (CONTROL)", chk.Ebp == (DWORD)exp.gin[4],
+                              "Ebp after an INTEGER-only set 0x%lx want 0x%lx", (unsigned long)chk.Ebp, (unsigned long)(DWORD)exp.gin[4]);
+            wc.ContextFlags = WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
+            int s_fp = cx_w64_set(th, &wc);
+            CHECKF(s_fp, "%s(FP|EXT) GLE/status=0x%lx", cx_w64_set_via(), (unsigned long)GetLastError());
+            memset(&chk, 0, sizeof chk);
+            chk.ContextFlags = WOW64_CONTEXT_CONTROL | WOW64_CONTEXT_INTEGER;
+            if (s_fp && cx_w64_get(th, &chk)) {
+                CHECKF(chk.Ebx == nebx, "Ebx 0x%lx after an FP|EXT set want 0x%lx", (unsigned long)chk.Ebx, (unsigned long)nebx);
+                t_info("ebp_after_fp_set", "0x%lx", (unsigned long)chk.Ebp);
             }
-        } else CHECKF(0, "Wow64GetThreadContext GLE=%lu", (unsigned long)GetLastError());
-        LONG one = 1;
-        SIZE_T wn = 0;
-        CHECKF(WriteProcessMemory(pi.hProcess, (void *)(uintptr_t)(a_args + CXO_STOP), &one, sizeof one, &wn), "WriteProcessMemory GLE=%lu",
-               (unsigned long)GetLastError());
-        ResumeThread(th);
+            set_done = s_int && s_fp;
+            memset(&wc, CX_SENT, sizeof wc);
+            wc.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
+            if (cx_w64_get(th, &wc)) {
+                CHECK_EQ(wc.Ebx, nebx);
+                CHECK_REG("WOW64 xmm2 after set", wc.ExtendedRegisters + 160 + 32, nx2, 16);
+                for (int i = 0; i < 8; i++) if (i != 2) {
+                    char lab[48]; snprintf(lab, sizeof lab, "WOW64 xmm%d after set", i);
+                    CHECK_REG(lab, wc.ExtendedRegisters + 160 + 16 * i, exp.vin[i], 16);
+                }
+                uint32_t mx; memcpy(&mx, wc.ExtendedRegisters + 24, 4);
+                CHECKF(mx == nmx, "MXCSR after set 0x%x want 0x%x", mx, nmx);
+                CHECKF((wc.FloatSave.ControlWord & CX_FCW_BITS) == (nfcw & CX_FCW_BITS), "FCW after set 0x%lx want 0x%x",
+                       (unsigned long)wc.FloatSave.ControlWord, nfcw);
+                CHECK_EQ(wc.Esi, (DWORD)exp.gin[2]);
+                /* EBP, EIP, ESP belong to WOW64_CONTEXT_CONTROL, which was not part of the set */
+                CX_CHECK_WGAP("an INTEGER-only Wow64SetThreadContext clears Ebp (CONTROL)", wc.Ebp == (DWORD)exp.gin[4],
+                              "Ebp after INTEGER and FP|EXT sets 0x%lx want 0x%lx", (unsigned long)wc.Ebp, (unsigned long)(DWORD)exp.gin[4]);
+                CHECKF(wc.Eip >= s->lo && wc.Eip <= s->hi && wc.Esp == s->sp, "Eip/Esp after set 0x%lx/0x%lx", (unsigned long)wc.Eip,
+                       (unsigned long)wc.Esp);
+                CHECK_REG("WOW64 ST(0) after set", wc.FloatSave.RegisterArea, exp.fin[0].b, 10);
+            } else CHECKF(0, "%s (re-read) GLE/status=0x%lx", cx_w64_get_via(), (unsigned long)GetLastError());
+        } else CHECKF(0, "%s GLE/status=0x%lx", cx_w64_get_via(), (unsigned long)GetLastError());
+        cx_sib_stop_flag(s);
+        DWORD rc = ResumeThread(th);
+        CHECKF(rc == 1, "ResumeThread previous count %lu", (unsigned long)rc);
         CloseHandle(th);
     }
-    /* drain until exit */
-    t0 = t_now_ms();
-    for (;;) {
-        DWORD avail = 0;
-        if (PeekNamedPipe(rd, NULL, 0, NULL, &avail, NULL) && avail) {
-            DWORD got = 0;
-            if (n + avail >= sizeof out) avail = (DWORD)(sizeof out - n - 1);
-            if (!avail) break;
-            if (ReadFile(rd, out + n, avail, &got, NULL)) { n += got; out[n] = 0; }
-        } else if (WaitForSingleObject(pi.hProcess, 0) == WAIT_OBJECT_0) {
-            if (!PeekNamedPipe(rd, NULL, 0, NULL, &avail, NULL) || !avail) break;
-        } else if (t_now_ms() - t0 > 25000) { TerminateProcess(pi.hProcess, 1); CHECKF(0, "x86 sibling did not exit"); break; }
-        else Sleep(5);
-    }
-    const char *go = cx_find_line(out, "W64_GOUT="), *x2 = cx_find_line(out, "W64_X2=");
-    CHECKF(!cx_find_line(out, "W64_TIMEOUT="), "x86 worker never observed the stop flag");
-    CHECKF(go && x2, "x86 sibling did not report its registers: %.300s", out);
-    if (go && x2 && set_done) {
+    cx_sib_finish(s, 25000);
+    const char *go = cx_find_line(s->out, "W64_GOUT="), *vv = cx_find_line(s->out, "W64_V="), *mxl = cx_find_line(s->out, "W64_MX="),
+               *fok = cx_find_line(s->out, "W64_FOK=");
+    CHECKF(go && vv && mxl && fok, "x86 sibling did not report its registers: %.300s", s->out);
+    if (go && vv && mxl && fok && set_done) {
+        /* the resumed x86 thread observes exactly the state that was set, and nothing else changed */
         unsigned long long g[5] = { 0 };
         sscanf(go, "%llx,%llx,%llx,%llx,%llx", &g[0], &g[1], &g[2], &g[3], &g[4]);
         CHECK_EQ(g[0], nebx);
-        for (int i = 1; i < 5; i++) CHECK_EQ(g[i], (DWORD)exp.gin[i]);
-        uint8_t v2[16];
-        if (cx_hexbytes(x2, v2, 16)) CHECK_REG("WOW64 xmm2 observed", v2, nx2, 16);
-        else CHECK(0);
+        for (int i = 1; i < 4; i++) CHECK_EQ(g[i], (DWORD)exp.gin[i]);
+        CX_CHECK_WGAP("an INTEGER-only Wow64SetThreadContext clears Ebp (CONTROL)", g[4] == (DWORD)exp.gin[4],
+                      "x86 thread observed ebp 0x%llx want 0x%lx", g[4], (unsigned long)(DWORD)exp.gin[4]);
+        uint8_t v[8][16];
+        if (cx_hexbytes(vv, &v[0][0], 128)) {
+            for (int i = 0; i < 8; i++) {
+                char lab[48]; snprintf(lab, sizeof lab, "x86 thread xmm%d observed", i);
+                CHECK_REG(lab, v[i], i == 2 ? nx2 : exp.vin[i], 16);
+            }
+        } else CHECKF(0, "bad W64_V line");
+        unsigned mxo = 0, fcwo = 0, rem = 0;
+        sscanf(mxl, "%x %x %u", &mxo, &fcwo, &rem);
+        CHECKF(mxo == nmx, "x86 thread observed MXCSR 0x%x want 0x%x", mxo, nmx);
+        CHECKF((fcwo & CX_FCW_BITS) == (CX_W64_NEW_FCW & CX_FCW_BITS), "x86 thread observed FCW 0x%x want 0x%x", fcwo, CX_W64_NEW_FCW);
+        CHECKF(atoi(fok) == 1, "x86 thread's x87 stack changed by a control-word-only set");
+        CHECKF(rem != 0, "x86 worker exhausted its loop budget");
     }
-    CloseHandle(pi.hProcess); CloseHandle(pi.hThread); CloseHandle(rd);
 #else
     SKIP("x64 build only (an x86 process cannot drive a WOW64 target through Wow64*ThreadContext)");
+#endif
+}
+
+TEST(wow64_suspend_count) {
+#ifdef T_X64
+    CX_NEED_W64API();
+    cx_sib *s = &g_sib;
+    CX_SIB_START(s, "xmm");
+    HANDLE th = cx_sib_thread(s);
+    if (th) {
+        const char *via = "";
+        /* Wow64SuspendThread and SuspendThread/ResumeThread share one documented suspend count */
+        DWORD c0 = cx_w64_suspend(th, &via);
+        DWORD c1 = cx_w64_suspend(th, &via);
+        DWORD c2 = SuspendThread(th);
+        t_info("suspend_via", "%s", via);
+        CHECKF(c0 == 0 && c1 == 1 && c2 == 2, "suspend counts %lu %lu %lu want 0 1 2", (unsigned long)c0, (unsigned long)c1, (unsigned long)c2);
+        DWORD r0 = ResumeThread(th), r1 = ResumeThread(th);
+        CHECKF(r0 == 3 && r1 == 2, "resume counts %lu %lu want 3 2", (unsigned long)r0, (unsigned long)r1);
+        /* still suspended (count 1): two reads 30 ms apart see the same loop counter (ECX) */
+        static WOW64_CONTEXT a, b;
+        memset(&a, 0, sizeof a); memset(&b, 0, sizeof b);
+        a.ContextFlags = b.ContextFlags = WOW64_CONTEXT_CONTROL | WOW64_CONTEXT_INTEGER;
+        BOOL ga = cx_w64_get(th, &a);
+        Sleep(30);
+        BOOL gb = cx_w64_get(th, &b);
+        CHECKF(ga && gb, "%s GLE/status=0x%lx", cx_w64_get_via(), (unsigned long)GetLastError());
+        if (ga && gb) {
+            CHECKF(a.Ecx == b.Ecx && a.Eip == b.Eip, "thread ran while suspended: ECX 0x%lx -> 0x%lx", (unsigned long)a.Ecx, (unsigned long)b.Ecx);
+            CHECKF(a.Eip >= s->lo && a.Eip <= s->hi, "Eip 0x%lx outside the spin loop", (unsigned long)a.Eip);
+        }
+        DWORD r2 = ResumeThread(th);
+        CHECKF(r2 == 1, "ResumeThread previous count %lu want 1", (unsigned long)r2);
+        /* running again: the loop counter advances */
+        Sleep(50);
+        DWORD c3 = cx_w64_suspend(th, &via);
+        CHECKF(c3 == 0, "%s after full resume: previous count %lu want 0", via, (unsigned long)c3);
+        memset(&b, 0, sizeof b);
+        b.ContextFlags = WOW64_CONTEXT_CONTROL | WOW64_CONTEXT_INTEGER;
+        if (ga && cx_w64_get(th, &b)) CHECKF(b.Ecx != a.Ecx, "x86 thread did not run after ResumeThread (ECX 0x%lx)", (unsigned long)b.Ecx);
+        /* documented failure value: (DWORD)-1 for a handle without THREAD_SUSPEND_RESUME */
+        HANDLE lim = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, s->tid);
+        if (lim) {
+            SetLastError(0);
+            DWORD bad = cx_w64_suspend(lim, &via);
+            t_info("suspend_without_access", "%lu gle=%lu", (unsigned long)bad, (unsigned long)GetLastError());
+            CHECKF(bad == (DWORD)-1, "%s without THREAD_SUSPEND_RESUME returned %lu", via, (unsigned long)bad);
+            if (bad != (DWORD)-1) ResumeThread(th);
+            CloseHandle(lim);
+        }
+        cx_sib_stop_flag(s);
+        DWORD r3 = ResumeThread(th);
+        CHECKF(r3 == 1, "final ResumeThread previous count %lu want 1", (unsigned long)r3);
+        CloseHandle(th);
+    }
+    cx_sib_finish(s, 25000);
+#else
+    SKIP("x64 build only");
+#endif
+}
+
+#ifdef T_X64
+static DWORD WINAPI cx_nop_thread(void *p) { (void)p; return 0; }
+#endif
+TEST(wow64_context_native_thread_rejected) {
+#ifdef T_X64
+    /* ThreadWow64Context on a thread of a native x64 process: pinned STATUS_INVALID_PARAMETER for set (no x86
+     * WOW64 machine), STATUS_INFO_LENGTH_MISMATCH for a wrong length; get fails. */
+    CX_NEED_W64API();
+    HANDLE h = CreateThread(NULL, 0, cx_nop_thread, NULL, CREATE_SUSPENDED, NULL);
+    if (!h) SKIP("CreateThread failed");
+    static WOW64_CONTEXT wc;
+    memset(&wc, 0, sizeof wc);
+    wc.ContextFlags = WOW64_CONTEXT_CONTROL | WOW64_CONTEXT_INTEGER;
+    if (N.nqit) {
+        LONG st = N.nqit(h, CX_ThreadWow64Context, &wc, CX_W64_CTX_LEN, NULL);
+        t_info("get_status", "0x%lx", (unsigned long)st);
+        CHECKF(st < 0, "ThreadWow64Context query on a native x64 thread succeeded (0x%lx)", (unsigned long)st);
+    }
+    if (X.Wow64GetThreadContext) {
+        memset(&wc, 0, sizeof wc);
+        wc.ContextFlags = WOW64_CONTEXT_CONTROL | WOW64_CONTEXT_INTEGER;
+        SetLastError(0);
+        BOOL r = X.Wow64GetThreadContext(h, &wc);
+        t_info("wow64getthreadcontext", "%d gle=%lu", r, (unsigned long)GetLastError());
+        CHECKF(!r, "Wow64GetThreadContext on a native x64 thread succeeded");
+    }
+    if (N.nsit) {
+        memset(&wc, 0, sizeof wc);
+        wc.ContextFlags = WOW64_CONTEXT_INTEGER;
+        LONG s1 = N.nsit(h, CX_ThreadWow64Context, &wc, CX_W64_CTX_LEN - 4);
+        LONG s2 = N.nsit(h, CX_ThreadWow64Context, &wc, CX_W64_CTX_LEN);
+        t_info("set_status", "len 0x2c8 -> 0x%lx, len 0x2cc -> 0x%lx", (unsigned long)s1, (unsigned long)s2);
+        CX_CHECK_WGAP("ThreadWow64Context set status", (unsigned long)s1 == 0xC0000004ul,
+                      "wrong length: 0x%lx want STATUS_INFO_LENGTH_MISMATCH", (unsigned long)s1);
+        CX_CHECK_WGAP("ThreadWow64Context set status", (unsigned long)s2 == 0xC000000Dul,
+                      "native thread: 0x%lx want STATUS_INVALID_PARAMETER", (unsigned long)s2);
+    }
+    if (X.Wow64SetThreadContext) {
+        memset(&wc, 0, sizeof wc);
+        wc.ContextFlags = WOW64_CONTEXT_INTEGER;
+        SetLastError(0);
+        BOOL r = X.Wow64SetThreadContext(h, &wc);
+        DWORD e = GetLastError();
+        t_info("wow64setthreadcontext", "%d gle=%lu", r, (unsigned long)e);
+        CHECKF(!r, "Wow64SetThreadContext on a native x64 thread succeeded");
+        CX_CHECK_WGAP("Wow64SetThreadContext error", r || e == ERROR_INVALID_PARAMETER, "GLE %lu want ERROR_INVALID_PARAMETER", (unsigned long)e);
+    }
+    ResumeThread(h);
+    CHECK(WaitForSingleObject(h, CX_TMO) == WAIT_OBJECT_0);
+    DWORD code = 1;
+    GetExitCodeThread(h, &code);
+    CHECK_EQ(code, 0);
+    CloseHandle(h);
+#else
+    SKIP("x64 build only");
+#endif
+}
+
+/* YMM uppers of an x86 (WOW64) thread: the x86 self view (GetThreadContext with CONTEXT_XSTATE inside the
+ * WOW64 process) and the native x64 view of the same suspended thread report the same registers; the
+ * WOW64_CONTEXT view carries XMM0-7 only. */
+TEST(wow64_ymm_views_agree) {
+#ifdef T_X64
+    CX_NEED_W64API();
+    CX_NEED_AVX();
+    cx_sib *s = &g_sib;
+    CX_SIB_START(s, "ymm");
+    static cx_args exp;
+    cx_args_fill(&exp, CX_W64_TAG, 1);
+    uint8_t want_x[8][16], want_yh[8][16];
+    for (int i = 0; i < 8; i++) { memcpy(want_x[i], exp.vin[i], 16); memcpy(want_yh[i], exp.vin[i] + 16, 16); }
+    /* 1. x86 self view (printed by the sibling before W64_INFO) */
+    const char *serr = cx_find_line(s->out, "W64_SELF_ERR=");
+    const char *smask = cx_find_line(s->out, "W64_SELF_MASK="), *sx = cx_find_line(s->out, "W64_SELF_X="), *syh = cx_find_line(s->out, "W64_SELF_YH=");
+    uint8_t self_x[8][16], self_yh[8][16];
+    int have_self = 0;
+    if (serr) {
+        char e[120]; sscanf(serr, "%119[^\n]", e);
+        CX_CHECK_WGAP("x86 GetThreadContext(CONTEXT_XSTATE)", 0, "x86 self view failed: %s", e);
+    } else {
+        unsigned long long m = 0;
+        if (smask) sscanf(smask, "%llx", &m);
+        t_info("self_mask", "0x%llx", m);
+        CHECKF(m & T_XS_AVX, "x86 self view: XSTATE mask 0x%llx lacks AVX while YMM uppers are nonzero", m);
+        if (cx_hexbytes(sx, &self_x[0][0], 128) && cx_hexbytes(syh, &self_yh[0][0], 128)) {
+            have_self = 1;
+            for (int i = 0; i < 8; i++) {
+                char lab[48];
+                snprintf(lab, sizeof lab, "x86 self view xmm%d", i);
+                CHECK_REG(lab, self_x[i], want_x[i], 16);
+                snprintf(lab, sizeof lab, "x86 self view ymm%d upper", i);
+                CHECK_REG(lab, self_yh[i], want_yh[i], 16);
+            }
+        } else CHECKF(0, "x86 sibling self view lines missing: %.300s", s->out);
+    }
+    HANDLE th = cx_sib_thread(s);
+    if (th) {
+        const char *via = "";
+        DWORD sc = cx_w64_suspend(th, &via);
+        CHECKF(sc == 0, "%s previous count %lu", via, (unsigned long)sc);
+        /* 2. WOW64 view: XMM0-7 (FXSAVE), nothing more */
+        static WOW64_CONTEXT wc;
+        memset(&wc, CX_SENT, sizeof wc);
+        wc.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_EXTENDED_REGISTERS;
+        if (cx_w64_get(th, &wc)) {
+            for (int i = 0; i < 8; i++) {
+                char lab[48]; snprintf(lab, sizeof lab, "WOW64 view xmm%d", i);
+                CHECK_REG(lab, wc.ExtendedRegisters + 160 + 16 * i, want_x[i], 16);
+            }
+            CHECKF(wc.Eip >= s->lo && wc.Eip <= s->hi, "WOW64 Eip 0x%lx outside the YMM spin loop", (unsigned long)wc.Eip);
+        } else CHECKF(0, "%s GLE/status=0x%lx", cx_w64_get_via(), (unsigned long)GetLastError());
+        /* 3. native x64 view with CONTEXT_XSTATE. A thread suspended in its 32-bit code reports that code's
+         * registers (compatibility-mode CS, RIP in the loop): its XMM0-7 and YMM0-7 uppers must be the x86
+         * thread's. Stopped elsewhere (in the WOW64 layer) the view is recorded only. */
+        cx_xc x;
+        if (cx_xc_init(&x, CX_STD | CONTEXT_XSTATE)) {
+            if (X.SetXStateFeaturesMask(x.ctx, T_XS_AVX) && GetThreadContext(th, x.ctx)) {
+                CONTEXT *c = x.ctx;
+                uint64_t m = cx_mask(c);
+                DWORD len = 0;
+                uint8_t *yh = cx_locate(c, CX_XS_AVX, &len);
+                t_info("x64_view", "Rip=0x%llx SegCs=0x%x mask=0x%llx", (unsigned long long)c->Rip, (unsigned)c->SegCs, (unsigned long long)m);
+                int in32 = c->SegCs == wc.SegCs && c->Rip >= s->lo && c->Rip <= s->hi;
+                if (in32) {
+                    CHECKF(c->Rip == wc.Eip && c->Rsp == wc.Esp, "x64 view Rip/Rsp 0x%llx/0x%llx vs WOW64 Eip/Esp 0x%lx/0x%lx",
+                           (unsigned long long)c->Rip, (unsigned long long)c->Rsp, (unsigned long)wc.Eip, (unsigned long)wc.Esp);
+                    CHECKF((uint32_t)c->Rbx == wc.Ebx && (uint32_t)c->Rsi == wc.Esi, "x64 view GPRs differ from the WOW64 view");
+                    CHECKF(m & T_XS_AVX, "x64 view: XSTATE mask 0x%llx lacks AVX", (unsigned long long)m);
+                    for (int i = 0; i < 8; i++) {
+                        char lab[48];
+                        snprintf(lab, sizeof lab, "x64 view xmm%d", i);
+                        CHECK_REG(lab, cx_xmm(c, i), want_x[i], 16);
+                        if (yh) {
+                            snprintf(lab, sizeof lab, "x64 view ymm%d upper", i);
+                            CHECK_REG(lab, yh + 16 * i, want_yh[i], 16);
+                            if (have_self) {
+                                snprintf(lab, sizeof lab, "x64 vs x86 self view ymm%d upper", i);
+                                CHECK_REG(lab, yh + 16 * i, self_yh[i], 16);
+                            }
+                        }
+                    }
+                    CHECKF(yh != NULL, "x64 view: LocateXStateFeature(AVX) NULL");
+                } else t_note("x64 view of the WOW64 thread is not in its 32-bit code (Rip 0x%llx SegCs 0x%x): YMM comparison not applicable",
+                              (unsigned long long)c->Rip, (unsigned)c->SegCs);
+            } else t_note("x64 GetThreadContext(CONTEXT_XSTATE) on the WOW64 thread failed, GLE=%lu", (unsigned long)GetLastError());
+            cx_xc_free(&x);
+        } else t_note("InitializeContext(CONTEXT_XSTATE) failed, GLE=%lu", (unsigned long)x.err);
+        cx_sib_stop_flag(s);
+        DWORD rc = ResumeThread(th);
+        CHECKF(rc == 1, "ResumeThread previous count %lu", (unsigned long)rc);
+        CloseHandle(th);
+    }
+    cx_sib_finish(s, 25000);
+    /* 4. the x86 thread itself still holds its YMM uppers after all three views were taken */
+    uint8_t yh_out[8][16];
+    if (cx_hexbytes(cx_find_line(s->out, "W64_YH="), &yh_out[0][0], 128)) {
+        for (int i = 0; i < 8; i++) {
+            char lab[48]; snprintf(lab, sizeof lab, "x86 thread ymm%d upper at exit", i);
+            CHECK_REG(lab, yh_out[i], want_yh[i], 16);
+        }
+    } else CHECKF(0, "x86 sibling did not report W64_YH: %.300s", s->out);
+#else
+    SKIP("x64 build only (the x86 build's own YMM context cases cover the self view)");
 #endif
 }
 
