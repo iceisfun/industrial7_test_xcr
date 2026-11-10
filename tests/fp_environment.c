@@ -1156,6 +1156,10 @@ TEST(sse_unmasked_unhandled_terminates_with_code) {
     REQUIRE(t_child_run("fpx", "sse 2 unhandled", 15000, &r));
     REQUIREF(!r.timed_out, "child timed out");
     CHECKF(r.exc_code != 0, "unhandled unmasked SSE divide-by-zero did not terminate the child (exit 0x%08lx): %s", r.exit_code, r.out);
+#ifdef T_X64
+    if (t_is_wine() && r.exc_code == 0xC00002B5u)   /* known Wine gap (seen with Wine 9; Wine 11 is exact) */
+        t_expect_fail("Wine %s reports an x64 #XM as STATUS_FLOAT_MULTIPLE_TRAPS", t_wine_version());
+#endif
     CHECKF(code_acceptable(0, K_ZE, r.exc_code), "unhandled code 0x%08lx want 0x%08lx", r.exc_code, want_code(0, K_ZE));
     CHECKF(strstr(r.out, "RES=") == NULL, "execution continued past the faulting instruction");
 }
@@ -1181,6 +1185,8 @@ static void run_fx_x87(int k) {
 #else
     /* x86: [K2] covers WOW64 (trap RIP = the FWAIT); 32-bit environments may report the x87 instruction
      * that caused the exception (FIP) instead. Either is a correct description of the fault. */
+    if (t_sde_model() && addr != lab && addr != oplab)   /* emulator artifact, README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s): the x87 FPU instruction pointer points into Pin's code cache", t_sde_model());
     CHECKF(addr == lab || addr == oplab, "ExceptionAddress 0x%llx is neither the FWAIT 0x%llx nor the x87 op 0x%llx", addr, lab, oplab);
     t_info("x87_exception_address", "%s", addr == lab ? "fwait" : addr == oplab ? "faulting x87 instruction (FIP)" : "other");
 #endif
@@ -2466,6 +2472,8 @@ TEST(fxrstor_xrstor_reserved_mxcsr_fault) {
     CHECKF(r.exc_code == STATUS_ACCESS_VIOLATION || r.exc_code == STATUS_PRIVILEGED_INSTRUCTION,
            "FXRSTOR reserved MXCSR: exception 0x%08lx", r.exc_code);
     if (!cpu_has(F_XSAVE)) { t_note("XSAVE not usable: XRSTOR part skipped"); return; }
+    if (t_sde_model())   /* emulator artifact, README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s): XRSTOR emulation has no #GP for a reserved MXCSR bit", t_sde_model());
     REQUIRE(t_child_run("rstor_bad", "1", 10000, &r));
     CHECKF(!r.timed_out, "child timed out");
     CHECKF(strstr(r.out, "SURVIVED=") == NULL && strstr(r.out, "NOXSAVE") == NULL, "XRSTOR rfbm=3 of a reserved MXCSR did not fault: %s", r.out);
