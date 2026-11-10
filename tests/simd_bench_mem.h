@@ -255,24 +255,29 @@ static uint32_t crc_shift_zeros(uint32_t c, size_t nbytes) {
 }
 static T_TARGET("sse4.2") uint32_t crc_sse42_3way(const uint8_t *p, size_t n) {
 #ifdef T_X64
-    size_t blk = (n / 24) * 8;                         /* bytes per stream, multiple of 8 */
+    typedef uint64_t cw_t;
+#define CRC_W(c, v) _mm_crc32_u64(c, v)
+#else
+    typedef uint32_t cw_t;                             /* x86: CRC32 r32, m32 streams */
+#define CRC_W(c, v) _mm_crc32_u32(c, v)
+#endif
+    const size_t W = sizeof(cw_t);
+    size_t blk = (n / (3 * W)) * W;                    /* bytes per stream, multiple of the word size */
     if (blk < 64) return crc_sse42_wide(p, n);
-    uint64_t c0 = ~0u, c1 = 0, c2 = 0;
+    cw_t c0 = ~0u, c1 = 0, c2 = 0;
     const uint8_t *p0 = p, *p1 = p + blk, *p2 = p + 2 * blk;
-    for (size_t i = 0; i < blk; i += 8) {
-        uint64_t a, b, d; memcpy(&a, p0 + i, 8); memcpy(&b, p1 + i, 8); memcpy(&d, p2 + i, 8);
-        c0 = _mm_crc32_u64(c0, a); c1 = _mm_crc32_u64(c1, b); c2 = _mm_crc32_u64(c2, d);
+    for (size_t i = 0; i < blk; i += W) {
+        cw_t a, b, d; memcpy(&a, p0 + i, W); memcpy(&b, p1 + i, W); memcpy(&d, p2 + i, W);
+        c0 = CRC_W(c0, a); c1 = CRC_W(c1, b); c2 = CRC_W(c2, d);
     }
     /* crc(A||B) raw = shift(crcA, |B|) ^ crcB_raw(start 0) */
     uint32_t c = crc_shift_zeros((uint32_t)c0, blk) ^ (uint32_t)c1;
     c = crc_shift_zeros(c, blk) ^ (uint32_t)c2;
     size_t i = 3 * blk;
-    for (; i + 8 <= n; i += 8) { uint64_t v; memcpy(&v, p + i, 8); c = (uint32_t)_mm_crc32_u64(c, v); }
+    for (; i + W <= n; i += W) { cw_t v; memcpy(&v, p + i, W); c = (uint32_t)CRC_W(c, v); }
     for (; i < n; i++) c = _mm_crc32_u8(c, p[i]);
+#undef CRC_W
     return ~c;
-#else
-    return crc_sse42_wide(p, n);
-#endif
 }
 
 /* ============================================================================ AES-128 */

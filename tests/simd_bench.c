@@ -8,8 +8,9 @@
  *   REP MOVSB/STOSB) for cache-resident and memory-bound sizes, strlen, CRC32C (software vs SSE4.2),
  *   AES-128 (software vs AES-NI vs VAES), carry-less multiply, planar RGB <-> YCbCr, AVX <-> SSE
  *   transition costs, FXSAVE / XSAVE / XSAVEOPT / XSAVEC costs, context capture (RtlCaptureContext,
- *   Get/SetThreadContext normal vs XSTATE, InitializeContext, CopyContext), scheduler round trips with live
- *   SIMD state, thread creation.
+ *   Get/SetThreadContext normal vs XSTATE, InitializeContext, CopyContext, RtlCaptureContext2), scheduler
+ *   round trips with live SIMD state, thread state stress (same-processor spinners re-verifying their
+ *   vector registers under preemption), thread creation (new thread gets the default MXCSR / FCW).
  * Pass/fail policy:
  *   - slowness is NEVER a failure. A case FAILs only when a computed result is wrong, or when a documented
  *     contract the measurement relies on is violated (QPC monotonic, affinity honoured, a context API
@@ -393,9 +394,12 @@ TEST(fp_denormal_penalty) {
     double slow = bm_run("mulps_denormal_default", fpt_sse_mulps, &x, 32.0 * FP_K, 1e9, "ns/mul", BM_TIME);
     t_set_mxcsr(saved);
     if (mask & 0x40) {
-        t_set_mxcsr(0x9FC0);                                     /* FTZ | DAZ | all masked */
+        /* correctness with DAZ ALONE: the kernel's own double->float conversion then still produces the
+         * float denormals (FTZ would already flush them there), so only DAZ can turn the operands into 0 */
+        t_set_mxcsr(0x1FC0);                                     /* DAZ | all masked, FTZ clear */
         fpt_sse_mulps(&x);
         f = t_get_mxcsr();
+        t_set_mxcsr(0x9FC0);                                     /* FTZ | DAZ | all masked */
         double fast = bm_run("mulps_denormal_ftz_daz", fpt_sse_mulps, &x, 32.0 * FP_K, 1e9, "ns/mul", BM_TIME);
         t_set_mxcsr(saved);
         bad = 0;
@@ -801,13 +805,7 @@ TEST(crc32c_sw_bytewise)  { crc_case("crc32c_sw_table", crc_sw_bytewise); }
 TEST(crc32c_sw_slice8)    { crc_case("crc32c_sw_slice8", crc_sw_slice8); }
 TEST(crc32c_sse42_u8)     { BM_NEED(SSE42); crc_case("crc32c_sse42_crc32b", crc_sse42_u8); }
 TEST(crc32c_sse42_wide)   { BM_NEED(SSE42); crc_case(sizeof(void *) == 8 ? "crc32c_sse42_crc32q" : "crc32c_sse42_crc32d", crc_sse42_wide); }
-TEST(crc32c_sse42_3way)   {
-    BM_NEED(SSE42);
-#ifndef T_X64
-    SKIP("3-way CRC32Q interleave is x64-only (x86 build has no CRC32 r64)");
-#endif
-    crc_case("crc32c_sse42_3way", crc_sse42_3way);
-}
+TEST(crc32c_sse42_3way)   { BM_NEED(SSE42); crc_case(sizeof(void *) == 8 ? "crc32c_sse42_3way_crc32q" : "crc32c_sse42_3way_crc32d", crc_sse42_3way); }
 
 /* =====================================================================================================
  * AES-128
@@ -1284,6 +1282,50 @@ TEST(ctx_rtlcapturecontext) {
     bm_unpin();
 }
 
+/* x64 RtlCaptureContext captures the caller's non-volatile XMM6-15 (the unwinder restores them from this
+ * record: RtlUnwindEx / RtlRestoreContext). ntdll 19041 RtlCaptureContext: FXSAVE [rcx+0x100] before any
+ * other vector use, STMXCSR [rcx+0x34], ContextFlags = 0x10000F (corpus explorer, ntdll!RtlCaptureContext
+ * asm). Only XMM6-15 / MXCSR / FCW are hard checks; XMM0-5 are volatile at the call (INFO). */
+#ifdef T_X64
+static const uint8_t *fx_xmm(const XMM_SAVE_AREA32 *f, int i) { return (const uint8_t *)&f->XmmRegisters[i]; }
+static int cap_xmm_compare(const CONTEXT *c, const uint8_t (*pat)[32], const char *label) {
+    int bad = 0, vol = 0;
+    for (int i = 0; i < 16; i++) {
+        int d = memcmp(fx_xmm(&c->FltSave, i), pat[i], 16) != 0;
+        if (i >= 6) { if (d && !bad) CHECK_REG(label, fx_xmm(&c->FltSave, i), pat[i], 16); bad += d; }
+        else vol += d;
+    }
+    CHECKF(bad == 0, "%s: %d of XMM6-15 differ from the caller's registers", label, bad);
+    t_info("volatile_xmm0_5_differing", "%d", vol);
+    return bad == 0;
+}
+#endif
+TEST(ctx_rtlcapturecontext_nonvolatile_xmm) {
+#ifndef T_X64
+    SKIP("x86 RtlCaptureContext captures CONTROL|INTEGER|SEGMENTS only (no floating-point state)");
+#else
+    static T_ALIGN(64) CONTEXT c;
+    static T_ALIGN(32) uint8_t pat[16][32];
+    for (int i = 0; i < 16; i++) t_pattern_reg(pat[i], 32, 0xCA, (uint32_t)i);
+    memset(&c, 0, sizeof c);
+    cap_call_xmm((void *)RtlCaptureContext, &c, (const uint8_t (*)[32])pat);
+    CHECKF(c.ContextFlags == 0x10000F, "ContextFlags 0x%lx want 0x10000F", c.ContextFlags);
+    cap_xmm_compare(&c, (const uint8_t (*)[32])pat, "RtlCaptureContext FltSave XMM6-15");
+    CHECKF(c.FltSave.ControlWord == t_get_x87_cw(), "FltSave.ControlWord 0x%04x, live FCW 0x%04x", c.FltSave.ControlWord, t_get_x87_cw());
+    CHECKF(c.MxCsr == t_get_mxcsr(), "MxCsr 0x%lx, live 0x%x", c.MxCsr, t_get_mxcsr());
+    /* a non-default MXCSR / FCW must be captured as is, not normalised */
+    unsigned mx = t_get_mxcsr(); unsigned short cw = t_get_x87_cw();
+    t_set_mxcsr(0x7F80 | 0x8000); t_set_x87_cw(0x0B7F);
+    memset(&c, 0, sizeof c);
+    cap_call_xmm((void *)RtlCaptureContext, &c, (const uint8_t (*)[32])pat);
+    unsigned short fcw = c.FltSave.ControlWord; DWORD m1 = c.MxCsr, m2 = c.FltSave.MxCsr;
+    t_set_mxcsr(mx); t_set_x87_cw(cw);
+    CHECKF(m1 == 0xFF80 && m2 == 0xFF80, "MxCsr 0x%lx / FltSave.MxCsr 0x%lx want 0xFF80 (FZ | RC=11 | masks)", m1, m2);
+    CHECKF(fcw == 0x0B7F, "FltSave.ControlWord 0x%04x want 0x0B7F", fcw);
+#endif
+}
+
+
 typedef struct sr_ctx { HANDLE th; int fails; } sr_ctx;
 static void sr_bench(void *p) {
     sr_ctx *x = (sr_ctx *)p;
@@ -1479,6 +1521,47 @@ TEST(ctx_copycontext_xstate) {
     bm_unpin();
 }
 
+/* RtlCaptureContext2 (ntdll, Windows 10 2004+, x64): RtlCaptureContext plus extended state. ntdll 19041
+ * (corpus explorer): FXSAVE + STMXCSR as RtlCaptureContext; then RtlpSanitizeContextFlags(&Flags, 1); if
+ * (Flags & 0x100040) == 0x100040 RtlpMergeContextXState merges ONLY the CET user shadow-stack component
+ * (XSTATE 11); finally Flags |= 0x10000F. It does not XSAVE the AVX component in 19041, so the YMM upper
+ * halves in the record are INFO, never a check. Hard checks: XMM6-15, MXCSR, flags 0x10000F. */
+typedef VOID (WINAPI *rcc2_fn)(PCONTEXT);
+typedef struct cap2_ctx { rcc2_fn f; CONTEXT *c; DWORD flags; } cap2_ctx;
+static void cap2_bench(void *p) { cap2_ctx *x = (cap2_ctx *)p; x->c->ContextFlags = x->flags; x->f(x->c); }
+TEST(ctx_rtlcapturecontext2_xstate) {
+#ifndef T_X64
+    SKIP("RtlCaptureContext2 is an x64 export");
+#else
+    rcc2_fn f = (rcc2_fn)t_proc("ntdll.dll", "RtlCaptureContext2");
+    if (!f) SKIP("ntdll!RtlCaptureContext2 not exported (before Windows 10 2004)");
+    BM_NEED(AVX);
+    if (!T_PROC("kernel32.dll", InitializeContext) || !T_PROC("kernel32.dll", LocateXStateFeature)) SKIP("XSTATE context APIs not exported");
+    DWORD flags = CX_FP_FLAGS | CONTEXT_XSTATE;
+    xctx xc;
+    if (!xctx_init(&xc, flags, XSTATE_MASK_AVX)) { free(xc.buf); return; }
+    static T_ALIGN(32) uint8_t pat[16][32];
+    for (int i = 0; i < 16; i++) t_pattern_reg(pat[i], 32, 0xC2, (uint32_t)i);
+    xc.c->ContextFlags = flags;
+    cap_call_ymm((void *)f, xc.c, (const uint8_t (*)[32])pat);
+    t_info("context_flags_after", "0x%lx", xc.c->ContextFlags);
+    CHECKF((xc.c->ContextFlags & 0x10000F) == 0x10000F, "ContextFlags 0x%lx lacks CONTROL|INTEGER|SEGMENTS|FLOATING_POINT", xc.c->ContextFlags);
+    if (!(xc.c->ContextFlags & 0x40)) t_note("CONTEXT_XSTATE dropped from ContextFlags (0x%lx)", xc.c->ContextFlags);
+    cap_xmm_compare(xc.c, (const uint8_t (*)[32])pat, "RtlCaptureContext2 FltSave XMM6-15");
+    CHECKF(xc.c->MxCsr == t_get_mxcsr(), "MxCsr 0x%lx, live 0x%x", xc.c->MxCsr, t_get_mxcsr());
+    __typeof__(&LocateXStateFeature) pLoc = T_PROC("kernel32.dll", LocateXStateFeature);
+    DWORD len = 0; const uint8_t *hi = (const uint8_t *)pLoc(xc.c, XSTATE_AVX, &len);
+    int same = 0;
+    if (hi && len >= 256) for (int i = 6; i < 16; i++) same += !memcmp(hi + 16 * i, pat[i] + 16, 16);
+    t_info("ymm6_15_upper_captured", "%d of 10 (19041 does not capture AVX here; INFO only)", same);
+    bm_pin();
+    cap2_ctx x = { f, xc.c, flags };
+    bm_run("rtlcapturecontext2_xstate", cap2_bench, &x, 1, 1e6, "Mcaptures/s", BM_RATE);
+    bm_unpin();
+    free(xc.buf);
+#endif
+}
+
 /* =====================================================================================================
  * scheduler: yields, event ping-pong (with live SIMD state), thread creation
  * ===================================================================================================== */
@@ -1612,6 +1695,86 @@ TEST(sched_pingpong_simd_live) {
     bm_unpin();
 }
 
+/* Thread state stress (GUIDANCE 5 "thread state stress iterations/s"): N threads pinned to ONE processor,
+ * each holding its own XMM/YMM image and re-verifying it against memory in a tight loop. They never block
+ * or yield, so every switch between them is an involuntary (timer/quantum) preemption; the OS must save
+ * and restore each thread's full vector state each time. PERF = verified iterations/s over all threads;
+ * any mismatch is a FAIL. The number of threads that made progress is INFO (no fairness contract). */
+static DWORD WINAPI bv_proc(LPVOID p) {
+    bv_spin *s = (bv_spin *)p;
+    if (cpu_has(F_AVX2)) bv_spin_ymm(s); else bv_spin_xmm(s);
+    return 0;
+}
+TEST(sched_preempt_simd_verify) {
+    int cpu = bm_pin();
+    if (cpu < 0) SKIP("cannot pin the case thread");
+    enum { NT = 4 };
+    int ymm = cpu_has(F_AVX2), width = ymm ? 32 : 16;
+    bv_spin *s = (bv_spin *)bm_alloc(sizeof(bv_spin) * NT);
+    REQUIRE(s);
+    /* detector self-test: change the reference in memory under a running spinner; it must notice and
+     * leave its loop by itself (bad = 1), proving the in-loop comparison is live */
+    {
+        for (int i = 0; i < 16; i++) t_pattern_reg(s[0].vin[i], 32, 0xBF, (uint32_t)i);
+        HANDLE h = CreateThread(NULL, 64 * 1024, bv_proc, &s[0], CREATE_SUSPENDED, NULL);
+        if (!h) { bm_free(s); bm_unpin(); SKIP("CreateThread failed: %lu", GetLastError()); }
+        SetThreadAffinityMask(h, (DWORD_PTR)1 << cpu);
+        ResumeThread(h);
+        double t0 = t_now_ms();
+        while (!s[0].ready && t_now_ms() - t0 < 5000) Sleep(1);
+        s[0].vin[BV_NPAT - 1][ymm ? 31 : 15] ^= 0x01;           /* the last compared byte of the last register */
+        DWORD w = WaitForSingleObject(h, 5000);
+        if (w != WAIT_OBJECT_0) { InterlockedExchange(&s[0].stop, 1); WaitForSingleObject(h, 5000); }
+        CloseHandle(h);
+        CHECKF(w == WAIT_OBJECT_0 && s[0].bad == 1, "self-test: spinner did not detect a changed reference (wait %lu, bad %ld)", w, s[0].bad);
+        memset(s, 0, sizeof(bv_spin) * NT);
+    }
+    HANDLE th[NT] = { 0 };
+    int n = 0;
+    for (int t = 0; t < NT; t++) {
+        for (int i = 0; i < 16; i++) t_pattern_reg(s[t].vin[i], 32, 0xB0 + (uint32_t)t, (uint32_t)i);
+        th[t] = CreateThread(NULL, 64 * 1024, bv_proc, &s[t], CREATE_SUSPENDED, NULL);
+        if (!th[t]) break;
+        SetThreadAffinityMask(th[t], (DWORD_PTR)1 << cpu);
+        n++;
+    }
+    if (n < 2) {
+        for (int t = 0; t < n; t++) { TerminateThread(th[t], 1); CloseHandle(th[t]); }
+        bm_free(s); bm_unpin(); SKIP("could not create 2 spinner threads: %lu", GetLastError());
+    }
+    for (int t = 0; t < n; t++) ResumeThread(th[t]);
+    double t0 = t_now_ms();
+    int ready = 0;
+    while (t_now_ms() - t0 < 5000) { ready = 0; for (int t = 0; t < n; t++) ready += s[t].ready != 0; if (ready == n) break; Sleep(5); }
+    double run_ms = bm_full() ? 2000 : 300;
+    uint64_t q0 = t_qpc();
+    LONG it0[NT]; for (int t = 0; t < n; t++) it0[t] = s[t].iters;
+    Sleep((DWORD)run_ms);
+    LONG it1[NT]; for (int t = 0; t < n; t++) it1[t] = s[t].iters;
+    uint64_t q1 = t_qpc();
+    for (int t = 0; t < n; t++) InterlockedExchange(&s[t].stop, 1);
+    DWORD w = WaitForMultipleObjects((DWORD)n, th, TRUE, 5000);
+    CHECKF(w < WAIT_OBJECT_0 + (DWORD)n, "spinner threads did not stop within 5 s (wait %lu)", w);
+    for (int t = 0; t < n; t++) { if (w >= WAIT_OBJECT_0 + (DWORD)n) TerminateThread(th[t], 1); CloseHandle(th[t]); }
+    CHECKF(ready == n, "only %d of %d spinners started within 5 s", ready, n);
+    double total = 0; int progressed = 0, bad = 0;
+    for (int t = 0; t < n; t++) {
+        total += (double)(uint32_t)(it1[t] - it0[t]);
+        progressed += it1[t] != it0[t];
+        int diff = -1;
+        for (int i = 0; i < BV_NPAT && diff < 0; i++) if (memcmp(s[t].vout[i], s[t].vin[i], (size_t)width)) diff = i;
+        if (diff >= 0) { char l[64]; snprintf(l, sizeof l, "spinner %d %s%d at exit", t, ymm ? "ymm" : "xmm", diff); CHECK_REG(l, s[t].vout[diff], s[t].vin[diff], (size_t)width); }
+        if (s[t].bad || diff >= 0) bad++;
+    }
+    CHECKF(bad == 0, "%d of %d same-processor spinners saw their %s registers change under preemption", bad, n, ymm ? "YMM" : "XMM");
+    double sec = t_qpc_sec(q0, q1);
+    if (sec > 0) t_perf(ymm ? "preempt_ymm_verify_iters" : "preempt_xmm_verify_iters", total / sec / 1e6, "Miter/s");
+    t_info("threads", "%d on cpu %d, %d made progress in %.0f ms", n, cpu, progressed, run_ms);
+    t_info("registers_per_thread", "%d x %d bytes", BV_NPAT, width);
+    bm_free(s);
+    bm_unpin();
+}
+
 typedef struct tc_ctx { int fails; unsigned mxcsr; unsigned short cw; } tc_ctx;
 static DWORD WINAPI tc_proc(LPVOID p) { tc_ctx *x = (tc_ctx *)p; x->mxcsr = t_get_mxcsr(); x->cw = t_get_x87_cw(); return 0x1234; }
 static void tc_bench(void *p) {
@@ -1622,11 +1785,22 @@ static void tc_bench(void *p) {
     if (WaitForSingleObject(h, 5000) != WAIT_OBJECT_0 || !GetExitCodeThread(h, &ec) || ec != 0x1234) x->fails++;
     CloseHandle(h);
 }
+/* New threads start with the default FP environment, not the creator's: ntoskrnl 19041
+ * KiInitializeContextThread stores MXCSR 0x1F80 and FCW 0x27F into the initial frame (corpus explorer). */
 TEST(sched_thread_create_rate) {
     bm_pin();
     static tc_ctx x; memset(&x, 0, sizeof x);
+    unsigned mx = t_get_mxcsr(); unsigned short cw = t_get_x87_cw();
+    t_set_mxcsr(0xFFC0 & ~0x40u); t_set_x87_cw(0x0F7F);      /* creator: FZ, RC=toward zero, PC=64 bits */
     tc_bench(&x);
+    t_set_mxcsr(mx); t_set_x87_cw(cw);
     if (x.fails) { bm_unpin(); SKIP("CreateThread failed: %lu", GetLastError()); }
+    CHECKF(x.mxcsr == 0x1F80, "new thread MXCSR 0x%04x want 0x1F80 (default, independent of the creator's 0xFF80)", x.mxcsr);
+#ifdef T_X64
+    CHECKF(x.cw == 0x027F, "new thread x87 FCW 0x%04x want 0x027F (Win64 default)", x.cw);
+#else
+    if (x.cw != 0x027F) t_note("new x86 thread x87 FCW 0x%04x (Windows default 0x027F)", x.cw);
+#endif
     bm_run("createthread_wait_close", tc_bench, &x, 1, 1e3, "kthreads/s", BM_RATE);
     CHECKF(x.fails == 0, "%d thread create/wait/exit-code failures", x.fails);
     t_info("new_thread_mxcsr", "0x%04x", x.mxcsr);

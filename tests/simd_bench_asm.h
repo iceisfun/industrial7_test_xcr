@@ -36,6 +36,59 @@ static T_NOINLINE T_TARGET("avx") void bx_spin_ymm(bx_spin *a) {
     __asm__ volatile(BX_ALL(BYL) BX_SPIN_LOOP BX_ALL(BYS) "vzeroupper\n\t" :: "r"(a) : "memory", "cc", BX_CLOB);
 }
 
+/* ============================================================================ self-verifying spinners
+ * load vin -> pattern registers, ready = 1, then loop: compare every pattern register with vin (through
+ * one scratch register), iters++, until stop. A mismatch sets bad = 1 and leaves the loop at once. The
+ * registers are stored to vout either way. Pattern registers: XMM/YMM0-14 (x64; scratch 15), 0-6 (x86;
+ * scratch 7). Several of these on ONE processor are switched only by preemption: the OS must save and
+ * restore each thread's full vector state on every involuntary context switch. */
+typedef struct bv_spin {
+    T_ALIGN(64) uint8_t vin[16][32];    /* offset 0    */
+    uint8_t vout[16][32];               /* offset 512  */
+    volatile LONG ready;                /* offset 1024 */
+    volatile LONG stop;                 /* offset 1028 */
+    volatile LONG bad;                  /* offset 1032 */
+    volatile LONG iters;                /* offset 1036 */
+} bv_spin;
+_Static_assert(offsetof(bv_spin, ready) == 1024 && offsetof(bv_spin, stop) == 1028 && offsetof(bv_spin, bad) == 1032 && offsetof(bv_spin, iters) == 1036, "bv_spin layout");
+#ifdef T_X64
+#define BV_S "15"
+#define BV_NPAT 15
+#define BV_PAT(M) M(0) M(1) M(2) M(3) M(4) M(5) M(6) M(7) M(8) M(9) M(10) M(11) M(12) M(13) M(14)
+#else
+#define BV_S "7"
+#define BV_NPAT 7
+#define BV_PAT(M) M(0) M(1) M(2) M(3) M(4) M(5) M(6)
+#endif
+#define BVX_CHK(i) "movdqa %%xmm" #i ", %%xmm" BV_S "\n\t" "pcmpeqb " #i "*32(%0), %%xmm" BV_S "\n\t" \
+                   "pmovmskb %%xmm" BV_S ", %%eax\n\t" "cmpl $0xFFFF, %%eax\n\t" "jne 8f\n\t"
+#define BVY_CHK(i) "vpcmpeqb " #i "*32(%0), %%ymm" #i ", %%ymm" BV_S "\n\t" \
+                   "vpmovmskb %%ymm" BV_S ", %%eax\n\t" "cmpl $-1, %%eax\n\t" "jne 8f\n\t"
+#define BV_LOOP(CHK) "movl $1, 1024(%0)\n\t" "1:\n\t" BV_PAT(CHK) "addl $1, 1036(%0)\n\t" \
+                     "cmpl $0, 1028(%0)\n\t" "je 1b\n\t" "jmp 9f\n\t" "8:\n\t" "movl $1, 1032(%0)\n\t" "9:\n\t"
+static T_NOINLINE void bv_spin_xmm(bv_spin *a) {
+    __asm__ volatile(BV_PAT(BXL) BV_LOOP(BVX_CHK) BV_PAT(BXS) :: "r"(a) : "memory", "cc", "eax", BX_CLOB);
+}
+static T_NOINLINE T_TARGET("avx2") void bv_spin_ymm(bv_spin *a) {
+    __asm__ volatile(BV_PAT(BYL) BV_LOOP(BVY_CHK) BV_PAT(BYS) "vzeroupper\n\t" :: "r"(a) : "memory", "cc", "eax", BX_CLOB);
+}
+
+#ifdef T_X64
+/* Call fn(ctx) (a Win64 function taking one pointer, e.g. RtlCaptureContext) with XMM0-15 (or, with
+ * ymm, YMM0-15) = pat[i]. The stack is realigned to 16 with 32 bytes of shadow space; RBX keeps RSP. */
+#define CAP_CALL "mov %%rsp, %%rbx\n\t" "and $-16, %%rsp\n\t" "sub $32, %%rsp\n\t" "mov %[c], %%rcx\n\t" \
+                 "call *%[fn]\n\t" "mov %%rbx, %%rsp\n\t"
+#define CAP_CLOB "rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "memory", "cc", BX_CLOB
+#define CPL(i)  "movdqu " #i "*32(%[p]), %%xmm" #i "\n\t"
+#define CPY(i)  "vmovdqu " #i "*32(%[p]), %%ymm" #i "\n\t"
+static T_NOINLINE void cap_call_xmm(void *fn, void *ctx, const uint8_t (*pat)[32]) {
+    __asm__ volatile(BX_ALL(CPL) CAP_CALL :: [p] "r"(pat), [c] "r"(ctx), [fn] "r"(fn) : CAP_CLOB);
+}
+static T_NOINLINE T_TARGET("avx") void cap_call_ymm(void *fn, void *ctx, const uint8_t (*pat)[32]) {
+    __asm__ volatile(BX_ALL(CPY) CAP_CALL "vzeroupper\n\t" :: [p] "r"(pat), [c] "r"(ctx), [fn] "r"(fn) : CAP_CLOB);
+}
+#endif
+
 /* ============================================================================ AVX <-> SSE transitions */
 typedef struct tr_ctx {
     T_ALIGN(32) float ones[8];
