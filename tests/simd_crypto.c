@@ -525,20 +525,26 @@ static void ghash(gf_mul_fn mul, const uint8_t H[16], const uint8_t *A, size_t a
     mul(y, H, y);
     memcpy(S, y, 16);
 }
-/* AES-GCM with a 96-bit IV (SP 800-38D 7.1/7.2); hw = AES-NI + PCLMULQDQ, else software */
-static void aes_gcm(int hw, const uint8_t *key, int bits, const uint8_t iv[12], const uint8_t *A, size_t alen,
-                    const uint8_t *in, size_t n, uint8_t *out, uint8_t tag[16], int decrypt) {
+/* AES-GCM (SP 800-38D 7.1/7.2); hw = AES-NI + PCLMULQDQ, else software. ivlen == 12: J0 = IV || 0^31 || 1;
+ * any other length: J0 = GHASH_H(IV || 0^(s+64) || [len(IV)]_64), i.e. GHASH with an empty A and C = IV. */
+static void aes_gcm_iv(int hw, const uint8_t *key, int bits, const uint8_t *iv, size_t ivlen, const uint8_t *A, size_t alen,
+                       const uint8_t *in, size_t n, uint8_t *out, uint8_t tag[16], int decrypt) {
     aes_sched ks; uint8_t H[16] = { 0 }, J0[16], ctr[16], S[16];
     V128 z, e;
     memset(&z, 0, sizeof z);
     if (hw) { hw_expand(key, bits, &ks); hw_ecb_enc(&ks, z.b, H, 1); }
     else { sw_expand(key, bits, &ks); e = sw_encrypt(&ks, z); memcpy(H, e.b, 16); }
-    memcpy(J0, iv, 12); J0[12] = J0[13] = J0[14] = 0; J0[15] = 1;
+    if (ivlen == 12) { memcpy(J0, iv, 12); J0[12] = J0[13] = J0[14] = 0; J0[15] = 1; }
+    else ghash(hw ? hw_gf128_mul : sw_gf128_mul, H, NULL, 0, iv, ivlen, J0);
     memcpy(ctr, J0, 16); inc32be(ctr);
     if (hw) hw_ctr(&ks, ctr, in, out, n, 1, 8); else sw_ctr(&ks, ctr, in, out, n, 1);
     ghash(hw ? hw_gf128_mul : sw_gf128_mul, H, A, alen, decrypt ? in : out, n, S);
     if (hw) hw_ecb_enc(&ks, J0, e.b, 1); else e = sw_encrypt(&ks, ld128(J0));
     for (int j = 0; j < 16; j++) tag[j] = S[j] ^ e.b[j];
+}
+static void aes_gcm(int hw, const uint8_t *key, int bits, const uint8_t iv[12], const uint8_t *A, size_t alen,
+                    const uint8_t *in, size_t n, uint8_t *out, uint8_t tag[16], int decrypt) {
+    aes_gcm_iv(hw, key, bits, iv, 12, A, alen, in, n, out, tag, decrypt);
 }
 
 /* ================================================================ CRC-32 / CRC-32C: table, PCLMUL folding, SSE4.2 */
@@ -1122,6 +1128,7 @@ typedef struct { const char *name; int bits; const char *key, *iv, *pt, *aad, *c
 #define GCM_P60 "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39"
 #define GCM_A20 "feedfacedeadbeeffeedfacedeadbeefabaddad2"
 #define GCM_K   "feffe9928665731c6d6a8f9467308308"
+#define GCM_IV60 "9313225df88406e555909c5aff5269aa6a7a9538534f7da1e4c303d2a318a728c3c0c95156809539fcf0e2429a6b525416aedbf5a0de6a57a637b39b"
 static const gcm_kat GCM_KATS[] = {
     { "tc1",  128, "00000000000000000000000000000000", "000000000000000000000000", "", "", "", "58e2fccefa7e3061367f1d57a4e7455a" },
     { "tc2",  128, "00000000000000000000000000000000", "000000000000000000000000", "00000000000000000000000000000000", "",
@@ -1139,6 +1146,16 @@ static const gcm_kat GCM_KATS[] = {
     { "tc16", 256, GCM_K GCM_K, "cafebabefacedbaddecaf888", GCM_P60, GCM_A20,
       "522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662",
       "76fc6ece0f4e1768cddf8853bb2d551b" },
+    /* non-96-bit IVs: J0 is derived through GHASH (8-byte IV in tc5, 60-byte IV in tc6/tc18) */
+    { "tc5",  128, GCM_K, "cafebabefacedbad", GCM_P60, GCM_A20,
+      "61353b4c2806934a777ff51fa22a4755699b2a714fcdc6f83766e5f97b6c742373806900e49f24b22b097544d4896b424989b5e1ebac0f07c23f4598",
+      "3612d2e79e3b0785561be14aaca2fccb" },
+    { "tc6",  128, GCM_K, GCM_IV60, GCM_P60, GCM_A20,
+      "8ce24998625615b603a033aca13fb894be9112a5c3a211a8ba262a3cca7e2ca701e4a9a4fba43c90ccdcb281d48c7c6fd62875d2aca417034c34aee5",
+      "619cc5aefffe0bfa462af43c1699d050" },
+    { "tc18", 256, GCM_K GCM_K, GCM_IV60, GCM_P60, GCM_A20,
+      "5a8def2f0c9e53f1f75d7853659e2a20eeb2b22aafde6419a058ab4f6f746bf40fc0c3b780f244452da3ebf1c5d82cdea2418997200ef82e44ae7e3f",
+      "a44a8266ee1c8eb0c8b5d4cf5ae9f19a" },
 };
 /* SHA known answers (FIPS 180-4 examples / NIST CSRC example values) */
 static const char *const SHA_MSG56 = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
@@ -1257,11 +1274,11 @@ TEST(aes_sw_reference_sp800_38a_gcm) {
     }
     for (size_t i = 0; i < T_COUNTOF(GCM_KATS); i++) {
         const gcm_kat *g = &GCM_KATS[i];
-        uint8_t gk[32], giv[12], gp[64], ga[32], gc[64], gt[16], oc[64], ot[16];
-        unhex(g->key, gk, 32); unhex(g->iv, giv, 12);
+        uint8_t gk[32], giv[64], gp[64], ga[32], gc[64], gt[16], oc[64], ot[16];
+        unhex(g->key, gk, 32); size_t ivl = unhex(g->iv, giv, sizeof giv);
         size_t pl = unhex(g->pt, gp, 64), al = unhex(g->aad, ga, 32);
         unhex(g->ct, gc, 64); unhex(g->tag, gt, 16);
-        aes_gcm(0, gk, g->bits, giv, ga, al, gp, pl, oc, ot, 0);
+        aes_gcm_iv(0, gk, g->bits, giv, ivl, ga, al, gp, pl, oc, ot, 0);
         CHECK_BLK(oc, gc, pl, "sw GCM %s ciphertext", g->name);
         CHECK_BLK(ot, gt, 16, "sw GCM %s tag", g->name);
     }
@@ -1585,14 +1602,14 @@ static void gcm_case(const char *n1, const char *n2) {
     for (size_t i = 0; i < T_COUNTOF(GCM_KATS); i++) {
         const gcm_kat *g = &GCM_KATS[i];
         if (strcmp(g->name, n1) && strcmp(g->name, n2)) continue;
-        uint8_t gk[32], giv[12], gp[64], ga[32], gc[64], gt[16], oc[64], ot[16], op[64];
-        unhex(g->key, gk, 32); unhex(g->iv, giv, 12);
+        uint8_t gk[32], giv[64], gp[64], ga[32], gc[64], gt[16], oc[64], ot[16], op[64];
+        unhex(g->key, gk, 32); size_t ivl = unhex(g->iv, giv, sizeof giv);
         size_t pl = unhex(g->pt, gp, 64), al = unhex(g->aad, ga, 32);
         unhex(g->ct, gc, 64); unhex(g->tag, gt, 16);
-        aes_gcm(1, gk, g->bits, giv, ga, al, gp, pl, oc, ot, 0);
-        CHECK_BLK(oc, gc, pl, "GCM %s ciphertext (AES-%d, %zu-byte P, %zu-byte A)", g->name, g->bits, pl, al);
+        aes_gcm_iv(1, gk, g->bits, giv, ivl, ga, al, gp, pl, oc, ot, 0);
+        CHECK_BLK(oc, gc, pl, "GCM %s ciphertext (AES-%d, %zu-byte IV, %zu-byte P, %zu-byte A)", g->name, g->bits, ivl, pl, al);
         CHECK_BLK(ot, gt, 16, "GCM %s tag", g->name);
-        aes_gcm(1, gk, g->bits, giv, ga, al, gc, pl, op, ot, 1);
+        aes_gcm_iv(1, gk, g->bits, giv, ivl, ga, al, gc, pl, op, ot, 1);
         CHECK_BLK(op, gp, pl, "GCM %s decrypt", g->name);
         CHECK_BLK(ot, gt, 16, "GCM %s decrypt tag", g->name);
     }
@@ -1601,6 +1618,8 @@ TEST(aesni_pclmul_gcm_tc1_tc2_aes128_zero) { gcm_case("tc1", "tc2"); }
 TEST(aesni_pclmul_gcm_tc3_tc4_aes128)      { gcm_case("tc3", "tc4"); }
 TEST(aesni_pclmul_gcm_tc13_tc14_aes256)    { gcm_case("tc13", "tc14"); }
 TEST(aesni_pclmul_gcm_tc16_aes256_aad)     { gcm_case("tc16", "tc16"); }
+TEST(aesni_pclmul_gcm_tc5_tc6_ghash_iv)     { gcm_case("tc5", "tc6"); }
+TEST(aesni_pclmul_gcm_tc18_aes256_ghash_iv) { gcm_case("tc18", "tc18"); }
 
 TEST(aesni_pclmul_gcm_tamper_and_random_vs_sw) {
     NEED(F_AES); NEED(F_PCLMULQDQ); crypto_init();
@@ -1608,17 +1627,18 @@ TEST(aesni_pclmul_gcm_tamper_and_random_vs_sw) {
     static uint8_t p[300], a[70], c1[300], c2[300];
     vbegin();
     for (int i = 0; i < 40; i++) {
-        uint8_t key[32], iv[12], t1[16], t2[16];
+        uint8_t key[32], iv[64], t1[16], t2[16];
         int bits = 128 + 64 * (i % 3);
         size_t pl = t_rng_range(&r, sizeof p + 1), al = t_rng_range(&r, sizeof a + 1);
-        t_rng_fill(&r, key, 32); t_rng_fill(&r, iv, 12); t_rng_fill(&r, p, sizeof p); t_rng_fill(&r, a, sizeof a);
-        aes_gcm(0, key, bits, iv, a, al, p, pl, c1, t1, 0);
-        aes_gcm(1, key, bits, iv, a, al, p, pl, c2, t2, 0);
-        VCHECK(!memcmp(c1, c2, pl) && !memcmp(t1, t2, 16), "GCM-AES%d P=%zu A=%zu: hw tag %s sw tag %s", bits, pl, al, hx(t2, 16), hx(t1, 16));
+        size_t ivl = (i % 4 == 3) ? 1 + t_rng_range(&r, sizeof iv) : 12;   /* every 4th: GHASH-derived J0 */
+        t_rng_fill(&r, key, 32); t_rng_fill(&r, iv, sizeof iv); t_rng_fill(&r, p, sizeof p); t_rng_fill(&r, a, sizeof a);
+        aes_gcm_iv(0, key, bits, iv, ivl, a, al, p, pl, c1, t1, 0);
+        aes_gcm_iv(1, key, bits, iv, ivl, a, al, p, pl, c2, t2, 0);
+        VCHECK(!memcmp(c1, c2, pl) && !memcmp(t1, t2, 16), "GCM-AES%d IV=%zu P=%zu A=%zu: hw tag %s sw tag %s", bits, ivl, pl, al, hx(t2, 16), hx(t1, 16));
         if (pl) {   /* one flipped ciphertext bit must change the tag computed on decryption */
             uint8_t back[300], t3[16];
             c2[t_rng_range(&r, pl)] ^= (uint8_t)(1u << t_rng_range(&r, 8));
-            aes_gcm(1, key, bits, iv, a, al, c2, pl, back, t3, 1);
+            aes_gcm_iv(1, key, bits, iv, ivl, a, al, c2, pl, back, t3, 1);
             VCHECK(memcmp(t3, t1, 16) != 0, "tampered ciphertext produced the original tag");
         }
     }
@@ -1874,7 +1894,7 @@ TEST(sha256ni_random_lengths_vs_software) { NEED(F_SHA); sha_random_lengths(ALG_
 
 /* ---------------------------------------------------------------- SHA512 extensions (VEX.256) */
 static void sha512_op_case(int op, uint64_t seed) {
-    NEED(F_SHA512);
+    NEED(F_SHA512); NEED(F_AVX2);   /* the helpers are compiled for AVX2 (vpermq/vpblendd around the SHA512 ops) */
     t_rng r; t_rng_seed(&r, seed);
     static const char *const nm[] = { "vsha512rnds2", "vsha512msg1", "vsha512msg2" };
     vbegin();
@@ -1892,7 +1912,7 @@ TEST(sha512ext_vsha512rnds2_vs_model) { sha512_op_case(S512_RNDS2, 401); }
 TEST(sha512ext_vsha512msg1_vs_model)  { sha512_op_case(S512_MSG1, 402); }
 TEST(sha512ext_vsha512msg2_vs_model)  { sha512_op_case(S512_MSG2, 403); }
 TEST(sha512ext_digest_known_answers) {
-    NEED(F_SHA512);
+    NEED(F_SHA512); NEED(F_AVX2);
     sha_kat_run(ALG_SHA512, hw_sha512_blocks_avx, "VSHA512");
     sha_random_lengths(ALG_SHA512, hw_sha512_blocks_avx, sw_sha512_blocks, 404);
 }
@@ -1971,7 +1991,7 @@ TEST(avx_vex128_aes_pclmul_unaligned_m128) {
 }
 
 TEST(vaes_ymm_per_lane_vs_model) {
-    NEED(F_VAES); crypto_init();
+    NEED(F_VAES); NEED(F_AVX2);   /* helper compiled with target("avx2,vaes") */ crypto_init();
     t_rng r; t_rng_seed(&r, 602);
     vbegin();
     for (int op = OP_ENC; op <= OP_DECLAST; op++) for (int i = 0; i < 500; i++) {
@@ -1987,7 +2007,7 @@ TEST(vaes_ymm_per_lane_vs_model) {
     VEND("VAES ymm");
 }
 TEST(vaes_ymm_ctr_vs_aesni_and_sp800_38a) {
-    NEED(F_VAES); crypto_init();
+    NEED(F_VAES); NEED(F_AVX2);   /* vbroadcasti128 */ crypto_init();
     uint8_t pt[64], want[64], got[64], key[32], ctr[16];
     unhex(SP_PT, pt, 64);
     for (int k = 0; k < 3; k++) {
@@ -2008,7 +2028,7 @@ TEST(vaes_ymm_ctr_vs_aesni_and_sp800_38a) {
     CHECK_BLK(o2, o1, N - 16, "VAES ymm CTR vs AES-NI 8-way (odd block count)");
 }
 TEST(vpclmulqdq_ymm_per_lane_vs_model) {
-    NEED(F_VPCLMULQDQ);
+    NEED(F_VPCLMULQDQ); NEED(F_AVX2);
     t_rng r; t_rng_seed(&r, 604);
     vbegin();
     for (int sel = 0; sel < 4; sel++) for (int i = 0; i < 500; i++) {
@@ -2249,6 +2269,469 @@ TEST(crypto_state_survives_suspend_getsetcontext) {
     CHECKF(job.bad == 0, "%ld of %ld crypto iterations wrong while being suspended / context round-tripped", job.bad, job.done_iters);
     CHECKF(job.done_iters >= before + 3, "worker made no progress after the context round trips");
     t_info("suspend_rounds", "%d suspends, %d GetThreadContext, %d SetThreadContext, %ld iterations", sus, gets, sets, job.done_iters);
+}
+
+/* ---------------------------------------------------------------- MXCSR independence */
+/* AES*, PCLMULQDQ, SHA*, GF2P8* are integer instructions: SDM Vol.2 lists "SIMD Floating-Point Exceptions:
+ * None" for each. Their results must not depend on MXCSR (rounding control, FTZ, DAZ, exception masks) and
+ * they must not set MXCSR flags. Only the hw_* helpers (integer code) run while the unusual MXCSR is loaded. */
+enum { MX_N = 48 };
+typedef struct { V128 enc, dl, imc, kga, clm, s2, s1, gf; } mx_res;
+static void mx_run(const V128 *a, const V128 *b, const V128 *k, mx_res *o, int aes, int clm, int sha, int gf) {
+    for (int i = 0; i < MX_N; i++) {
+        if (aes) { hw_aesop(OP_ENC, &a[i], &b[i], &o[i].enc); hw_aesop(OP_DECLAST, &a[i], &b[i], &o[i].dl);
+                   hw_aesop(OP_IMC, &a[i], &b[i], &o[i].imc); hw_kga(&a[i], 0x1B, &o[i].kga); }
+        if (clm) hw_pclmul(&a[i], &b[i], 0x11, &o[i].clm);
+        if (sha) { hw_shaop(SH256_RNDS2, &a[i], &b[i], &k[i], &o[i].s2); hw_shaop(SH_RNDS4_3, &a[i], &b[i], &k[i], &o[i].s1); }
+        if (gf) hw_gfni_affine(&a[i], &b[i], 0x63, 1, &o[i].gf);
+    }
+}
+TEST(crypto_results_independent_of_mxcsr) {
+    int aes = cpu_has(F_AES), clm = cpu_has(F_PCLMULQDQ), sha = cpu_has(F_SHA), gf = cpu_has(F_GFNI);
+    if (!aes && !clm && !sha && !gf) SKIP("none of AES, PCLMULQDQ, SHA, GFNI is usable");
+    crypto_init();
+    static T_ALIGN(16) uint8_t fx[512];
+    memset(fx, 0, sizeof fx);
+    t_fxsave(fx);
+    uint32_t mask; memcpy(&mask, fx + 28, 4);
+    if (!mask) mask = 0xFFBF;                                   /* SDM 11.6.6: zero MXCSR_MASK means 0xFFBF */
+    static const unsigned modes[] = { 0x6000, 0xE040, 0x2040, 0x4000 | 0x8000 };   /* RC=chop/FTZ/DAZ, exceptions unmasked */
+    static V128 a[MX_N], b[MX_N], k[MX_N];
+    static mx_res want[MX_N], got[MX_N];
+    t_rng r; t_rng_seed(&r, 901);
+    for (int i = 0; i < MX_N; i++) { gen128(&r, &a[i]); gen128(&r, &b[i]); gen128(&r, &k[i]); }
+    memset(want, 0, sizeof want);
+    for (int i = 0; i < MX_N; i++) {
+        if (aes) { want[i].enc = m_aesenc(a[i], b[i]); want[i].dl = m_aesdeclast(a[i], b[i]); want[i].imc = m_aesimc(a[i]);
+                   want[i].kga = m_aeskeygenassist(a[i], 0x1B); }
+        if (clm) want[i].clm = m_pclmul(a[i], b[i], 0x11);
+        if (sha) { want[i].s2 = m_sha256rnds2(a[i], b[i], k[i]); want[i].s1 = m_sha1rnds4(a[i], b[i], 3); }
+        if (gf) want[i].gf = m_gf2p8affine(a[i], b[i], 0x63, 1);
+    }
+    unsigned saved = t_get_mxcsr();
+    for (size_t m = 0; m < T_COUNTOF(modes); m++) {
+        unsigned mx = modes[m] & mask;                         /* DAZ only where MXCSR_MASK allows it */
+        memset(got, 0, sizeof got);
+        t_set_mxcsr(mx);
+        mx_run(a, b, k, got, aes, clm, sha, gf);
+        unsigned after = t_get_mxcsr();
+        t_set_mxcsr(saved);
+        CHECKF(after == mx, "MXCSR changed from 0x%04x to 0x%04x by integer crypto instructions", mx, after);
+        CHECKF(!memcmp(got, want, sizeof got), "results under MXCSR=0x%04x differ from the models", mx);
+    }
+    CHECK_EQ(t_get_mxcsr(), saved);
+}
+
+/* ---------------------------------------------------------------- legacy SSE vs VEX.128 upper YMM bits */
+/* SDM Vol.2 AESENC/PCLMULQDQ/SHA256MSG1: legacy SSE form "DEST[MAXVL-1:128] (Unmodified)";
+ * VEX.128 form "DEST[MAXVL-1:128] := 0". out[0] = legacy result ymm, out[1] = VEX result ymm. */
+#define UPPER_ASM(LEG, VEX) __asm__ volatile( \
+        "vmovdqu (%0), %%ymm1\n\tvmovdqu (%1), %%xmm2\n\t" LEG "\n\tvmovdqu %%ymm1, (%2)\n\t" \
+        "vmovdqu (%0), %%ymm3\n\t" VEX "\n\tvmovdqu %%ymm3, 32(%2)\n\tvzeroupper" \
+        : : "r"(pat), "r"(k), "r"(out) : "xmm1", "xmm2", "xmm3", "memory")
+T_TARGET("avx") T_NOINLINE static void hw_upper_legacy_vs_vex(int which, const uint8_t *pat, const uint8_t *k, uint8_t *out) {
+    switch (which) {
+    case 0:  UPPER_ASM("aesenc %%xmm2, %%xmm1", "vaesenc %%xmm2, %%xmm3, %%xmm3"); break;
+    case 1:  UPPER_ASM("pclmulqdq $0x01, %%xmm2, %%xmm1", "vpclmulqdq $0x01, %%xmm2, %%xmm3, %%xmm3"); break;
+    default: UPPER_ASM("aesimc %%xmm2, %%xmm1", "vaesimc %%xmm2, %%xmm3"); break;
+    }
+}
+TEST(legacy_sse_crypto_preserves_upper_ymm_vex128_zeroes_it) {
+    NEED(F_AVX); crypto_init();
+    if (!cpu_has(F_AES) && !cpu_has(F_PCLMULQDQ)) SKIP("neither AES nor PCLMULQDQ is usable");
+    t_rng r; t_rng_seed(&r, 902);
+    static const char *const nm[] = { "aesenc", "pclmulqdq $1", "aesimc" };
+    vbegin();
+    for (int which = 0; which < 3; which++) {
+        if (which != 1 && !cpu_has(F_AES)) continue;
+        if (which == 1 && !cpu_has(F_PCLMULQDQ)) continue;
+        for (int i = 0; i < 100; i++) {
+            B256 pat; V128 k, lo, want; uint8_t out[64];
+            t_rng_fill(&r, pat.b, 32); gen128(&r, &k);
+            if (i == 0) memset(pat.b + 16, 0xFF, 16);
+            memcpy(lo.b, pat.b, 16);
+            hw_upper_legacy_vs_vex(which, pat.b, k.b, out);
+            want = which == 0 ? m_aesenc(lo, k) : which == 1 ? m_pclmul(lo, k, 0x01) : m_aesimc(k);
+            static const uint8_t zero[16];
+            VCHECK(!memcmp(out, want.b, 16) && !memcmp(out + 32, want.b, 16), "%s low 128 bits: legacy %s vex %s model %s", nm[which],
+                   hx(out, 16), hx(out + 32, 16), hx(want.b, 16));
+            VCHECK(!memcmp(out + 16, pat.b + 16, 16), "legacy %s changed YMM[255:128]: %s, was %s", nm[which], hx(out + 16, 16), hx(pat.b + 16, 16));
+            VCHECK(!memcmp(out + 48, zero, 16), "VEX.128 v%s left YMM[255:128] = %s (must be zero)", nm[which], hx(out + 48, 16));
+        }
+    }
+    VEND("legacy vs VEX.128 upper bits");
+}
+
+/* ---------------------------------------------------------------- operands at the end of a committed page */
+typedef struct { uint8_t *base; size_t page; } guard_pages;
+static int guard_alloc(guard_pages *g) {          /* [base, base+page) RW, [base+page, base+2*page) NOACCESS */
+    SYSTEM_INFO si; GetSystemInfo(&si);
+    g->page = si.dwPageSize ? si.dwPageSize : 4096;
+    g->base = (uint8_t *)VirtualAlloc(NULL, 2 * g->page, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if (!g->base) return 0;
+    DWORD old;
+    if (!VirtualProtect(g->base + g->page, g->page, PAGE_NOACCESS, &old)) { VirtualFree(g->base, 0, MEM_RELEASE); g->base = NULL; return 0; }
+    return 1;
+}
+TEST(crypto_m128_operand_ending_at_guard_page_no_fault) {
+    if (!cpu_has(F_AES) && !cpu_has(F_PCLMULQDQ) && !cpu_has(F_SHA)) SKIP("none of AES, PCLMULQDQ, SHA is usable");
+    crypto_init();
+    guard_pages g;
+    if (!guard_alloc(&g)) SKIP("VirtualAlloc/VirtualProtect failed (%lu)", GetLastError());
+    uint8_t *end = g.base + g.page;
+    t_rng r; t_rng_seed(&r, 903);
+    vbegin();
+    for (int i = 0; i < 64; i++) {
+        V128 a, k, got, want;
+        gen128(&r, &a); gen128(&r, &k);
+        memcpy(end - 16, k.b, 16);                    /* aligned: the last 16 bytes of the accessible page */
+        const V128 *km = (const V128 *)(end - 16);
+        if (cpu_has(F_AES)) {
+            int op = i % 5;
+            hw_aesop_mem(op, op == OP_IMC ? km : &a, km, &got);
+            want = op == OP_IMC ? m_aesimc(k) : m_aesop(op, a, k);
+            VCHECK(!memcmp(got.b, want.b, 16), "%s m128 at page end = %s, model %s", g_aesop_name[op], hx(got.b, 16), hx(want.b, 16));
+            if (cpu_has(F_AVX)) {                     /* VEX form: unaligned m128 ending 1..15 bytes before the page end */
+                uint8_t o[16]; int off = 17 + (i % 15);
+                memcpy(end - off, k.b, 16);
+                hw_aesop_vex128_avx(op, a.b, end - off, o);
+                VCHECK(!memcmp(o, want.b, 16), "v%s m128 at page end - %d = %s, model %s", g_aesop_name[op], off, hx(o, 16), hx(want.b, 16));
+            }
+        }
+        if (cpu_has(F_PCLMULQDQ)) {
+            memcpy(end - 16, k.b, 16);
+            hw_pclmul_mem(&a, km, i & 3, &got);
+            want = m_pclmul(a, k, g_sel_imm[i & 3]);
+            VCHECK(!memcmp(got.b, want.b, 16), "pclmulqdq m128 at page end = %s, model %s", hx(got.b, 16), hx(want.b, 16));
+        }
+        if (cpu_has(F_SHA)) {
+            V128 z; memset(&z, 0, sizeof z);
+            memcpy(end - 16, k.b, 16);
+            hw_shaop_mem(SH256_MSG1, &a, km, &z, &got);
+            want = m_sha256msg1(a, k);
+            VCHECK(!memcmp(got.b, want.b, 16), "sha256msg1 m128 at page end = %s, model %s", hx(got.b, 16), hx(want.b, 16));
+        }
+    }
+    VEND("m128 operands at the end of a committed page");
+    VirtualFree(g.base, 0, MEM_RELEASE);
+}
+static LONG CALLBACK guard_veh(EXCEPTION_POINTERS *ep) {
+    const EXCEPTION_RECORD *er = ep->ExceptionRecord;
+    if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && er->NumberParameters >= 2)
+        printf("AV_INFO=%llu %llx\n", (unsigned long long)er->ExceptionInformation[0], (unsigned long long)er->ExceptionInformation[1]);
+    fflush(stdout);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+/* argv[1]: "vex" = VEX vaesenc m128 straddling into the NOACCESS page (8 bytes in each page),
+ *          "legacy" = aligned legacy aesenc m128 entirely inside the NOACCESS page. */
+T_NOINLINE static void guard_vex_vaesenc(const uint8_t *op) {   /* caller checked AVX + AES */
+    __asm__ volatile("vpxor %%xmm1, %%xmm1, %%xmm1\n\tvaesenc (%0), %%xmm1, %%xmm1" : : "r"(op) : "xmm1", "memory");
+}
+CHILD(crypto_guard_page_fault) {
+    const char *w = argc > 1 ? argv[1] : "";
+    guard_pages g;
+    if (!guard_alloc(&g)) return 3;
+    uint8_t *op = !strcmp(w, "vex") ? g.base + g.page - 8 : g.base + g.page;
+    printf("OP_ADDR=%llx\nPAGE_END=%llx\n", (unsigned long long)(ULONG_PTR)op, (unsigned long long)(ULONG_PTR)(g.base + g.page));
+    fflush(stdout);
+    AddVectoredExceptionHandler(1, guard_veh);
+    if (!strcmp(w, "vex")) guard_vex_vaesenc(op);
+    else __asm__ volatile("pxor %%xmm1, %%xmm1\n\taesenc (%0), %%xmm1" : : "r"(op) : "xmm1", "memory");
+    printf("NOFAULT=1\n");
+    return 0;
+}
+static void guard_fault_case(const char *which) {
+    char v[96];
+    REQUIREF(t_child_run("crypto_guard_page_fault", which, 5000, &g_cr), "child did not start (error %lu)", g_cr.spawn_error);
+    CHECKF(!g_cr.timed_out, "child hung");
+    CHECKF(g_cr.exc_code == XP_STATUS_ACCESS_VIOLATION, "%s m128 read touching a PAGE_NOACCESS page: exception 0x%08lx exit 0x%lx (want 0xC0000005)",
+           which, g_cr.exc_code, g_cr.exit_code);
+    unsigned long long opa = 0, pend = 0, rw = 99, addr = 0;
+    if (t_child_find(&g_cr, "OP_ADDR=", v, sizeof v)) opa = strtoull(v, NULL, 16);
+    if (t_child_find(&g_cr, "PAGE_END=", v, sizeof v)) pend = strtoull(v, NULL, 16);
+    if (t_child_find(&g_cr, "AV_INFO=", v, sizeof v)) { char *e; rw = strtoull(v, &e, 10); addr = strtoull(e, NULL, 16); }
+    if (g_cr.exc_code != XP_STATUS_ACCESS_VIOLATION) return;
+    /* ExceptionInformation[0] = 0 for a read; [1] = the inaccessible address: it must lie in the NOACCESS page and
+     * inside the 16-byte operand (which byte exactly is CPU-reported, so only the range is a contract). */
+    CHECKF(rw == 0, "AV ExceptionInformation[0] = %llu, want 0 (read)", rw);
+    CHECKF(addr >= pend && addr < opa + 16, "AV address 0x%llx outside [page end 0x%llx, operand end 0x%llx)", addr, pend, opa + 16);
+    t_info("av_address_minus_page_end", "%lld", (long long)(addr - pend));
+}
+TEST(aesni_legacy_m128_in_noaccess_page_faults_child) { NEED(F_AES); guard_fault_case("legacy"); }
+TEST(vaes128_m128_straddling_noaccess_page_faults_child) { NEED(F_AES); NEED(F_AVX); guard_fault_case("vex"); }
+
+/* ---------------------------------------------------------------- AES state pinned in registers across preemption */
+/* One asm block holds the round keys and the cipher state in XMM registers for the whole run (nothing compiled in
+ * between can save/restore them), so a mismatch can only come from the OS losing or mixing register state on a
+ * preemption or on a concurrent Suspend/Get/SetThreadContext round trip.
+ * x64: AES-128 round keys in XMM5-XMM15 (includes callee-saved XMM6-15), 4 blocks in XMM0-3.
+ * x86: one block in XMM0, round keys 1..7 in XMM1-7, keys 0 and 8-10 from (aligned) memory. Each iteration
+ * encrypts the block(s) in place, n iterations. */
+#define PA_R4(k) "aesenc %%xmm" #k ", %%xmm0\n\taesenc %%xmm" #k ", %%xmm1\n\taesenc %%xmm" #k ", %%xmm2\n\taesenc %%xmm" #k ", %%xmm3\n\t"
+T_NOINLINE static void pinned_aes_chain(const V128 *rk, V128 *st, uint32_t n) {
+#ifdef T_X64
+    __asm__ volatile(
+        "movdqa 0(%0), %%xmm5\n\tmovdqa 16(%0), %%xmm6\n\tmovdqa 32(%0), %%xmm7\n\tmovdqa 48(%0), %%xmm8\n\t"
+        "movdqa 64(%0), %%xmm9\n\tmovdqa 80(%0), %%xmm10\n\tmovdqa 96(%0), %%xmm11\n\tmovdqa 112(%0), %%xmm12\n\t"
+        "movdqa 128(%0), %%xmm13\n\tmovdqa 144(%0), %%xmm14\n\tmovdqa 160(%0), %%xmm15\n\t"
+        "movdqa 0(%1), %%xmm0\n\tmovdqa 16(%1), %%xmm1\n\tmovdqa 32(%1), %%xmm2\n\tmovdqa 48(%1), %%xmm3\n\t"
+        "1:\n\t"
+        "pxor %%xmm5, %%xmm0\n\tpxor %%xmm5, %%xmm1\n\tpxor %%xmm5, %%xmm2\n\tpxor %%xmm5, %%xmm3\n\t"
+        PA_R4(6) PA_R4(7) PA_R4(8) PA_R4(9) PA_R4(10) PA_R4(11) PA_R4(12) PA_R4(13) PA_R4(14)
+        "aesenclast %%xmm15, %%xmm0\n\taesenclast %%xmm15, %%xmm1\n\taesenclast %%xmm15, %%xmm2\n\taesenclast %%xmm15, %%xmm3\n\t"
+        "decl %2\n\tjnz 1b\n\t"
+        "movdqa %%xmm0, 0(%1)\n\tmovdqa %%xmm1, 16(%1)\n\tmovdqa %%xmm2, 32(%1)\n\tmovdqa %%xmm3, 48(%1)"
+        : "+r"(rk), "+r"(st), "+r"(n)
+        :
+        : "xmm0", "xmm1", "xmm2", "xmm3", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12",
+          "xmm13", "xmm14", "xmm15", "cc", "memory");
+#else
+    __asm__ volatile(
+        "movdqa 16(%0), %%xmm1\n\tmovdqa 32(%0), %%xmm2\n\tmovdqa 48(%0), %%xmm3\n\tmovdqa 64(%0), %%xmm4\n\t"
+        "movdqa 80(%0), %%xmm5\n\tmovdqa 96(%0), %%xmm6\n\tmovdqa 112(%0), %%xmm7\n\t"
+        "movdqa 0(%1), %%xmm0\n\t"
+        "1:\n\t"
+        "pxor 0(%0), %%xmm0\n\t"
+        "aesenc %%xmm1, %%xmm0\n\taesenc %%xmm2, %%xmm0\n\taesenc %%xmm3, %%xmm0\n\taesenc %%xmm4, %%xmm0\n\t"
+        "aesenc %%xmm5, %%xmm0\n\taesenc %%xmm6, %%xmm0\n\taesenc %%xmm7, %%xmm0\n\t"
+        "aesenc 128(%0), %%xmm0\n\taesenc 144(%0), %%xmm0\n\taesenclast 160(%0), %%xmm0\n\t"
+        "decl %2\n\tjnz 1b\n\t"
+        "movdqa %%xmm0, 0(%1)"
+        : "+r"(rk), "+r"(st), "+r"(n)
+        :
+        : "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "cc", "memory");
+#endif
+}
+#ifdef T_X64
+#define PA_BLOCKS 4
+#else
+#define PA_BLOCKS 1
+#endif
+typedef struct { T_ALIGN(16) V128 rk[11]; T_ALIGN(16) V128 st[4]; uint32_t n; volatile LONG started; } pa_job;
+static DWORD WINAPI pa_worker(LPVOID pv) {
+    pa_job *j = (pa_job *)pv;
+    InterlockedExchange(&j->started, 1);
+    pinned_aes_chain(j->rk, j->st, j->n);
+    return 0;
+}
+static void pa_setup(pa_job *j, t_rng *r) {
+    uint8_t key[16]; aes_sched ks;
+    t_rng_fill(r, key, 16); sw_expand(key, 128, &ks);
+    memcpy(j->rk, ks.rk, sizeof j->rk);
+    t_rng_fill(r, j->st, sizeof j->st);
+}
+TEST(aesni_pinned_registers_survive_preemption_and_context_roundtrips) {
+    NEED(F_AES); crypto_init();
+    enum { NKEY = 8, MAXT = 64 };   /* 64 = WaitForMultipleObjects limit */
+    static pa_job ref[NKEY], jobs[MAXT];
+    t_rng r; t_rng_seed(&r, 904);
+    for (int i = 0; i < NKEY; i++) pa_setup(&ref[i], &r);
+    /* 1. the asm chain against the software cipher (3 iterations) */
+    {
+        static pa_job t; t = ref[0]; t.n = 3;
+        aes_sched ks; ks.nr = 10; memcpy(ks.rk, t.rk, sizeof t.rk);
+        pinned_aes_chain(t.rk, t.st, t.n);
+        for (int b = 0; b < PA_BLOCKS; b++) {
+            V128 v = ref[0].st[b];
+            for (int it = 0; it < 3; it++) v = sw_encrypt(&ks, v);
+            CHECK_BLK(t.st[b].b, v.b, 16, "pinned-register AES chain block %d vs software (3 iterations)", b);
+        }
+    }
+    /* 2. calibrate n so one run takes ~30 ms uncontended (bounded for slow/emulated CPUs) */
+    uint32_t n = 20000;
+    {
+        static pa_job t; t = ref[0]; t.n = n;
+        uint64_t t0 = t_qpc(); pinned_aes_chain(t.rk, t.st, t.n); double ms = t_qpc_ms(t0, t_qpc());
+        double want = ms > 0 ? 20000.0 * 30.0 / ms : 4e6;
+        n = want < 2000 ? 2000 : want > 4e6 ? 4000000u : (uint32_t)want;
+        t_info("iterations_per_run", "%u (calibration: 20000 in %.2f ms)", n, ms);
+    }
+    /* 3. uncontended reference results, one per key */
+    for (int i = 0; i < NKEY; i++) {
+        static pa_job t; t = ref[i]; t.n = n;
+        pinned_aes_chain(t.rk, t.st, t.n);
+        memcpy(ref[i].st, t.st, sizeof t.st);     /* ref[i].st now holds the expected result ... */
+    }
+    /* ... and the inputs are regenerated from the same seed */
+    t_rng_seed(&r, 904);
+    static pa_job inputs[NKEY];
+    for (int i = 0; i < NKEY; i++) pa_setup(&inputs[i], &r);
+    /* 4. oversubscribed workers (2 x logical CPUs, 4..64) while the main thread round-trips their contexts */
+    int ncpu = t_cpu_count(); if (ncpu < 1) ncpu = 1;
+    int nt = 2 * ncpu; if (nt < 4) nt = 4; if (nt > MAXT) nt = MAXT;
+    HANDLE h[MAXT]; int started = 0;
+    for (int i = 0; i < nt; i++) {
+        jobs[i] = inputs[i % NKEY]; jobs[i].n = n; jobs[i].started = 0;
+        h[i] = CreateThread(NULL, 0, pa_worker, &jobs[i], 0, NULL);
+        if (!h[i]) break;
+        started++;
+    }
+    if (started < 2) { for (int i = 0; i < started; i++) { WaitForSingleObject(h[i], 30000); CloseHandle(h[i]); } SKIP("could not create worker threads"); }
+    int rounds = 0, gets = 0, sets = 0, cfail = 0;
+    uint64_t t0 = t_qpc();
+    for (;;) {
+        DWORD w = WaitForMultipleObjects((DWORD)started, h, TRUE, 0);
+        if (w != WAIT_TIMEOUT || t_qpc_ms(t0, t_qpc()) > 30000) break;
+        for (int i = 0; i < started; i++) {
+            if (!jobs[i].started || WaitForSingleObject(h[i], 0) == WAIT_OBJECT_0) continue;
+            if (SuspendThread(h[i]) == (DWORD)-1) continue;
+            rounds++;
+            CONTEXT ctx; memset(&ctx, 0, sizeof ctx);
+#ifdef T_X64
+            ctx.ContextFlags = CONTEXT_FULL | CONTEXT_FLOATING_POINT;
+#else
+            ctx.ContextFlags = CONTEXT_FULL | CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
+#endif
+            int ok = 1;
+            if (GetThreadContext(h[i], &ctx)) { gets++; if (rounds & 1) { if (SetThreadContext(h[i], &ctx)) sets++; else ok = 0; } }
+            else ok = 0;
+            ResumeThread(h[i]);
+            /* a worker that finished its chain and is exiting may refuse context access: not a failure */
+            if (!ok && WaitForSingleObject(h[i], 50) != WAIT_OBJECT_0) cfail++;
+        }
+        Sleep(rounds & 3 ? 0 : 1);
+    }
+    DWORD w = WaitForMultipleObjects((DWORD)started, h, TRUE, 30000);
+    CHECKF(w != WAIT_TIMEOUT, "workers did not finish");
+    int bad = 0;
+    for (int i = 0; i < started; i++) {
+        if (w == WAIT_TIMEOUT) TerminateThread(h[i], 1);
+        CloseHandle(h[i]);
+        if (w == WAIT_TIMEOUT) continue;
+        if (memcmp(jobs[i].st, ref[i % NKEY].st, sizeof jobs[i].st)) {
+            if (bad++ < 4) CHECKF(0, "thread %d (key %d): pinned-register AES result %s differs from the uncontended run %s",
+                                  i, i % NKEY, hx(jobs[i].st, 16), hx(ref[i % NKEY].st, 16));
+        }
+    }
+    CHECKF(bad == 0, "%d of %d threads computed a different result than uncontended", bad, started);
+    CHECKF(cfail == 0, "%d Get/SetThreadContext calls on suspended running workers failed", cfail);
+    t_info("workers", "%d threads on %d CPUs, %u iterations each; %d suspends, %d GetThreadContext, %d SetThreadContext",
+           started, ncpu, n, rounds, gets, sets);
+}
+
+/* ---------------------------------------------------------------- AES key register visible/modifiable via the context */
+/* A worker loads a key and a state into two XMM registers, signals ready and spins (GPR-only) until released, then
+ * executes AESENC with those registers. The main thread suspends it, reads the registers from the thread context,
+ * replaces both with new values via SetThreadContext and resumes. The worker's AESENC must use the new values.
+ * x64: XMM9 = key, XMM8 = state (CONTEXT.FltSave.XmmRegisters). x86: XMM7 = key, XMM6 = state
+ * (CONTEXT.ExtendedRegisters = FXSAVE image, XMM i at byte 160 + 16 i). */
+typedef struct { T_ALIGN(16) V128 key; T_ALIGN(16) V128 state; T_ALIGN(16) V128 key_out; T_ALIGN(16) V128 out; volatile LONG ready, go; } kx_job;
+#ifdef T_X64
+#define KX_KEY 9
+#define KX_ST 8
+#else
+#define KX_KEY 7
+#define KX_ST 6
+#endif
+#define KX_S_(x) #x
+#define KX_S(x) KX_S_(x)
+static DWORD WINAPI kx_worker(LPVOID pv) {
+    kx_job *j = (kx_job *)pv;
+    __asm__ volatile(
+        "movdqa %[key], %%xmm" KX_S(KX_KEY) "\n\tmovdqa %[st], %%xmm" KX_S(KX_ST) "\n\t"
+        "movl $1, %[ready]\n\t"
+        "1:\n\tpause\n\tcmpl $0, %[go]\n\tje 1b\n\t"
+        "aesenc %%xmm" KX_S(KX_KEY) ", %%xmm" KX_S(KX_ST) "\n\t"
+        "movdqa %%xmm" KX_S(KX_ST) ", %[out]\n\tmovdqa %%xmm" KX_S(KX_KEY) ", %[kout]"
+        : [ready] "+m"(j->ready), [out] "=m"(j->out), [kout] "=m"(j->key_out)
+        : [key] "m"(j->key), [st] "m"(j->state), [go] "m"(j->go)
+        : "xmm" KX_S(KX_KEY), "xmm" KX_S(KX_ST), "cc", "memory");
+    return 0;
+}
+static uint8_t *kx_xmm(CONTEXT *c, int i) {
+#ifdef T_X64
+    return (uint8_t *)&c->FltSave.XmmRegisters[i];
+#else
+    return c->ExtendedRegisters + 160 + 16 * i;
+#endif
+}
+TEST(aesni_key_register_visible_and_settable_via_thread_context) {
+    NEED(F_AES); crypto_init();
+    static kx_job j;
+    t_rng r; t_rng_seed(&r, 905);
+    memset(&j, 0, sizeof j);
+    V128 key2, st2;
+    t_rng_fill(&r, &j.key, 16); t_rng_fill(&r, &j.state, 16); t_rng_fill(&r, &key2, 16); t_rng_fill(&r, &st2, 16);
+    HANDLE h = CreateThread(NULL, 0, kx_worker, &j, 0, NULL);
+    if (!h) SKIP("CreateThread failed (%lu)", GetLastError());
+    uint64_t t0 = t_qpc();
+    while (!j.ready && t_qpc_ms(t0, t_qpc()) < 5000) Sleep(1);
+    int ready = j.ready != 0, suspended = 0, got = 0, set = 0, reread = 0;
+    CONTEXT ctx; memset(&ctx, 0, sizeof ctx);
+    CONTEXT c2; memset(&c2, 0, sizeof c2);
+#ifdef T_X64
+    DWORD flags = CONTEXT_CONTROL | CONTEXT_FLOATING_POINT;
+#else
+    DWORD flags = CONTEXT_CONTROL | CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
+#endif
+    DWORD err = 0;
+    if (ready && SuspendThread(h) != (DWORD)-1) {
+        suspended = 1;
+        ctx.ContextFlags = flags;
+        if (!GetThreadContext(h, &ctx)) err = GetLastError();
+        else {
+            got = 1;
+            memcpy(kx_xmm(&ctx, KX_KEY), key2.b, 16); memcpy(kx_xmm(&ctx, KX_ST), st2.b, 16);
+            ctx.ContextFlags = flags;
+            if (!SetThreadContext(h, &ctx)) err = GetLastError();
+            else {
+                set = 1;
+                c2.ContextFlags = flags;
+                reread = GetThreadContext(h, &c2);
+            }
+        }
+        ResumeThread(h);
+    }
+    InterlockedExchange(&j.go, 1);
+    DWORD w = WaitForSingleObject(h, 10000);
+    if (w != WAIT_OBJECT_0) TerminateThread(h, 1);
+    CloseHandle(h);
+    REQUIREF(ready, "worker never reached its spin loop");
+    REQUIREF(suspended, "SuspendThread failed");
+    REQUIREF(got, "GetThreadContext(CONTEXT_FLOATING_POINT) failed (%lu)", err);
+    CHECKF(w == WAIT_OBJECT_0, "worker did not finish after release");
+    /* ctx was overwritten with the new values above; c2 is the re-read after SetThreadContext */
+    if (reread) {
+        CHECK_BLK(kx_xmm(&c2, KX_KEY), key2.b, 16, "XMM%d re-read after SetThreadContext", KX_KEY);
+        CHECK_BLK(kx_xmm(&c2, KX_ST), st2.b, 16, "XMM%d re-read after SetThreadContext", KX_ST);
+    }
+    CHECKF(set, "SetThreadContext(CONTEXT_FLOATING_POINT) failed (%lu)", err);
+    if (set && w == WAIT_OBJECT_0) {
+        V128 want = m_aesenc(st2, key2);
+        CHECK_BLK(j.key_out.b, key2.b, 16, "key register after SetThreadContext (XMM%d)", KX_KEY);
+        CHECK_BLK(j.out.b, want.b, 16, "AESENC with the context-supplied key and state");
+    }
+}
+/* Read-only variant: the registers the worker loaded are what GetThreadContext reports (no Set). */
+TEST(aesni_key_register_reported_by_get_thread_context) {
+    NEED(F_AES); crypto_init();
+    static kx_job j;
+    t_rng r; t_rng_seed(&r, 906);
+    memset(&j, 0, sizeof j);
+    t_rng_fill(&r, &j.key, 16); t_rng_fill(&r, &j.state, 16);
+    HANDLE h = CreateThread(NULL, 0, kx_worker, &j, 0, NULL);
+    if (!h) SKIP("CreateThread failed (%lu)", GetLastError());
+    uint64_t t0 = t_qpc();
+    while (!j.ready && t_qpc_ms(t0, t_qpc()) < 5000) Sleep(1);
+    int ready = j.ready != 0, got = 0;
+    CONTEXT ctx; memset(&ctx, 0, sizeof ctx);
+#ifdef T_X64
+    ctx.ContextFlags = CONTEXT_CONTROL | CONTEXT_FLOATING_POINT;
+#else
+    ctx.ContextFlags = CONTEXT_CONTROL | CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
+#endif
+    if (ready && SuspendThread(h) != (DWORD)-1) { got = GetThreadContext(h, &ctx); ResumeThread(h); }
+    InterlockedExchange(&j.go, 1);
+    DWORD w = WaitForSingleObject(h, 10000);
+    if (w != WAIT_OBJECT_0) TerminateThread(h, 1);
+    CloseHandle(h);
+    REQUIREF(ready, "worker never reached its spin loop");
+    REQUIREF(got, "SuspendThread/GetThreadContext failed (%lu)", GetLastError());
+    CHECK_BLK(kx_xmm(&ctx, KX_KEY), j.key.b, 16, "XMM%d (AES key) in the suspended thread's context", KX_KEY);
+    CHECK_BLK(kx_xmm(&ctx, KX_ST), j.state.b, 16, "XMM%d (AES state) in the suspended thread's context", KX_ST);
+    V128 want = m_aesenc(j.state, j.key);
+    CHECKF(w == WAIT_OBJECT_0, "worker did not finish after release");
+    CHECK_BLK(j.out.b, want.b, 16, "AESENC after the suspend/resume");
 }
 
 /* ---------------------------------------------------------------- PERF (verified before reporting) */
