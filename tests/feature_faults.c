@@ -1186,8 +1186,11 @@ TEST(av_null_write) {
         CHECKF(r.p1 == 0, "ExceptionInformation[1]=0x%llx, expected 0", r.p1);
     }
 }
+/* Emulator artifacts (README "Emulated validation"), under tools/sde_run.sh only; checks unchanged. */
+#define FF_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) %s", t_sde_model(), why); } while (0)
 TEST(av_execute_nx_page) {
     if (!cpu_hw(F_NX)) SKIP("no NX");
+    FF_SDE_XFAIL("reports an instruction fetch from a no-execute page as a read (ExceptionInformation[0]=0)");
 #ifndef T_X64
     DWORD flags = 0; BOOL perm = FALSE;
     BOOL (WINAPI *gdp)(HANDLE, LPDWORD, PBOOL) = (BOOL (WINAPI *)(HANDLE, LPDWORD, PBOOL))t_proc("kernel32.dll", "GetProcessDEPPolicy");
@@ -1241,6 +1244,7 @@ TEST(trap_fastfail_bypasses_handlers) {
     CHECKF(r.exit_code == S_FASTFAIL, "process exit code 0x%08lx, expected STATUS_STACK_BUFFER_OVERRUN", (unsigned long)r.exit_code);
 }
 TEST(trap_icebp_recorded) {
+    FF_SDE_XFAIL("executes ICEBP (F1) without raising #DB");
     static fp_res r; fp_run("trap_icebp", &r);
     if (!fp_survived("trap_icebp", &r)) return;
     CHECKF(r.fault, "ICEBP (F1) executed without a #DB");
@@ -1318,6 +1322,8 @@ static void fp_x87u(const char *probe, const DWORD *codes, int n, unsigned sw_bi
 #endif
     if (fp_expect_fault(probe, &r, codes, n, 0, fx)) {
 #ifndef T_X64
+        if (t_sde_model() && !(r.ea == 0 || (r.ea < 0 && r.ea >= -8)))   /* emulator artifact, README "Emulated validation" */
+            t_expect_fail("Intel SDE (%s): the x87 FPU instruction pointer points into Pin's code cache", t_sde_model());
         CHECKF(r.ip == 0, "%s: context EIP insn%+lld, expected the FWAIT that took the #MF", probe, r.ip);
         CHECKF(r.ea == 0 || (r.ea < 0 && r.ea >= -8), "%s: ExceptionAddress insn%+lld is neither the FWAIT nor the x87 instruction before it", probe, r.ea);
         if (r.ea != 0) t_note("%s: ExceptionAddress = faulting x87 instruction (insn%+lld), not the FWAIT", probe, r.ea);
@@ -1413,7 +1419,12 @@ TEST(repeat_null_read_200)      { fp_repeat("av_null_read", 200); }
 TEST(repeat_movaps_gp_200)      { fp_repeat("gp_movaps_misaligned", 200); }
 TEST(repeat_hlt_200)            { fp_repeat("priv_hlt", 200); }
 TEST(repeat_sse_zerodiv_200)    { fp_repeat("sseu_zerodiv", 200); }
-TEST(repeat_x87_zerodiv_200)    { fp_repeat("x87u_zerodiv", 200); }
+#ifndef T_X64
+#define FF_SDE_XFAIL_X87IP() FF_SDE_XFAIL("x87 FPU instruction pointer points into Pin's code cache (differs per iteration)")
+#else
+#define FF_SDE_XFAIL_X87IP() ((void)0)
+#endif
+TEST(repeat_x87_zerodiv_200)    { FF_SDE_XFAIL_X87IP(); fp_repeat("x87u_zerodiv", 200); }
 TEST(repeat_absent_avx512_200) {
     if (cpu_has(F_AVX512F)) SKIP("AVX-512F is usable here");
     if (!fp_avx512_surely_ud()) SKIP("AVX-512 may be implemented but hidden");
