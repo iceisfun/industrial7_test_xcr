@@ -899,8 +899,12 @@ TEST(feat_movdiri)               { fp_feat("feat_movdiri", F_MOVDIRI, -1, 0, "MO
 TEST(feat_3dnow_femms)           { fp_feat("feat_3dnow_femms", F_AMD3DNOW, -1, 0, "3DNow!"); }
 TEST(feat_sse4a_extrq)           { fp_feat("feat_sse4a_extrq", F_SSE4A, -1, 0, "SSE4a"); }
 /* XCR0 bit 0 is always set when OSXSAVE is: xmask 1 makes "OSXSAVE clear" a hardware-enforced #UD. */
-TEST(feat_xsaveopt_absent)       { fp_feat("feat_xsaveopt", F_XSAVEOPT, -1, 1, "XSAVEOPT"); }
-TEST(feat_xsavec_absent)         { fp_feat("feat_xsavec", F_XSAVEC, -1, 1, "XSAVEC"); }
+/* SDE stops the process on any XSAVE-family instruction while CPUID.OSXSAVE is clear ("OSXAVE BIT IS NOT SET IN
+ * CPUID" on Pin's own stderr, no report file): emulator artifact, README "Emulated validation". */
+#define FF_SDE_XFAIL_NO_OSXSAVE() do { if (!cpu()->osxsave) \
+    FF_SDE_XFAIL("stops the child on an XSAVE-family instruction while CPUID.OSXSAVE is clear [#UD]"); } while (0)
+TEST(feat_xsaveopt_absent)       { FF_SDE_XFAIL_NO_OSXSAVE(); fp_feat("feat_xsaveopt", F_XSAVEOPT, -1, 1, "XSAVEOPT"); }
+TEST(feat_xsavec_absent)         { FF_SDE_XFAIL_NO_OSXSAVE(); fp_feat("feat_xsavec", F_XSAVEC, -1, 1, "XSAVEC"); }
 TEST(feat_xgetbv_without_osxsave) {
     if (cpu()->osxsave) SKIP("CR4.OSXSAVE is set: XGETBV is legal");
     fp_ud("feat_xgetbv_no_osxsave");
@@ -908,6 +912,7 @@ TEST(feat_xgetbv_without_osxsave) {
 TEST(feat_xsave_without_osxsave) {
     if (cpu()->osxsave) SKIP("CR4.OSXSAVE is set: XSAVE is legal");
     if (!cpu_hw(F_XSAVE)) t_note("XSAVE not implemented: #UD as an absent feature");
+    FF_SDE_XFAIL_NO_OSXSAVE();
     fp_ud("feat_xsave_no_osxsave");
 }
 

@@ -166,6 +166,7 @@ XFAIL with SDE's message (`t_sde_killed_child`). Known artifacts of SDE 10.13 on
 | area | SDE behaviour (hardware/SDM behaviour in brackets) |
 |---|---|
 | chip check | stops the process on an instruction the model or XCR0 lacks [#UD] |
+| XSAVE/XSAVEOPT/XSAVEC with CPUID.OSXSAVE clear (`nhm`, `wsm`) | stops the process with "OSXAVE BIT IS NOT SET IN CPUID" on Pin's stderr, no report file [#UD] |
 | emulated EVEX aligned moves, MOVDIR64B, XSAVE family, legacy SHA m128 | no #GP for a misaligned operand |
 | XSETBV / XGETBV | XSETBV works at CPL3, XGETBV accepts any index [#GP] |
 | XSAVE emulation | XCOMP_BV omits PKRU, initial components and (32-bit) Hi16_ZMM, is 0 for RFBM=0; XRSTOR with partial RFBM touches other components; FXRSTOR does not set XINUSE[0]; no XRSTOR header #GP, no #PF on the area |

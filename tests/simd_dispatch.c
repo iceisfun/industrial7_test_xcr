@@ -1359,6 +1359,8 @@ TEST(detect_vs_GetEnabledXStateFeatures) {
     uint64_t api = gef();
     t_info("api_xstate_features", "0x%llx", (unsigned long long)api);
     t_info("xcr0", "0x%llx", (unsigned long long)c->xcr0);
+    if (api == 0 && t_is_wine())   /* Windows 10 kernelbase returns 3 when RtlGetEnabledExtendedFeatures(~0) is 0 */
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures returns 0 without XSAVE", t_wine_version());
     CHECKF((api & 3) == 3, "GetEnabledXStateFeatures()=0x%llx lacks the legacy x87/SSE bits that are always enabled", (unsigned long long)api);
     CHECK_EQ(api, gef());   /* stable */
     if (t_env_get()->api_xstate_present) CHECK_EQ(api, t_env_get()->api_xstate_features);

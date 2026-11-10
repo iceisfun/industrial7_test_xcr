@@ -410,6 +410,21 @@ static uint64_t cx_enabled_user(void) {
     return c->xcr0_valid ? (e & c->xcr0) : e;
 }
 static int cx_avx_ok(void) { return cpu_has(F_AVX) && (cx_enabled() & T_XS_AVX); }
+/* No XSTATE support at all (RtlGetEnabledExtendedFeatures(~0) == 0, e.g. a CPU without XSAVE). Windows 10
+ * kernelbase!InitializeContext2 (reference decomp) then clears CONTEXT_XSTATE (0x40) from the requested flags
+ * when an architecture bit is set, and GetEnabledXStateFeatures returns 3 instead of 0. */
+static int cx_xstate_off(void) {
+    static int v = -1;
+    if (v < 0) {
+        DWORD64 (WINAPI *rg)(DWORD64) = (DWORD64 (WINAPI *)(DWORD64))t_proc("ntdll.dll", "RtlGetEnabledExtendedFeatures");
+        v = rg && rg(~0ull) == 0;
+    }
+    return v;
+}
+/* The ContextFlags InitializeContext stores for the requested flags */
+static DWORD cx_init_flags(DWORD f) {
+    return (cx_xstate_off() && (f & (0x00010000u | 0x00100000u))) ? (f & ~0x40u) : f;
+}
 static int cx_zmm_ok(void) {
     return cpu_has(F_AVX512F) && (cx_enabled() & T_XS_ZMM_STATE) == T_XS_ZMM_STATE;
 }
@@ -848,6 +863,8 @@ TEST(ctx_api_exports) {
     CHECKF(n == 6, "partial XSTATE API set: %d of 6 exported", n);
     uint64_t e = cx_enabled();
     t_info("enabled_features", "0x%llx", (unsigned long long)e);
+    if (e == 0 && t_is_wine())
+        t_expect_fail("Wine %s: GetEnabledXStateFeatures returns 0 without XSAVE", t_wine_version());
     CHECKF((e & 3) == 3, "GetEnabledXStateFeatures 0x%llx lacks x87|SSE (always enabled on x86/x64)", (unsigned long long)e);
 }
 
@@ -970,8 +987,8 @@ TEST(init_ctx_alignment_sweep_guarded) {
                 CHECKF(((uintptr_t)pc % CX_CTX_ALIGN) == 0, "CONTEXT %p not %d-aligned", (void *)pc, CX_CTX_ALIGN);
                 CHECKF((uint8_t *)pc >= b && (uint8_t *)pc + sizeof(CONTEXT) <= b + need, "CONTEXT %p outside buffer [%p,+%lu)",
                        (void *)pc, (void *)b, (unsigned long)need);
-                CHECK_EQ(pc->ContextFlags, flags[f]);
-                if (flags[f] & 0x40 & ~CX_ARCHBIT) {
+                CHECK_EQ(pc->ContextFlags, cx_init_flags(flags[f]));
+                if (cx_init_flags(flags[f]) & 0x40 & ~CX_ARCHBIT) {
                     for (DWORD id = 2; id < 64; id++) {
                         if (!(cx_enabled_user() & (1ull << id))) continue;
                         DWORD fl = 0;
@@ -1032,7 +1049,12 @@ TEST(init_ctx_contents) {
     CX_NEED_XAPI();
     cx_xc x;
     CX_XC_REQUIRE(&x, CX_STD | CONTEXT_XSTATE);
-    CHECK_EQ(x.ctx->ContextFlags, CX_STD | CONTEXT_XSTATE);
+    CHECK_EQ(x.ctx->ContextFlags, cx_init_flags(CX_STD | CONTEXT_XSTATE));
+    if (cx_xstate_off()) {
+        t_note("no XSTATE support (RtlGetEnabledExtendedFeatures = 0): InitializeContext dropped CONTEXT_XSTATE");
+        cx_xc_free(&x);
+        return;
+    }
     CHECKF(((uintptr_t)x.ctx % CX_CTX_ALIGN) == 0, "context %p misaligned", (void *)x.ctx);
     CHECKF((uint8_t *)x.ctx >= (uint8_t *)x.buf && (uint8_t *)x.ctx < (uint8_t *)x.buf + 64, "context %p far from buffer %p",
            (void *)x.ctx, x.buf);
