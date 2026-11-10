@@ -1356,6 +1356,11 @@ static const char *vk_name(int vk) { return vk == 64 ? "zmm" : vk == 32 ? "ymm" 
 /* The standard scenario: prepare, run, check calls / after-resume state. */
 typedef void (*xk_tweak)(xf *, xexp *, xh *);
 static int xk_test(const char *kname, int vk, int mode, int variant, xk_tweak tweak, const char *label) {
+    if (t_sde_model() && !strcmp(kname, "ss")) {   /* emulator artifact (README "Emulated validation") */
+        t_expect_fail("Intel SDE (%s): Pin cannot single-step the application (a TF trap kills the process)", t_sde_model());
+        CHECKF(0, "%s: single-step kind not run under Intel SDE", label);
+        return -1;
+    }
     xs_init();
     const xk *k = xk_find(kname);
     if (!k) { CHECKF(0, "unknown kind %s", kname); return -1; }
