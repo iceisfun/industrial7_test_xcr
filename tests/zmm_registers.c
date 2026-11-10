@@ -3391,3 +3391,723 @@ TEST(zmm_context_set_xstate_avx512) {
     zx_merge_avx512(&want, &s->in, &nv);
     t_vregs_check(&s->out, &want, T_VK_ZMM, 0, -1, "after SetThreadContext with modified AVX-512 state");
 }
+
+/* =============================================================================================
+ * AVX512-FP16, AVX512-BF16, AVX512-BITALG / AVX512-VBMI2: reference vectors and model checks
+ *
+ * Contract (Intel SDM vol.2 instruction pages; AVX512-FP16 architecture specification; SDM vol.1 15.x):
+ *  - FP16 arithmetic (VADDPH/VSUBPH/VMULPH/VDIVPH/VFMADD213PH): IEEE binary16, one rounding (FMA fused),
+ *    MXCSR.RC or the EVEX embedded rounding {rn,rd,ru,rz}-sae, which also suppresses every exception
+ *    flag; MXCSR.DAZ and MXCSR.FTZ are IGNORED by FP16 instructions: denormal inputs are used and denormal
+ *    results delivered. NaN rules as SSE: first NaN source quieted, invalid -> default NaN 0xFE00.
+ *    Exception flags IE/ZE/OE/UE/PE are the OR of the lanes (tininess after rounding, as for SSE);
+ *    MXCSR.DE is not compared (not pinned down for FP16 sources). Masked-off lanes ({k}) keep the
+ *    destination and never raise flags (exception class E2).
+ *  - VCVTPH2PSX exact; VCVTPS2PHX rounds with RC/embedded RC; VCVTW2PH rounds; VCVTTPH2W truncates,
+ *    NaN/inf/out-of-range -> 0x8000 with IE, inexact -> PE.
+ *  - BF16: VCVTNE2PS2BF16 (low half from SRC2, high half from SRC1) and VCVTNEPS2BF16 round to nearest
+ *    even, input denormals -> signed zero, NaN -> src[31:16] | 0x40; MXCSR neither consulted nor updated.
+ *    VDPBF16PS: srcdest.fp32[i] += a.bf16[2i+1]*b.bf16[2i+1], then += a.bf16[2i]*b.bf16[2i], RNE, DAZ
+ *    and FTZ behaviour, no flags. The intermediate rounding sequence is checked with exactly computed
+ *    alternatives: the SDM order must match or the case reports which order the CPU used (NOTE), any other
+ *    result is a FAIL. Products of bf16 denormal inputs are zero (DAZ) - checked as known answers.
+ *  - BITALG VPSHUFBITQMB, masked VPOPCNTB; VBMI2 VPSH{L,R}D{W,D,Q} (imm masked to the element width),
+ *    VPSH{L,R}DV{W,D,Q}, VPCOMPRESS{B,W} / VPEXPAND{B,W} register and memory forms (a compress store writes
+ *    exactly popcount(k) elements).
+ * Models use integer arithmetic only (no host FP), so they are identical on x64 and x86.
+ * ============================================================================================= */
+#define NEED_XB(f) do { NEED_X(f); if (!cpu_has(F_AVX512BW)) SKIP("AVX512BW not usable (needed for the 32/64-bit opmasks)"); } while (0)
+
+typedef struct T_ALIGN(64) zfx { zv s, a, b, o; uint64_t k, ko; uint32_t mx_in, mx_out, mx_save, pad; } zfx;
+_Static_assert(offsetof(zfx, k) == 256 && offsetof(zfx, ko) == 264 && offsetof(zfx, mx_in) == 272 &&
+               offsetof(zfx, mx_out) == 276 && offsetof(zfx, mx_save) == 280, "ZFX_FN offsets");
+/* zmm0 = s (destination preload), zmm1 = a, zmm2 = b, k1 = k, MXCSR = mx_in; out: zmm0 -> o, k2 -> ko, MXCSR -> mx_out */
+#define ZFX_FN(name, isa, body) \
+    T_TARGET(isa) T_NOINLINE static void name(zfx *p) { \
+        __asm__ volatile("vmovdqu64 0(%0), %%zmm0\n\tvmovdqu64 64(%0), %%zmm1\n\tvmovdqu64 128(%0), %%zmm2\n\t" \
+                         "kmovq 256(%0), %%k1\n\tkxorq %%k2, %%k2, %%k2\n\tstmxcsr 280(%0)\n\tldmxcsr 272(%0)\n\t" \
+                         body "\n\tstmxcsr 276(%0)\n\tldmxcsr 280(%0)\n\t" \
+                         "vmovdqu64 %%zmm0, 192(%0)\n\tkmovq %%k2, 264(%0)\n\tvzeroupper" \
+                         :: "r"(p) : "xmm0", "xmm1", "xmm2", "k1", "k2", "memory", "cc"); }
+static void zfx_run(void (*fn)(zfx *), zfx *p) { memset(&p->o, 0xCC, sizeof p->o); p->ko = 0; p->mx_out = 0; fn(p); }
+
+enum { ZR_RN, ZR_RD, ZR_RU, ZR_RZ };
+#define ZR_IE 0x01u
+#define ZR_DE 0x02u
+#define ZR_ZE 0x04u
+#define ZR_OE 0x08u
+#define ZR_UE 0x10u
+#define ZR_PE 0x20u
+#define ZR_DAZ 0x40u
+#define ZR_FTZ 0x8000u
+#define ZR_MX(rc) (0x1F80u | ((unsigned)(rc) << 13))
+#define ZR_CMPFL (ZR_IE | ZR_ZE | ZR_OE | ZR_UE | ZR_PE)
+static const char *const zr_rcn[4] = { "RN", "RD", "RU", "RZ" };
+
+static int zr_msb(uint64_t x) { int n = -1; while (x) { n++; x >>= 1; } return n; }
+/* m >> sh rounded by rc (sign s for directed modes); *inex = discarded bits nonzero */
+static uint64_t zr_shr_round(uint64_t m, int sh, int s, int rc, int *inex) {
+    if (sh <= 0) { *inex = 0; return m << -sh; }
+    uint64_t q = sh >= 64 ? 0 : m >> sh;
+    int guard = sh > 64 ? 0 : (int)((m >> (sh - 1)) & 1);
+    int sticky = sh - 1 >= 64 ? m != 0 : (sh - 1 > 0 && (m & ((1ull << (sh - 1)) - 1)) != 0);
+    *inex = guard || sticky;
+    int up = rc == ZR_RN ? guard && (sticky || (q & 1)) : rc == ZR_RD ? s && *inex : rc == ZR_RU ? !s && *inex : 0;
+    return q + (uint64_t)up;
+}
+/* Correctly round (-1)^s * m * 2^e (m != 0; bit 0 of m may be a sticky bit far below the rounding point) to
+ * the binary format with mb fraction bits and eb exponent bits; flags OE/UE/PE (tininess after rounding);
+ * ftz: tiny results become signed zero (UE|PE). */
+static uint64_t zr_round(int mb, int eb, int s, uint64_t m, int e, int rc, int ftz, unsigned *fl) {
+    int bias = (1 << (eb - 1)) - 1, emin = 1 - bias, E = zr_msb(m) + e, inex, inex_u;
+    uint64_t sb = (uint64_t)s << (mb + eb), emax_field = (1ull << eb) - 1;
+    uint64_t qu = zr_shr_round(m, (E - mb) - e, s, rc, &inex_u);
+    int tiny = (E + ((qu >> (mb + 1)) ? 1 : 0)) < emin;
+    if (ftz && tiny) { *fl |= ZR_UE | ZR_PE; return sb; }
+    int lsb = E - mb; if (lsb < emin - mb) lsb = emin - mb;
+    uint64_t q = zr_shr_round(m, lsb - e, s, rc, &inex);
+    if (q == (1ull << (mb + 1))) { q >>= 1; lsb++; }
+    if (q >> mb) {
+        int biased = lsb + mb + bias;
+        if (biased >= (int)emax_field) {
+            *fl |= ZR_OE | ZR_PE;
+            int inf = rc == ZR_RN || (rc == ZR_RU && !s) || (rc == ZR_RD && s);
+            return sb | (inf ? emax_field << mb : ((emax_field - 1) << mb) | ((1ull << mb) - 1));
+        }
+        if (inex) *fl |= ZR_PE | (tiny ? ZR_UE : 0);
+        return sb | ((uint64_t)biased << mb) | (q & ((1ull << mb) - 1));
+    }
+    if (inex) *fl |= ZR_PE | (tiny ? ZR_UE : 0);
+    return sb | q;
+}
+/* ---- binary16 */
+static int zh_isnan(uint16_t h) { return (h & 0x7C00) == 0x7C00 && (h & 0x3FF); }
+static int zh_issnan(uint16_t h) { return zh_isnan(h) && !(h & 0x200); }
+static int zh_isinf(uint16_t h) { return (h & 0x7FFF) == 0x7C00; }
+static int zh_iszero(uint16_t h) { return (h & 0x7FFF) == 0; }
+static void zh_unpack(uint16_t h, uint64_t *m, int *e) {
+    unsigned ex = (h >> 10) & 31, fr = h & 0x3FF;
+    if (ex) { *m = fr | 0x400u; *e = (int)ex - 25; } else { *m = fr; *e = -24; }
+}
+static uint16_t zh_rnd(int s, uint64_t m, int e, int rc, unsigned *fl) { return (uint16_t)zr_round(10, 5, s, m, e, rc, 0, fl); }
+static uint16_t zh_zero(int s) { return (uint16_t)(s ? 0x8000 : 0); }
+/* two-source NaN rule (SSE): first NaN source, quieted; IE if any SNaN */
+static int zh_nan2(uint16_t a, uint16_t b, uint16_t *r, unsigned *fl) {
+    if (!zh_isnan(a) && !zh_isnan(b)) return 0;
+    if (zh_issnan(a) || zh_issnan(b)) *fl |= ZR_IE;
+    *r = (uint16_t)((zh_isnan(a) ? a : b) | 0x200);
+    return 1;
+}
+static uint16_t zh_add(uint16_t a, uint16_t b, int sub, int rc, unsigned *fl) {
+    uint16_t r;
+    if (zh_nan2(a, b, &r, fl)) return r;
+    if (sub) b ^= 0x8000;
+    int sa = a >> 15, sb = b >> 15;
+    if (zh_isinf(a) && zh_isinf(b) && sa != sb) { *fl |= ZR_IE; return 0xFE00; }
+    if (zh_isinf(a)) return a;
+    if (zh_isinf(b)) return b;
+    if (zh_iszero(a) && zh_iszero(b)) return zh_zero(sa == sb ? sa : rc == ZR_RD);
+    if (zh_iszero(a)) return b;
+    if (zh_iszero(b)) return a;
+    uint64_t ma, mb; int ea, eb; zh_unpack(a, &ma, &ea); zh_unpack(b, &mb, &eb);
+    int em = ea < eb ? ea : eb;
+    uint64_t A = ma << (ea - em), B = mb << (eb - em);      /* exact: < 2^41 */
+    if (sa == sb) return zh_rnd(sa, A + B, em, rc, fl);
+    if (A == B) return zh_zero(rc == ZR_RD);
+    return A > B ? zh_rnd(sa, A - B, em, rc, fl) : zh_rnd(sb, B - A, em, rc, fl);
+}
+static uint16_t zh_mul(uint16_t a, uint16_t b, int rc, unsigned *fl) {
+    uint16_t r;
+    if (zh_nan2(a, b, &r, fl)) return r;
+    int s = (a ^ b) >> 15;
+    if ((zh_isinf(a) && zh_iszero(b)) || (zh_iszero(a) && zh_isinf(b))) { *fl |= ZR_IE; return 0xFE00; }
+    if (zh_isinf(a) || zh_isinf(b)) return (uint16_t)((s << 15) | 0x7C00);
+    if (zh_iszero(a) || zh_iszero(b)) return zh_zero(s);
+    uint64_t ma, mb; int ea, eb; zh_unpack(a, &ma, &ea); zh_unpack(b, &mb, &eb);
+    return zh_rnd(s, ma * mb, ea + eb, rc, fl);
+}
+static uint16_t zh_div(uint16_t a, uint16_t b, int rc, unsigned *fl) {
+    uint16_t r;
+    if (zh_nan2(a, b, &r, fl)) return r;
+    int s = (a ^ b) >> 15;
+    if ((zh_isinf(a) && zh_isinf(b)) || (zh_iszero(a) && zh_iszero(b))) { *fl |= ZR_IE; return 0xFE00; }
+    if (zh_isinf(a)) return (uint16_t)((s << 15) | 0x7C00);
+    if (zh_isinf(b) || zh_iszero(a)) return zh_zero(s);
+    if (zh_iszero(b)) { *fl |= ZR_ZE; return (uint16_t)((s << 15) | 0x7C00); }
+    uint64_t ma, mb; int ea, eb; zh_unpack(a, &ma, &ea); zh_unpack(b, &mb, &eb);
+    uint64_t q = (ma << 40) / mb, rem = (ma << 40) % mb;
+    return zh_rnd(s, (q << 1) | (rem != 0), ea - eb - 41, rc, fl);
+}
+/* a*b+c, one rounding; callers pass no NaN */
+static uint16_t zh_fma(uint16_t a, uint16_t b, uint16_t c, int rc, unsigned *fl) {
+    int sp = (a ^ b) >> 15, sc = c >> 15;
+    if (zh_isinf(a) || zh_isinf(b)) {
+        if (zh_iszero(a) || zh_iszero(b) || (zh_isinf(c) && sc != sp)) { *fl |= ZR_IE; return 0xFE00; }
+        return (uint16_t)((sp << 15) | 0x7C00);
+    }
+    if (zh_isinf(c)) return c;
+    if (zh_iszero(a) || zh_iszero(b)) return zh_iszero(c) ? zh_zero(sp == sc ? sp : rc == ZR_RD) : c;
+    uint64_t ma, mb, mc; int ea, eb, ec; zh_unpack(a, &ma, &ea); zh_unpack(b, &mb, &eb);
+    uint64_t P = ma * mb; int ep = ea + eb;
+    if (zh_iszero(c)) return zh_rnd(sp, P, ep, rc, fl);
+    zh_unpack(c, &mc, &ec);
+    int d = ec - ep, em;
+    uint64_t A, C;
+    if (d > 40) {                      /* c dominates: product becomes a sticky bit */
+        C = mc << 40; em = ec - 40; int sh = em - ep;
+        A = sh >= 64 ? (P != 0) : (P >> sh) | ((P & ((1ull << sh) - 1)) != 0);
+    } else if (d < -40) {              /* product dominates */
+        A = P << 40; em = ep - 40; int sh = em - ec;
+        C = sh >= 64 ? (mc != 0) : (mc >> sh) | ((mc & ((1ull << sh) - 1)) != 0);
+    } else { em = ep < ec ? ep : ec; A = P << (ep - em); C = mc << (ec - em); }   /* exact: < 2^62 */
+    if (sp == sc) return zh_rnd(sp, A + C, em, rc, fl);
+    if (A == C) return zh_zero(rc == ZR_RD);
+    return A > C ? zh_rnd(sp, A - C, em, rc, fl) : zh_rnd(sc, C - A, em, rc, fl);
+}
+static uint32_t zh_to_f32(uint16_t h) {   /* exact; NaN quieted, payload kept */
+    uint32_t s = (uint32_t)(h & 0x8000) << 16, ex = (h >> 10) & 31, fr = h & 0x3FF;
+    if (ex == 31) return s | 0x7F800000u | (fr << 13) | (fr ? 0x400000u : 0);
+    if (ex == 0) {
+        if (!fr) return s;
+        int n = 0; while (!(fr & 0x400)) { fr <<= 1; n++; }
+        return s | ((uint32_t)(113 - n) << 23) | ((fr & 0x3FF) << 13);
+    }
+    return s | ((ex + 112) << 23) | (fr << 13);
+}
+static uint16_t zh_from_f32(uint32_t x, int rc, unsigned *fl) {
+    int s = x >> 31; unsigned ex = (x >> 23) & 0xFF, fr = x & 0x7FFFFF;
+    if (ex == 0xFF) {
+        if (!fr) return (uint16_t)((s << 15) | 0x7C00);
+        if (!(fr & 0x400000)) *fl |= ZR_IE;
+        return (uint16_t)((s << 15) | 0x7E00 | (fr >> 13));
+    }
+    if (!ex && !fr) return zh_zero(s);
+    if (!ex) *fl |= ZR_DE;
+    return zh_rnd(s, ex ? fr | 0x800000u : fr, ex ? (int)ex - 150 : -149, rc, fl);
+}
+static uint16_t zh_from_i16(int16_t v, int rc, unsigned *fl) {
+    if (!v) return 0;
+    int s = v < 0; uint64_t m = s ? (uint64_t)(-(int32_t)v) : (uint64_t)v;
+    return zh_rnd(s, m, 0, rc, fl);
+}
+static uint16_t zh_to_i16_trunc(uint16_t h, unsigned *fl) {
+    if (zh_isnan(h) || zh_isinf(h)) { *fl |= ZR_IE; return 0x8000; }
+    if (zh_iszero(h)) return 0;
+    uint64_t m; int e; zh_unpack(h, &m, &e);
+    int s = h >> 15, inex = 0;
+    uint64_t q = e >= 0 ? m << e : zr_shr_round(m, -e, s, ZR_RZ, &inex);
+    if ((!s && q > 32767) || (s && q > 32768)) { *fl |= ZR_IE; return 0x8000; }
+    if (inex) *fl |= ZR_PE;
+    return (uint16_t)(s ? -(int32_t)q : (int32_t)q);
+}
+static uint16_t zh_gen(t_rng *r, int nonan) {
+    static const uint16_t sp[] = { 0x0000, 0x8000, 0x3C00, 0xBC00, 0x7BFF, 0xFBFF, 0x0001, 0x8001, 0x03FF, 0x0400, 0x7C00,
+                                   0xFC00, 0x7E00, 0x7D01, 0x3BFF, 0x3C01, 0x1000, 0x5000, 0x0200, 0x6800, 0x77FF, 0x87FF };
+    for (;;) {
+        uint16_t v;
+        switch (t_rng_range(r, 8)) {
+        case 0: v = sp[t_rng_range(r, T_COUNTOF(sp))]; break;
+        case 1: v = (uint16_t)(t_rng_u32(r) & 0x83FF); break;                                  /* denormal */
+        case 2: v = (uint16_t)t_rng_u32(r); break;
+        case 3: v = (uint16_t)((t_rng_u32(r) & 0x8000) | ((1 + t_rng_range(r, 4)) << 10) | (t_rng_u32(r) & 0x3FF)); break; /* tiny normal */
+        case 4: v = (uint16_t)((t_rng_u32(r) & 0x8000) | ((27 + t_rng_range(r, 4)) << 10) | (t_rng_u32(r) & 0x3FF)); break; /* huge */
+        default: v = (uint16_t)((t_rng_u32(r) & 0x8000) | ((9 + t_rng_range(r, 13)) << 10) | (t_rng_u32(r) & 0x3FF)); break;
+        }
+        if (nonan && zh_isnan(v)) continue;
+        return v;
+    }
+}
+static uint32_t zf32_gen(t_rng *r) {
+    static const uint32_t sp[] = { 0x00000000, 0x80000000, 0x3F800000, 0x00000001, 0x807FFFFF, 0x00800000, 0x7F7FFFFF, 0xFF7FFFFF,
+                                   0x7F800000, 0xFF800000, 0x7FC00000, 0x7F800001, 0xFFA12345, 0x3F808000, 0x3F818000, 0x3F7FFFFF };
+    switch (t_rng_range(r, 6)) {
+    case 0: return sp[t_rng_range(r, T_COUNTOF(sp))];
+    case 1: return t_rng_u32(r) & 0x807FFFFFu;
+    case 2: return (t_rng_u32(r) & 0xFFFF0000u) | (t_rng_range(r, 2) ? 0x8000u : 0x7FFFu + (uint32_t)t_rng_range(r, 3)); /* near ties */
+    default: return t_rng_u32(r);
+    }
+}
+static uint16_t zb_from_f32(uint32_t x) {   /* SDM convert_fp32_to_bfloat16 */
+    if (((x >> 23) & 0xFF) == 0) return (uint16_t)((x >> 16) & 0x8000);
+    if (((x >> 23) & 0xFF) == 0xFF) return (uint16_t)((x >> 16) | ((x & 0x7FFFFF) ? 0x40 : 0));
+    return (uint16_t)((x + 0x7FFFu + ((x >> 16) & 1)) >> 16);
+}
+/* failed checks in the FP16 cases, so that an SDE XFAIL never hides a real failure */
+static int g_zh_bad;
+#define ZCHECKF(c, ...) do { int ok_ = !!(c); if (!ok_) g_zh_bad++; CHECKF(ok_, __VA_ARGS__); } while (0)
+#define ZCHECK(c) ZCHECKF(c, "%s", #c)
+/* compare n 16-bit lanes; one CHECK; reports the first bad lane with its inputs */
+static void zh_lanes(const char *what, const zv *got, const uint16_t *want, int n, const zv *a, const zv *b) {
+    for (int i = 0; i < n; i++)
+        if (got->w[i] != want[i]) {
+            ZCHECKF(0, "%s: lane %d a=0x%04x b=0x%04x got 0x%04x want 0x%04x", what, i, a ? a->w[i] : 0, b ? b->w[i] : 0, got->w[i], want[i]);
+            return;
+        }
+    ZCHECK(1);
+}
+
+/* ---- FP16 instructions */
+#define ZH_ISA "avx512f,avx512bw,avx512fp16"
+ZFX_FN(z16_vaddph_512, ZH_ISA, "vaddph %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vsubph_512, ZH_ISA, "vsubph %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vmulph_512, ZH_ISA, "vmulph %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vdivph_512, ZH_ISA, "vdivph %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vfmadd213ph_512, ZH_ISA, "vfmadd213ph %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vaddph_k_512, ZH_ISA, "vaddph %%zmm2, %%zmm1, %%zmm0%{%%k1%}")
+ZFX_FN(z16_vaddph_rn_512, ZH_ISA, "vaddph %{rn-sae%}, %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vaddph_rd_512, ZH_ISA, "vaddph %{rd-sae%}, %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vaddph_ru_512, ZH_ISA, "vaddph %{ru-sae%}, %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vaddph_rz_512, ZH_ISA, "vaddph %{rz-sae%}, %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vmulph_rz_512, ZH_ISA, "vmulph %{rz-sae%}, %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vdivph_ru_512, ZH_ISA, "vdivph %{ru-sae%}, %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vfmadd213ph_rd_512, ZH_ISA, "vfmadd213ph %{rd-sae%}, %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(z16_vcvtph2psx_512, ZH_ISA, "vcvtph2psx %%ymm1, %%zmm0")
+ZFX_FN(z16_vcvtps2phx_512, ZH_ISA, "vcvtps2phx %%zmm1, %%ymm0")
+ZFX_FN(z16_vcvtps2phx_rn_512, ZH_ISA, "vcvtps2phx %{rn-sae%}, %%zmm1, %%ymm0")
+ZFX_FN(z16_vcvtps2phx_rd_512, ZH_ISA, "vcvtps2phx %{rd-sae%}, %%zmm1, %%ymm0")
+ZFX_FN(z16_vcvtps2phx_ru_512, ZH_ISA, "vcvtps2phx %{ru-sae%}, %%zmm1, %%ymm0")
+ZFX_FN(z16_vcvtps2phx_rz_512, ZH_ISA, "vcvtps2phx %{rz-sae%}, %%zmm1, %%ymm0")
+ZFX_FN(z16_vcvtw2ph_512, ZH_ISA, "vcvtw2ph %%zmm1, %%zmm0")
+ZFX_FN(z16_vcvttph2w_512, ZH_ISA, "vcvttph2w %%zmm1, %%zmm0")
+
+/* FP16 exception flags. Under Intel SDE (tools/sde_run.sh) the emulated FP16 arithmetic does not set OE/UE/PE
+ * (and in 32-bit mode not even IE), while its vcvt* do: such a pure omission is counted and the case ends XFAIL
+ * when nothing else failed; any extra flag is a FAIL, and without XCR_SDE every difference is a FAIL. */
+static int g_zh_sde_gap;
+static void zh_flags(const char *what, unsigned got, unsigned want) {
+    got &= ZR_CMPFL; want &= ZR_CMPFL;
+    if (got != want && t_sde_model() && !(got & ~want)) { g_zh_sde_gap++; return; }
+    ZCHECKF(got == want, "%s: MXCSR flags 0x%02x want 0x%02x (DE not compared)", what, got, want);
+}
+#define ZH_SDE_END() do { if (g_zh_sde_gap && !g_zh_bad) XFAIL("Intel SDE (%s) emulation: FP16 arithmetic left exception flags clear in %d checks (results matched)", \
+                                                  t_sde_model(), g_zh_sde_gap); } while (0)
+static const uint32_t zh_mx[6] = { ZR_MX(ZR_RN), ZR_MX(ZR_RD), ZR_MX(ZR_RU), ZR_MX(ZR_RZ),
+                                   ZR_MX(ZR_RN) | ZR_DAZ | ZR_FTZ, ZR_MX(ZR_RZ) | ZR_DAZ | ZR_FTZ };
+
+TEST(zmm_fp16_arith_vs_model_daz_ftz_ignored) {
+    NEED_XB(F_AVX512FP16);
+    g_zh_sde_gap = g_zh_bad = 0;
+    static const char *const nm[4] = { "vaddph", "vsubph", "vmulph", "vdivph" };
+    void (*fn[4])(zfx *) = { z16_vaddph_512, z16_vsubph_512, z16_vmulph_512, z16_vdivph_512 };
+    t_rng r; t_rng_seed(&r, 0xF160);
+    static zfx p;
+    int den_out = 0, de_seen = 0;
+    for (int op = 0; op < 4; op++)
+        for (int m = 0; m < 6; m++) {
+            int rc = (zh_mx[m] >> 13) & 3, bad = 0;
+            for (int it = 0; it < 24 && !bad; it++) {
+                zx_rand(&p.s, &r);
+                for (int i = 0; i < 32; i++) { p.a.w[i] = zh_gen(&r, 0); p.b.w[i] = zh_gen(&r, 0); }
+                p.k = ~0ull; p.mx_in = zh_mx[m];
+                zfx_run(fn[op], &p);
+                uint16_t w[32]; unsigned fl = 0;
+                for (int i = 0; i < 32; i++) {
+                    uint16_t x = p.a.w[i], y = p.b.w[i];
+                    w[i] = op < 2 ? zh_add(x, y, op, rc, &fl) : op == 2 ? zh_mul(x, y, rc, &fl) : zh_div(x, y, rc, &fl);
+                    if ((w[i] & 0x7C00) == 0 && (w[i] & 0x3FF)) den_out++;
+                }
+                char what[96]; snprintf(what, sizeof what, "%s MXCSR=0x%04x (%s%s)", nm[op], zh_mx[m], zr_rcn[rc], (zh_mx[m] & ZR_DAZ) ? ", DAZ+FTZ set: ignored" : "");
+                for (int i = 0; i < 32; i++) if (p.o.w[i] != w[i]) bad = 1;
+                zh_lanes(what, &p.o, w, 32, &p.a, &p.b);
+                zh_flags(what, p.mx_out, fl);
+                ZCHECKF((p.mx_out & ~0x3Fu) == (p.mx_in & ~0x3Fu), "%s: MXCSR control bits changed: 0x%04x", what, p.mx_out);
+                if (p.mx_out & ZR_DE) de_seen = 1;
+            }
+        }
+    t_info("fp16_denormal_results_checked", "%d", den_out);
+    t_info("fp16_de_flag_observed", "%d", de_seen);
+    /* known answers */
+    static const struct { int op, mx; uint16_t a, b, want; unsigned fl; const char *why; } kat[] = {
+        { 0, ZR_MX(ZR_RN), 0x3C00, 0x1000, 0x3C00, ZR_PE, "1 + 2^-11 tie -> even (1.0)" },
+        { 0, ZR_MX(ZR_RU), 0x3C00, 0x1000, 0x3C01, ZR_PE, "1 + 2^-11 RU" },
+        { 0, ZR_MX(ZR_RN), 0x7BFF, 0x5000, 0x7C00, ZR_OE | ZR_PE, "65504 + 32 overflows to inf (RN)" },
+        { 0, ZR_MX(ZR_RZ), 0x7BFF, 0x5000, 0x7BFF, ZR_OE | ZR_PE, "65504 + 32 RZ -> max" },
+        { 0, ZR_MX(ZR_RN) | ZR_DAZ | ZR_FTZ, 0x0001, 0x0001, 0x0002, 0, "denormal + denormal with DAZ+FTZ set (ignored)" },
+        { 2, ZR_MX(ZR_RN) | ZR_DAZ | ZR_FTZ, 0x0001, 0x3800, 0x0000, ZR_UE | ZR_PE, "2^-24 * 0.5 tie -> 0 (RN)" },
+        { 2, ZR_MX(ZR_RU) | ZR_FTZ, 0x0001, 0x3800, 0x0001, ZR_UE | ZR_PE, "2^-24 * 0.5 RU -> 2^-24, FTZ ignored" },
+        { 2, ZR_MX(ZR_RN) | ZR_DAZ, 0x0200, 0x4000, 0x0400, 0, "2^-15 * 2 = min normal, DAZ ignored" },
+        { 1, ZR_MX(ZR_RD), 0x3C00, 0x3C00, 0x8000, 0, "1 - 1 = -0 in RD" },
+        { 3, ZR_MX(ZR_RN), 0x3C00, 0x0000, 0x7C00, ZR_ZE, "1 / 0 = inf, ZE" },
+        { 3, ZR_MX(ZR_RN), 0x0000, 0x0000, 0xFE00, ZR_IE, "0 / 0 = default NaN" },
+        { 0, ZR_MX(ZR_RN), 0x7D01, 0x3C00, 0x7F01, ZR_IE, "SNaN + 1 -> quieted SNaN, IE" },
+    };
+    for (size_t k = 0; k < T_COUNTOF(kat); k++) {
+        memset(&p, 0, sizeof p);
+        for (int i = 0; i < 32; i++) { p.a.w[i] = kat[k].a; p.b.w[i] = kat[k].b; }
+        p.mx_in = (uint32_t)kat[k].mx; p.k = ~0ull;
+        zfx_run(fn[kat[k].op], &p);
+        unsigned fl = 0; uint16_t mw = kat[k].op < 2 ? zh_add(kat[k].a, kat[k].b, kat[k].op, (kat[k].mx >> 13) & 3, &fl)
+                                   : kat[k].op == 2 ? zh_mul(kat[k].a, kat[k].b, (kat[k].mx >> 13) & 3, &fl) : zh_div(kat[k].a, kat[k].b, (kat[k].mx >> 13) & 3, &fl);
+        ZCHECKF(mw == kat[k].want && (fl & ZR_CMPFL) == kat[k].fl, "model self-check %s: 0x%04x/0x%02x", kat[k].why, mw, fl);
+        ZCHECKF(p.o.w[0] == kat[k].want && p.o.w[31] == kat[k].want, "%s %s: got 0x%04x/0x%04x want 0x%04x", nm[kat[k].op], kat[k].why, p.o.w[0], p.o.w[31], kat[k].want);
+        char what[96]; snprintf(what, sizeof what, "%s %s", nm[kat[k].op], kat[k].why);
+        zh_flags(what, p.mx_out, kat[k].fl);
+    }
+    ZH_SDE_END();
+}
+
+TEST(zmm_fp16_fma_single_rounding_vs_model) {
+    NEED_XB(F_AVX512FP16);
+    g_zh_sde_gap = g_zh_bad = 0;
+    t_rng r; t_rng_seed(&r, 0xF161);
+    static zfx p;
+    int bad = 0;
+    for (int m = 0; m < 6 && !bad; m++)
+        for (int it = 0; it < 40 && !bad; it++) {
+            int rc = (zh_mx[m] >> 13) & 3;
+            for (int i = 0; i < 32; i++) { p.s.w[i] = zh_gen(&r, 1); p.a.w[i] = zh_gen(&r, 1); p.b.w[i] = zh_gen(&r, 1); }
+            if (it & 1) for (int i = 0; i < 32; i += 2) p.b.w[i] = (uint16_t)(zh_mul(p.a.w[i], p.s.w[i], ZR_RN, &(unsigned){ 0 }) ^ 0x8000); /* near cancellation */
+            p.k = ~0ull; p.mx_in = zh_mx[m];
+            zfx_run(z16_vfmadd213ph_512, &p);
+            uint16_t w[32]; unsigned fl = 0;
+            for (int i = 0; i < 32; i++) w[i] = zh_fma(p.a.w[i], p.s.w[i], p.b.w[i], rc, &fl);   /* zmm0 = zmm1*zmm0 + zmm2 */
+            char what[80]; snprintf(what, sizeof what, "vfmadd213ph MXCSR=0x%04x", zh_mx[m]);
+            for (int i = 0; i < 32; i++) if (p.o.w[i] != w[i]) { bad = 1; ZCHECKF(0, "%s lane %d: a=0x%04x dst=0x%04x c=0x%04x got 0x%04x want 0x%04x",
+                                                                            what, i, p.a.w[i], p.s.w[i], p.b.w[i], p.o.w[i], w[i]); break; }
+            zh_flags(what, p.mx_out, fl);
+        }
+    ZCHECK(!bad);
+    /* known answer: (1+2^-10)(1-2^-10) - 1 = -2^-20 exactly (a separately rounded product would give 0); a denormal
+       result, delivered with FTZ set */
+    memset(&p, 0, sizeof p);
+    for (int i = 0; i < 32; i++) { p.a.w[i] = 0x3C01; p.s.w[i] = 0x3BFE; p.b.w[i] = 0xBC00; }
+    p.mx_in = ZR_MX(ZR_RN) | ZR_FTZ | ZR_DAZ;
+    zfx_run(z16_vfmadd213ph_512, &p);
+    ZCHECKF(p.o.w[0] == 0x8010 && p.o.w[31] == 0x8010, "fused (1+2^-10)(1-2^-10)-1: got 0x%04x want 0x8010", p.o.w[0]);
+    ZCHECKF((p.mx_out & ZR_CMPFL) == 0, "exact fused result raised flags 0x%02x", p.mx_out & ZR_CMPFL);
+    ZH_SDE_END();
+}
+
+TEST(zmm_fp16_embedded_rounding_sae_and_masking) {
+    NEED_XB(F_AVX512FP16);
+    g_zh_sde_gap = g_zh_bad = 0;
+    t_rng r; t_rng_seed(&r, 0xF162);
+    static zfx p;
+    struct { const char *n; void (*f)(zfx *); int op, rc; } er[] = {
+        { "vaddph {rn-sae}", z16_vaddph_rn_512, 0, ZR_RN }, { "vaddph {rd-sae}", z16_vaddph_rd_512, 0, ZR_RD },
+        { "vaddph {ru-sae}", z16_vaddph_ru_512, 0, ZR_RU }, { "vaddph {rz-sae}", z16_vaddph_rz_512, 0, ZR_RZ },
+        { "vmulph {rz-sae}", z16_vmulph_rz_512, 2, ZR_RZ }, { "vdivph {ru-sae}", z16_vdivph_ru_512, 3, ZR_RU },
+        { "vfmadd213ph {rd-sae}", z16_vfmadd213ph_rd_512, 4, ZR_RD },
+    };
+    for (size_t k = 0; k < T_COUNTOF(er); k++)
+        for (int it = 0; it < 16; it++) {
+            /* MXCSR.RC deliberately different from the embedded mode; flags must stay clear (SAE) */
+            uint32_t mx = ZR_MX((er[k].rc + 1 + it % 3) & 3);
+            for (int i = 0; i < 32; i++) { p.s.w[i] = zh_gen(&r, 1); p.a.w[i] = zh_gen(&r, er[k].op == 4); p.b.w[i] = zh_gen(&r, er[k].op == 4); }
+            p.a.w[0] = 0x7D01; p.b.w[1] = 0x0000; p.a.w[1] = 0x3C00;         /* SNaN and x/0 lanes: no flags under SAE */
+            if (er[k].op == 4) p.a.w[0] = 0x3C00;
+            p.k = ~0ull; p.mx_in = mx;
+            zfx_run(er[k].f, &p);
+            uint16_t w[32]; unsigned fl = 0;
+            for (int i = 0; i < 32; i++) {
+                uint16_t x = p.a.w[i], y = p.b.w[i];
+                w[i] = er[k].op == 0 ? zh_add(x, y, 0, er[k].rc, &fl) : er[k].op == 2 ? zh_mul(x, y, er[k].rc, &fl)
+                     : er[k].op == 3 ? zh_div(x, y, er[k].rc, &fl) : zh_fma(x, p.s.w[i], y, er[k].rc, &fl);
+            }
+            char what[96]; snprintf(what, sizeof what, "%s (MXCSR.RC=%s)", er[k].n, zr_rcn[(mx >> 13) & 3]);
+            zh_lanes(what, &p.o, w, 32, &p.a, &p.b);
+            ZCHECKF(p.mx_out == mx, "%s: MXCSR 0x%04x after the instruction, want unchanged 0x%04x (SAE)", what, p.mx_out, mx);
+        }
+    /* merge masking: masked-off lanes keep zmm0 and raise nothing (SNaN / inf-inf placed only there) */
+    for (int it = 0; it < 16; it++) {
+        uint64_t k = t_rng_next(&r) & 0xFFFFFFFFull;
+        for (int i = 0; i < 32; i++) {
+            p.s.w[i] = zh_gen(&r, 0);
+            if ((k >> i) & 1) { p.a.w[i] = zh_gen(&r, 1); p.b.w[i] = (uint16_t)(0x3C00 | (t_rng_u32(&r) & 0x3FF)); }
+            else { p.a.w[i] = (i & 1) ? 0x7D01 : 0x7C00; p.b.w[i] = (i & 1) ? 0x3C00 : 0xFC00; }
+        }
+        p.k = k | 0xFFFFFFFF00000000ull; p.mx_in = ZR_MX(ZR_RN);
+        zfx_run(z16_vaddph_k_512, &p);
+        uint16_t w[32]; unsigned fl = 0;
+        for (int i = 0; i < 32; i++) w[i] = ((k >> i) & 1) ? zh_add(p.a.w[i], p.b.w[i], 0, ZR_RN, &fl) : p.s.w[i];
+        zh_lanes("vaddph {k1} merge", &p.o, w, 32, &p.a, &p.b);
+        zh_flags("vaddph {k1} merge (masked-off SNaN/inf-inf must not raise IE)", p.mx_out, fl);
+    }
+    ZH_SDE_END();
+}
+
+TEST(zmm_fp16_conversions_vs_model) {
+    NEED_XB(F_AVX512FP16);
+    t_rng r; t_rng_seed(&r, 0xF163);
+    static zfx p;
+    int daz_flushed = 0, daz_den = 0;
+    for (int it = 0; it < 64; it++) {
+        /* vcvtph2psx: exact */
+        for (int i = 0; i < 16; i++) { p.a.w[i] = zh_gen(&r, 0); if (zh_issnan(p.a.w[i])) p.a.w[i] |= 0x200; }
+        int daz = it & 1;
+        p.mx_in = ZR_MX(ZR_RN) | (daz ? ZR_DAZ : 0); p.k = ~0ull;
+        zfx_run(z16_vcvtph2psx_512, &p);
+        int ok = 1;
+        for (int i = 0; i < 16; i++) {
+            uint32_t w = zh_to_f32(p.a.w[i]);
+            int den = (p.a.w[i] & 0x7C00) == 0 && (p.a.w[i] & 0x3FF);
+            if (daz && den) { daz_den++; if (p.o.d[i] == (w & 0x80000000u)) { daz_flushed++; continue; } }
+            if (p.o.d[i] != w) { ok = 0; CHECKF(0, "vcvtph2psx DAZ=%d lane %d: 0x%04x -> 0x%08x want 0x%08x", daz, i, p.a.w[i], p.o.d[i], w); break; }
+        }
+        if (ok) CHECK(1);
+        /* vcvtps2phx: MXCSR.RC (with flags) and the four embedded modes (no flags) */
+        for (int i = 0; i < 16; i++) p.a.d[i] = zf32_gen(&r);
+        for (int m = 0; m < 5; m++) {
+            void (*f[5])(zfx *) = { z16_vcvtps2phx_512, z16_vcvtps2phx_rn_512, z16_vcvtps2phx_rd_512, z16_vcvtps2phx_ru_512, z16_vcvtps2phx_rz_512 };
+            int rc = m ? m - 1 : it & 3;
+            p.mx_in = ZR_MX(m ? (rc + 2) & 3 : rc);
+            zfx_run(f[m], &p);
+            uint16_t w[32]; unsigned fl = 0;
+            for (int i = 0; i < 16; i++) w[i] = zh_from_f32(p.a.d[i], rc, &fl);
+            memset(w + 16, 0, 32);
+            char what[64]; snprintf(what, sizeof what, "vcvtps2phx %s %s", m ? "embedded" : "MXCSR.RC", zr_rcn[rc]);
+            for (int i = 0; i < 32; i++) if (p.o.w[i] != w[i]) { CHECKF(0, "%s lane %d: 0x%08x -> 0x%04x want 0x%04x", what, i, i < 16 ? p.a.d[i] : 0, p.o.w[i], w[i]); goto next_cvt; }
+            CHECK(1);
+        next_cvt:
+            if (m) CHECKF(p.mx_out == p.mx_in, "%s: MXCSR 0x%04x want unchanged (SAE)", what, p.mx_out);
+            else CHECKF((p.mx_out & ZR_CMPFL) == (fl & ZR_CMPFL), "%s: flags 0x%02x want 0x%02x", what, p.mx_out & ZR_CMPFL, fl & ZR_CMPFL);
+        }
+        /* vcvtw2ph (rounds above 2048) and vcvttph2w (truncation, indefinite 0x8000) */
+        zx_rand(&p.a, &r);
+        for (int i = 0; i < 8; i++) p.a.sw[i] = (int16_t)(2040 + (int)t_rng_range(&r, 40) * (i & 1 ? -1 : 1) * (int)(1 + t_rng_range(&r, 8)));
+        p.a.w[8] = 0x8000; p.a.w[9] = 0x7FFF; p.a.w[10] = 0; p.a.w[11] = 0xFFFF;
+        int rc = it & 3; p.mx_in = ZR_MX(rc);
+        zfx_run(z16_vcvtw2ph_512, &p);
+        { uint16_t w[32]; unsigned fl = 0;
+          for (int i = 0; i < 32; i++) w[i] = zh_from_i16(p.a.sw[i], rc, &fl);
+          char what[48]; snprintf(what, sizeof what, "vcvtw2ph %s", zr_rcn[rc]);
+          zh_lanes(what, &p.o, w, 32, &p.a, NULL);
+          CHECKF((p.mx_out & ZR_CMPFL) == (fl & ZR_CMPFL), "%s: flags 0x%02x want 0x%02x", what, p.mx_out & ZR_CMPFL, fl & ZR_CMPFL); }
+        for (int i = 0; i < 32; i++) p.a.w[i] = zh_gen(&r, 0);
+        p.a.w[0] = 0x7800; p.a.w[1] = 0xF800; p.a.w[2] = 0x77FF; p.a.w[3] = 0xBBFF; p.a.w[4] = 0x7C00; p.a.w[5] = 0x7E00;
+        p.mx_in = ZR_MX((rc + 1) & 3);                   /* truncation ignores RC */
+        zfx_run(z16_vcvttph2w_512, &p);
+        { uint16_t w[32]; unsigned fl = 0;
+          for (int i = 0; i < 32; i++) w[i] = zh_to_i16_trunc(p.a.w[i], &fl);
+          zh_lanes("vcvttph2w", &p.o, w, 32, &p.a, NULL);
+          CHECKF((p.mx_out & ZR_CMPFL) == (fl & ZR_CMPFL), "vcvttph2w: flags 0x%02x want 0x%02x", p.mx_out & ZR_CMPFL, fl & ZR_CMPFL); }
+    }
+    t_info("vcvtph2psx_fp16_denormal_daz", "%d of %d fp16 denormal lanes flushed under DAZ=1", daz_flushed, daz_den);
+}
+
+/* ---- BF16 */
+#define ZB_ISA "avx512f,avx512bw,avx512bf16"
+ZFX_FN(zb_cvtne2_512, ZB_ISA, "vcvtne2ps2bf16 %%zmm2, %%zmm1, %%zmm0")
+ZFX_FN(zb_cvtne2_k_512, ZB_ISA, "vcvtne2ps2bf16 %%zmm2, %%zmm1, %%zmm0%{%%k1%}")
+ZFX_FN(zb_cvtne_512, ZB_ISA, "vcvtneps2bf16 %%zmm1, %%ymm0")
+ZFX_FN(zb_dpbf16_512, ZB_ISA, "vdpbf16ps %%zmm2, %%zmm1, %%zmm0")
+static const uint32_t zb_mx[3] = { ZR_MX(ZR_RN), ZR_MX(ZR_RZ) | ZR_DAZ | ZR_FTZ, ZR_MX(ZR_RU) };
+
+TEST(zmm_bf16_vcvtne2ps2bf16_rne_daz_vs_model) {
+    NEED_XB(F_AVX512BF16);
+    t_rng r; t_rng_seed(&r, 0xBF01);
+    static zfx p;
+    /* known answers: ties to even down/up, above tie, overflow, denormal -> 0, SNaN quieted, carry into exponent */
+    static const uint32_t kin[8] = { 0x3F808000u, 0x3F818000u, 0x3F808001u, 0x7F7FFFFFu, 0x00000001u, 0x80400000u, 0x7F800001u, 0x3F7FFFFFu };
+    static const uint16_t kout[8] = { 0x3F80, 0x3F82, 0x3F81, 0x7F80, 0x0000, 0x8000, 0x7FC0, 0x3F80 };
+    for (int i = 0; i < 16; i++) { p.a.d[i] = kin[i & 7]; p.b.d[i] = kin[7 - (i & 7)]; }
+    p.mx_in = ZR_MX(ZR_RZ); p.k = ~0ull;
+    zfx_run(zb_cvtne2_512, &p);
+    for (int i = 0; i < 32; i++) {
+        uint16_t w = i < 16 ? kout[7 - (i & 7)] : kout[i & 7];     /* low 16 words from SRC2 (zmm2), high from SRC1 */
+        if (p.o.w[i] != w) { CHECKF(0, "vcvtne2ps2bf16 known answer word %d: got 0x%04x want 0x%04x", i, p.o.w[i], w); break; }
+    }
+    CHECKF(p.mx_out == p.mx_in, "MXCSR changed by vcvtne2ps2bf16: 0x%04x", p.mx_out);
+    for (int it = 0; it < 96; it++) {
+        for (int i = 0; i < 16; i++) { p.a.d[i] = zf32_gen(&r); p.b.d[i] = zf32_gen(&r); }
+        zx_rand(&p.s, &r);
+        int masked = it % 4 == 3;
+        p.k = masked ? t_rng_next(&r) : ~0ull; p.mx_in = zb_mx[it % 3];
+        zfx_run(masked ? zb_cvtne2_k_512 : zb_cvtne2_512, &p);
+        uint16_t w[32];
+        for (int i = 0; i < 32; i++) w[i] = (masked && !((p.k >> i) & 1)) ? p.s.w[i] : zb_from_f32(i < 16 ? p.b.d[i] : p.a.d[i - 16]);
+        char what[80]; snprintf(what, sizeof what, "vcvtne2ps2bf16%s MXCSR=0x%04x", masked ? " {k1}" : "", p.mx_in);
+        zh_lanes(what, &p.o, w, 32, NULL, NULL);
+        CHECKF(p.mx_out == p.mx_in, "%s: MXCSR changed to 0x%04x (must be neither consulted nor updated)", what, p.mx_out);
+        /* vcvtneps2bf16 zmm -> ymm: upper 256 bits of zmm0 zeroed */
+        zfx_run(zb_cvtne_512, &p);
+        for (int i = 0; i < 32; i++) w[i] = i < 16 ? zb_from_f32(p.a.d[i]) : 0;
+        snprintf(what, sizeof what, "vcvtneps2bf16 ymm MXCSR=0x%04x", p.mx_in);
+        zh_lanes(what, &p.o, w, 32, NULL, NULL);
+        CHECKF(p.mx_out == p.mx_in, "%s: MXCSR changed to 0x%04x", what, p.mx_out);
+    }
+}
+
+/* exact VDPBF16PS model for restricted operands: everything is an integer multiple of 2^-31 below 2^45 */
+static int64_t zb_fix(uint32_t f32) {   /* fp32 that is a multiple of 2^-31 below 2^31 -> value * 2^31 */
+    if (!(f32 & 0x7FFFFFFF)) return 0;
+    int64_t m = (int64_t)((f32 & 0x7FFFFF) | 0x800000); int e = (int)((f32 >> 23) & 0xFF) - 150 + 31;
+    m = e >= 0 ? m << e : m >> -e;
+    return (f32 >> 31) ? -m : m;
+}
+static int64_t zb_prod(uint16_t x, uint16_t y) {   /* bf16 normals with exponent in [-5, 5] */
+    int64_t mx = (x & 0x7F) | 0x80, my = (y & 0x7F) | 0x80;
+    int e = ((x >> 7) & 0xFF) - 134 + ((y >> 7) & 0xFF) - 134 + 31;
+    int64_t p = e >= 0 ? (mx * my) << e : (mx * my) >> -e;
+    return ((x ^ y) & 0x8000) ? -p : p;
+}
+static uint32_t zb_round_fix(int64_t v) {   /* RNE of v * 2^-31 to fp32 */
+    if (!v) return 0;
+    unsigned fl = 0;
+    return (uint32_t)zr_round(23, 8, v < 0, (uint64_t)(v < 0 ? -v : v), -31, ZR_RN, 1, &fl);
+}
+static uint32_t zb_seq(int64_t acc, int64_t p1, int64_t p2) {
+    uint32_t t = zb_round_fix(acc + p1);
+    return zb_round_fix(zb_fix(t) + p2);
+}
+TEST(zmm_bf16_vdpbf16ps_vs_model) {
+    NEED_XB(F_AVX512BF16);
+    static zfx p;
+    /* known answers: 1 + 3*0.5 + 2*4 = 10.5; a bf16 denormal input is zero (2 + 2^-133*2^127 stays 2);
+       a denormal product/sum is flushed (0 + 2^-126*0.5 = +0); MXCSR untouched */
+    memset(&p, 0, sizeof p);
+    p.s.d[0] = 0x3F800000u; p.a.w[0] = 0x4000; p.a.w[1] = 0x4040; p.b.w[0] = 0x4080; p.b.w[1] = 0x3F00;
+    p.s.d[1] = 0x40000000u; p.a.w[2] = 0x0001; p.b.w[2] = 0x7F00;
+    p.s.d[2] = 0x00000000u; p.a.w[4] = 0x0080; p.b.w[4] = 0x3F00;
+    p.s.d[3] = 0xC1200000u; p.a.w[6] = 0x4120; p.b.w[6] = 0x3F80; p.a.w[7] = 0x8000; p.b.w[7] = 0x3F80;   /* -10 + 10 + (-0) */
+    p.mx_in = ZR_MX(ZR_RU); p.k = ~0ull;
+    zfx_run(zb_dpbf16_512, &p);
+    static const uint32_t kw[4] = { 0x41280000u, 0x40000000u, 0x00000000u, 0x00000000u };
+    for (int i = 0; i < 4; i++) CHECKF(p.o.d[i] == kw[i], "vdpbf16ps known answer lane %d: got 0x%08x want 0x%08x", i, p.o.d[i], kw[i]);
+    for (int i = 4; i < 16; i++) if (p.o.d[i]) { CHECKF(0, "vdpbf16ps lane %d: 0 + 0*0 = 0x%08x", i, p.o.d[i]); break; }
+    CHECKF(p.mx_out == p.mx_in, "MXCSR changed by vdpbf16ps: 0x%04x", p.mx_out);
+    /* random operands; the exact alternatives decide what an implementation could have done */
+    t_rng r; t_rng_seed(&r, 0xBF02);
+    int n_sdm = 0, n_even_first = 0, n_single = 0, n_bad = 0;
+    for (int it = 0; it < 64; it++) {
+        for (int i = 0; i < 16; i++)
+            p.s.d[i] = (t_rng_u32(&r) & 0x807FFFFFu) | ((uint32_t)(127 - 8 + t_rng_range(&r, 17)) << 23);
+        for (int i = 0; i < 32; i++) {
+            p.a.w[i] = (uint16_t)((t_rng_u32(&r) & 0x807F) | ((127 - 5 + t_rng_range(&r, 11)) << 7));
+            p.b.w[i] = (uint16_t)((t_rng_u32(&r) & 0x807F) | ((127 - 5 + t_rng_range(&r, 11)) << 7));
+        }
+        p.mx_in = zb_mx[it % 3];
+        zfx_run(zb_dpbf16_512, &p);
+        CHECKF(p.mx_out == p.mx_in, "vdpbf16ps changed MXCSR 0x%04x -> 0x%04x", p.mx_in, p.mx_out);
+        for (int i = 0; i < 16; i++) {
+            int64_t acc = zb_fix(p.s.d[i]), pe = zb_prod(p.a.w[2 * i], p.b.w[2 * i]), po = zb_prod(p.a.w[2 * i + 1], p.b.w[2 * i + 1]);
+            uint32_t sdm = zb_seq(acc, po, pe), ev = zb_seq(acc, pe, po), one = zb_round_fix(acc + po + pe), g = p.o.d[i];
+            if (g == sdm) n_sdm++;
+            else if (g == ev) n_even_first++;
+            else if (g == one) n_single++;
+            else if (n_bad++ == 0)
+                CHECKF(0, "vdpbf16ps lane %d: acc=0x%08x a=0x%04x,0x%04x b=0x%04x,0x%04x got 0x%08x want 0x%08x (SDM order; even-first 0x%08x, "
+                       "single rounding 0x%08x)", i, p.s.d[i], p.a.w[2 * i], p.a.w[2 * i + 1], p.b.w[2 * i], p.b.w[2 * i + 1], g, sdm, ev, one);
+        }
+    }
+    CHECKF(n_bad == 0, "%d lanes match no rounding sequence", n_bad);
+    t_info("vdpbf16ps_rounding", "lanes matching SDM order (odd then even) %d, even-first only %d, single rounding only %d", n_sdm, n_even_first, n_single);
+    if (n_even_first || n_single) t_note("vdpbf16ps does not follow the SDM pseudo-code rounding order in %d lanes", n_even_first + n_single);
+}
+
+/* ---- BITALG / VBMI2 */
+T_TARGET("avx512f,avx512bw,avx512bitalg") T_NOINLINE static void zbit_512(const zv *a, const zv *b, uint64_t k, uint64_t out_k[2], zv *pc) {
+    __m512i A = _mm512_load_si512(a), B = _mm512_load_si512(b);
+    out_k[0] = _mm512_bitshuffle_epi64_mask(A, B);
+    out_k[1] = _mm512_mask_bitshuffle_epi64_mask(k, A, B);
+    _mm512_store_si512(pc, _mm512_maskz_popcnt_epi8(k, A));
+}
+TEST(zmm_bitalg_vpshufbitqmb_masked_popcnt) {
+    NEED_XB(F_AVX512BITALG);
+    t_rng r; t_rng_seed(&r, 0xB170);
+    for (int it = 0; it < 64; it++) {
+        static zv a, b, pc, e;
+        zx_rand(&a, &r); zx_rand(&b, &r);
+        if (it == 0) for (int i = 0; i < 64; i++) b.b[i] = (uint8_t)(i | 0xC0);   /* index bits 7:6 ignored */
+        uint64_t k = t_rng_next(&r), ok[2];
+        zbit_512(&a, &b, k, ok, &pc);
+        uint64_t m = 0;
+        for (int i = 0; i < 64; i++) m |= ((a.q[i >> 3] >> (b.b[i] & 63)) & 1) << i;
+        CHECKF(ok[0] == m, "vpshufbitqmb: k=0x%016llx want 0x%016llx", (unsigned long long)ok[0], (unsigned long long)m);
+        CHECKF(ok[1] == (m & k), "vpshufbitqmb {k}: 0x%016llx want 0x%016llx", (unsigned long long)ok[1], (unsigned long long)(m & k));
+        for (int i = 0; i < 64; i++) e.b[i] = ((k >> i) & 1) ? (uint8_t)zx_pop64(a.b[i]) : 0;
+        CHECK_LANES("vpopcntb {k}{z}", pc.b, e.b, 64, 1);
+    }
+}
+
+#define ZV2_ISA "avx512f,avx512bw,avx512vbmi2"
+/* out: 0-2 shldi w/d/q, 3-5 shrdi, 6-8 shldv, 9-11 shrdv; immediates 17/33/65 exercise the count masking */
+T_TARGET(ZV2_ISA) T_NOINLINE static void zv2_shift_512(const zv *a, const zv *b, const zv *c, zv out[12], int set) {
+    __m512i A = _mm512_load_si512(a), B = _mm512_load_si512(b), C = _mm512_load_si512(c);
+    if (set == 0) {
+        _mm512_store_si512(&out[0], _mm512_shldi_epi16(A, B, 5));  _mm512_store_si512(&out[1], _mm512_shldi_epi32(A, B, 31));
+        _mm512_store_si512(&out[2], _mm512_shldi_epi64(A, B, 1));  _mm512_store_si512(&out[3], _mm512_shrdi_epi16(A, B, 15));
+        _mm512_store_si512(&out[4], _mm512_shrdi_epi32(A, B, 9));  _mm512_store_si512(&out[5], _mm512_shrdi_epi64(A, B, 63));
+    } else {
+        _mm512_store_si512(&out[0], _mm512_shldi_epi16(A, B, 17)); _mm512_store_si512(&out[1], _mm512_shldi_epi32(A, B, 33));
+        _mm512_store_si512(&out[2], _mm512_shldi_epi64(A, B, 65)); _mm512_store_si512(&out[3], _mm512_shrdi_epi16(A, B, 16));
+        _mm512_store_si512(&out[4], _mm512_shrdi_epi32(A, B, 32)); _mm512_store_si512(&out[5], _mm512_shrdi_epi64(A, B, 0));
+    }
+    _mm512_store_si512(&out[6], _mm512_shldv_epi16(A, B, C));  _mm512_store_si512(&out[7], _mm512_shldv_epi32(A, B, C));
+    _mm512_store_si512(&out[8], _mm512_shldv_epi64(A, B, C));  _mm512_store_si512(&out[9], _mm512_shrdv_epi16(A, B, C));
+    _mm512_store_si512(&out[10], _mm512_shrdv_epi32(A, B, C)); _mm512_store_si512(&out[11], _mm512_shrdv_epi64(A, B, C));
+}
+static uint64_t zv2_get(const zv *v, int w, int i) { return w == 2 ? v->w[i] : w == 4 ? v->d[i] : v->q[i]; }
+static void zv2_set(zv *v, int w, int i, uint64_t x) { if (w == 2) v->w[i] = (uint16_t)x; else if (w == 4) v->d[i] = (uint32_t)x; else v->q[i] = x; }
+/* upper half of (hi:lo) << n, lower half of (hi:lo) >> n; n already reduced mod the element width */
+static uint64_t zv2_shl(int bits, uint64_t hi, uint64_t lo, unsigned n) { uint64_t m = bits == 64 ? ~0ull : (1ull << bits) - 1; return n ? ((hi << n) | (lo >> (bits - n))) & m : hi; }
+static uint64_t zv2_shr(int bits, uint64_t hi, uint64_t lo, unsigned n) { uint64_t m = bits == 64 ? ~0ull : (1ull << bits) - 1; return n ? ((lo >> n) | (hi << (bits - n))) & m : lo; }
+TEST(zmm_vbmi2_double_shifts_all_widths) {
+    NEED_XB(F_AVX512VBMI2);
+    t_rng r; t_rng_seed(&r, 0xB2B2);
+    static const int imm[2][6] = { { 5, 31, 1, 15, 9, 63 }, { 17, 33, 65, 16, 32, 0 } };
+    static const char *const nm[12] = { "vpshldw $imm", "vpshldd $imm", "vpshldq $imm", "vpshrdw $imm", "vpshrdd $imm", "vpshrdq $imm",
+                                        "vpshldvw", "vpshldvd", "vpshldvq", "vpshrdvw", "vpshrdvd", "vpshrdvq" };
+    for (int it = 0; it < 32; it++) {
+        static zv a, b, c, o[12], e;
+        zx_rand(&a, &r); zx_rand(&b, &r); zx_rand(&c, &r);
+        if (it & 1) for (int i = 0; i < 64; i++) c.b[i] &= 0x47;   /* small counts and counts >= width */
+        int set = (it >> 1) & 1;
+        zv2_shift_512(&a, &b, &c, o, set);
+        for (int k = 0; k < 12; k++) {
+            int w = 2 << (k % 3), bits = 8 * w;
+            for (int i = 0; i < 64 / w; i++) {
+                uint64_t x = zv2_get(&a, w, i), y = zv2_get(&b, w, i);
+                unsigned n = (unsigned)((k < 6 ? (uint64_t)imm[set][k] : zv2_get(&c, w, i)) & (unsigned)(bits - 1));
+                int left = (k % 6) < 3;
+                zv2_set(&e, w, i, left ? zv2_shl(bits, x, y, n) : zv2_shr(bits, y, x, n));
+            }
+            char what[48]; snprintf(what, sizeof what, "%s%s", nm[k], k < 6 ? (set ? " (imm >= width)" : "") : "");
+            CHECK_LANES(what, o[k].b, e.b, 64 / w, w);
+        }
+    }
+}
+
+T_TARGET(ZV2_ISA) T_NOINLINE static void zv2_cx_512(const zv *a, const zv *s, uint64_t k, zv out[3], uint8_t *mem, const uint16_t *src16) {
+    __m512i A = _mm512_load_si512(a), S = _mm512_load_si512(s);
+    _mm512_store_si512(&out[0], _mm512_maskz_compress_epi16((__mmask32)k, A));
+    _mm512_store_si512(&out[1], _mm512_mask_expand_epi8(S, (__mmask64)k, A));
+    _mm512_mask_compressstoreu_epi8(mem, (__mmask64)k, A);
+    _mm512_store_si512(&out[2], _mm512_maskz_expandloadu_epi16((__mmask32)(k >> 32), src16));
+}
+TEST(zmm_vbmi2_compress_expand_byte_word_forms) {
+    NEED_XB(F_AVX512VBMI2);
+    t_rng r; t_rng_seed(&r, 0xB2C3);
+    static uint8_t mem[64 + 64 + 1];
+    static uint16_t src16[32 + 1];
+    for (int it = 0; it < 48; it++) {
+        static zv a, s, o[3], e;
+        zx_rand(&a, &r); zx_rand(&s, &r);
+        uint64_t k = it == 0 ? 0 : it == 1 ? ~0ull : t_rng_next(&r) & t_rng_next(&r);
+        memset(mem, 0xA5, sizeof mem);
+        for (int i = 0; i < 33; i++) src16[i] = (uint16_t)t_rng_u32(&r);
+        uint8_t *dst = mem + 1 + (it & 7);                         /* unaligned destination */
+        zv2_cx_512(&a, &s, k, o, dst, src16 + (it & 1));
+        /* vpcompressw {z} */
+        memset(&e, 0, sizeof e);
+        for (int i = 0, j = 0; i < 32; i++) if ((k >> i) & 1) e.w[j++] = a.w[i];
+        CHECK_LANES("vpcompressw {k}{z}", o[0].w, e.w, 32, 2);
+        /* vpexpandb merge */
+        e = s;
+        for (int i = 0, j = 0; i < 64; i++) if ((k >> i) & 1) e.b[i] = a.b[j++];
+        CHECK_LANES("vpexpandb {k}", o[1].b, e.b, 64, 1);
+        /* vpcompressb m512{k}: exactly popcount(k) bytes written, contiguous, nothing else touched */
+        int n = zx_pop64(k), badmem = -1;
+        for (int i = 0, j = 0; i < (int)sizeof mem; i++) {
+            uint8_t want = 0xA5;
+            if (mem + i >= dst && mem + i < dst + n) { while (!((k >> j) & 1)) j++; want = a.b[j++]; }
+            if (mem[i] != want) { badmem = i; break; }
+        }
+        CHECKF(badmem < 0, "vpcompressb to memory (k=0x%016llx, %d elements): byte %d of the buffer wrong", (unsigned long long)k, n, badmem);
+        /* vpexpandw from memory {z}: consecutive source elements */
+        memset(&e, 0, sizeof e);
+        const uint16_t *ps = src16 + (it & 1);
+        for (int i = 0, j = 0; i < 32; i++) if ((k >> (32 + i)) & 1) e.w[i] = ps[j++];
+        CHECK_LANES("vpexpandw m512 {k}{z}", o[2].w, e.w, 32, 2);
+    }
+}
