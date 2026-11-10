@@ -63,7 +63,7 @@ TEST(ctx_env_report) {
 /* ============================================================================ capture */
 typedef struct cap_ctx { CONTEXT *c; } cap_ctx;
 static void cap_bench(void *p) { RtlCaptureContext(((cap_ctx *)p)->c); }
-TEST(ctx_rtlcapturecontext) {
+TEST(ctx_rtlcapturecontext_rate) {
     static T_ALIGN(64) CONTEXT c;
     memset(&c, 0, sizeof c);
     RtlCaptureContext(&c);
@@ -131,11 +131,11 @@ TEST(ctx_get_control) {
     bm_unpin();
 }
 TEST(ctx_get_full_fp)           { get_ctx_case("getthreadcontext_full_fp", 0, 0, 0); }
-TEST(ctx_get_xstate_avx)        { get_ctx_case("getthreadcontext_xstate_avx", 1, XSTATE_MASK_AVX, 0); }
-TEST(ctx_get_xstate_avx512)     { get_ctx_case("getthreadcontext_xstate_avx512", 1, XSTATE_MASK_AVX | XSTATE_MASK_AVX512, 0); }
+TEST(ctx_get_xstate_avx_ymm)      { get_ctx_case("getthreadcontext_xstate_avx", 1, XSTATE_MASK_AVX, 0); }
+TEST(ctx_get_xstate_avx512_zmm)   { get_ctx_case("getthreadcontext_xstate_avx512", 1, XSTATE_MASK_AVX | XSTATE_MASK_AVX512, 0); }
 TEST(ctx_getset_full_fp)        { get_ctx_case("get_set_threadcontext_full_fp", 0, 0, 1); }
-TEST(ctx_getset_xstate_avx)     { get_ctx_case("get_set_threadcontext_xstate_avx", 1, XSTATE_MASK_AVX, 1); }
-TEST(ctx_getset_xstate_avx512)  { get_ctx_case("get_set_threadcontext_xstate_avx512", 1, XSTATE_MASK_AVX | XSTATE_MASK_AVX512, 1); }
+TEST(ctx_getset_xstate_avx_ymm)   { get_ctx_case("get_set_threadcontext_xstate_avx", 1, XSTATE_MASK_AVX, 1); }
+TEST(ctx_getset_xstate_avx512_zmm){ get_ctx_case("get_set_threadcontext_xstate_avx512", 1, XSTATE_MASK_AVX | XSTATE_MASK_AVX512, 1); }
 
 /* ============================================================================ exceptions */
 #define CB_SW_CODE 0xE0C0FFEEu
@@ -378,7 +378,7 @@ static void tj_batch(void *p) {
         CloseHandle(h[i]);
     }
 }
-TEST(ctx_thread_create_join) {
+TEST(ctx_thread_create_join_single) {
     tj_ctx x = { 0 };
     tj_one(&x);
     if (x.fails) SKIP("CreateThread failed: %lu", GetLastError());

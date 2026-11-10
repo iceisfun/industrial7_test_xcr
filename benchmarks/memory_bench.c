@@ -143,6 +143,8 @@ static void mb_case(const char *op, const char *kname, cpy_fn c, set_fn s) {
     if (c) t_note("copies stop at %u MB (source + destination stay within the 512 MB budget)", (unsigned)(cap >> 20));
     size_t sizes[32];
     int ns = mb_sizes(sizes, 32);
+    while (ns > 0 && sizes[ns - 1] > cap) ns--;
+    if (ns < 32 && (ns == 0 || sizes[ns - 1] < cap)) sizes[ns++] = cap;   /* the sweep ends at the cap (128 MB copies) */
     bm_pin();
     double first = 0, last = 0;
     for (int al = 0; al < 2; al++) {
@@ -246,14 +248,14 @@ TEST(mem_scalar_kernels_correctness) {
 TEST(memcpy_sweep_scalar)    { mb_case("memcpy", "scalar", cpy_scalar, NULL); }
 TEST(memcpy_sweep_crt)       { mb_case("memcpy", "crt", cpy_crt, NULL); }
 TEST(memcpy_sweep_sse2)      { BM_NEED(SSE2); mb_case("memcpy", "sse2", cpy_sse2, NULL); }
-TEST(memcpy_sweep_sse2_nt)   { BM_NEED(SSE2); mb_case("memcpy", "sse2_nt", cpy_sse2_nt, NULL); }
-TEST(memcpy_sweep_avx)       { BM_NEED(AVX); mb_case("memcpy", "avx", cpy_avx, NULL); }
-TEST(memcpy_sweep_avx512)    { BM_NEED(AVX512F); mb_case("memcpy", "avx512", cpy_avx512, NULL); }
+TEST(memcpy_sweep_nt_sse2)   { BM_NEED(SSE2); mb_case("memcpy", "sse2_nt", cpy_sse2_nt, NULL); }
+TEST(memcpy_sweep_avx_ymm)     { BM_NEED(AVX); mb_case("memcpy", "avx", cpy_avx, NULL); }
+TEST(memcpy_sweep_avx512_zmm)  { BM_NEED(AVX512F); mb_case("memcpy", "avx512", cpy_avx512, NULL); }
 TEST(memcpy_sweep_rep_movsb) { mb_case("memcpy", "rep_movsb", cpy_rep_movsb, NULL); }
 TEST(memset_sweep_scalar)    { mb_case("memset", "scalar", NULL, set_scalar); }
 TEST(memset_sweep_crt)       { mb_case("memset", "crt", NULL, set_crt); }
 TEST(memset_sweep_sse2)      { BM_NEED(SSE2); mb_case("memset", "sse2", NULL, set_sse2); }
-TEST(memset_sweep_sse2_nt)   { BM_NEED(SSE2); mb_case("memset", "sse2_nt", NULL, set_sse2_nt); }
-TEST(memset_sweep_avx)       { BM_NEED(AVX); mb_case("memset", "avx", NULL, set_avx); }
-TEST(memset_sweep_avx512)    { BM_NEED(AVX512F); BM_NEED(AVX512BW); mb_case("memset", "avx512", NULL, set_avx512); }
+TEST(memset_sweep_nt_sse2)   { BM_NEED(SSE2); mb_case("memset", "sse2_nt", NULL, set_sse2_nt); }
+TEST(memset_sweep_avx_ymm)     { BM_NEED(AVX); mb_case("memset", "avx", NULL, set_avx); }
+TEST(memset_sweep_avx512_zmm)  { BM_NEED(AVX512F); BM_NEED(AVX512BW); mb_case("memset", "avx512", NULL, set_avx512); }
 TEST(memset_sweep_rep_stosb) { mb_case("memset", "rep_stosb", NULL, set_rep_stosb); }
