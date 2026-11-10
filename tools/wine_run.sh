@@ -7,6 +7,8 @@
 # - hard timeout (XCR_TIMEOUT seconds, default 600); the prefix's wineserver and children are killed and
 #   the prefix removed afterwards. Exit status = the exe's exit status (124 = timeout).
 # Unix paths given to the exe must be translated: use Z:/abs/path (see scripts/run_all.sh).
+# XCR_WINE_WRAP (optional): a command prefix put before the wine loader inside the timeout, e.g. an
+# instrumentation tool such as Intel SDE (see tools/sde_run.sh). Split on whitespace.
 set -uo pipefail
 [ $# -ge 1 ] || { echo "usage: $0 <exe> [args...]" >&2; exit 2; }
 EXE="$1"; shift
@@ -25,4 +27,4 @@ cleanup() {
 }
 trap cleanup EXIT
 env -u DISPLAY -u WAYLAND_DISPLAY WINEPREFIX="$RUN" WINEARCH=win64 WINEDEBUG="${WINEDEBUG:--all}" \
-    timeout -k 5 "$TMO" "$WINE" "$EXE" "$@"
+    timeout -k 5 "$TMO" ${XCR_WINE_WRAP:-} "$WINE" "$EXE" "$@"
