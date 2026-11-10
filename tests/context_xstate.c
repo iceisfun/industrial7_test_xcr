@@ -2418,6 +2418,9 @@ TEST(xstate_two_workers_isolated) {
 TEST(xstate_suspend_get_resume_loop) {
     /* 200 x (suspend, XSTATE get, resume) on a running YMM worker: every snapshot exact, final state intact. */
     CX_NEED_AVX();
+    if (t_sde_model())   /* emulator artifact (README "Emulated validation"): each emulated Get/SetThreadContext
+                          * takes ~0.3 s, so the worker's bounded spin loop ends before the 200 iterations do */
+        t_expect_fail("Intel SDE (%s): emulation too slow for the worker's bounded spin loop", t_sde_model());
     cx_args *a = cx_args_new(0x7900, 0);
     REQUIRE(a);
     cx_xc x;
