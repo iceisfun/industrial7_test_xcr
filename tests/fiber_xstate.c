@@ -37,6 +37,18 @@
  *   - Fibers doc: TLS accessed by a fiber is the TLS of the thread running it; ExitThread from a fiber
  *     exits the thread; "If your fiber function returns, the thread running the fiber exits."
  *
+ *   - Re-checked in review (kernelbase SwitchToFiber 0x716a0 -> SwitchToFiberContext 0xb6050 asm): the save
+ *     path runs fnclex before fnstcw, so the outgoing fiber's x87 exception flags are dropped (INFO only);
+ *     MXCSR is stmxcsr/ldmxcsr whole (flags included, INFO only: the ABI makes them volatile); the dwFlags
+ *     word (CONTEXT_FLOATING_POINT|0x100000 when FIBER_FLAG_FLOAT_SWITCH) is never consulted on x64.
+ *     BaseFiberStart: start routine, then RtlExitUserThread(0). RtlFlsGetValue fails with
+ *     STATUS_INVALID_PARAMETER also when the current fiber has no FLS block yet (so only NULL is checked
+ *     for a fresh fiber/thread, never the last error).
+ *   - Effect checks beyond reading MXCSR back: per-fiber exception masks change whether DIVSS 1/0 traps
+ *     (child process), frame-based SEH dispatch and longjmp unwinding on a fiber stack (child; they need
+ *     the NT_TIB stack limits swapped), user APCs run on the running fiber's stack, fibers inside a
+ *     thread-pool callback.
+ *
  * Not checked (INFO/NOTE only): SwitchToFiber(GetCurrentFiber()) (doc: "unpredictable"), SwitchToFiber(NULL)
  * or from a non-fiber thread (undefined), MXCSR/x87 status flags, volatile XMM, upper YMM/ZMM, the
  * initial FP state of a new fiber, thread exit codes the docs do not specify.
@@ -2245,6 +2257,286 @@ TEST(fls_many_indexes_many_fibers) {
     for (int k = 0; k < c.n; k++) FlsFree(c.idx[k]);
     REQUIRE(c.main && c.f[0] && c.f[3]);
     CHECKF(c.bad == 0, "FLS values crossed between fibers %ld times (%d indexes)", c.bad, c.n);
+}
+
+/* ======================================================================== */
+/*        per-fiber MXCSR exception masks have a real effect (child)        */
+/* ======================================================================== */
+/* Fiber A runs with every SSE exception masked (0x1F80), fiber B with ZM unmasked (0x1D80). After every
+ * switch each side divides 1/0 with DIVSS. Per-fiber MXCSR => A never traps and B traps on every resume;
+ * shared MXCSR => the other way round. A VEH masks the exception in the faulting context and continues,
+ * so the faulting DIVSS re-executes (SIMD FP exceptions are faults, SDM Vol.1 11.5.1) and yields +inf.
+ * Deliberate faults, so the whole thing runs in a child process. */
+#ifndef STATUS_FLOAT_MULTIPLE_TRAPS
+#define STATUS_FLOAT_MULTIPLE_TRAPS 0xC00002B5u
+#endif
+#ifndef STATUS_FLOAT_MULTIPLE_FAULTS
+#define STATUS_FLOAT_MULTIPLE_FAULTS 0xC00002B4u
+#endif
+#define TRAP_N 200
+static volatile long g_trap_n[2], g_trap_total;
+static volatile int g_trap_side;
+static void *g_trap_a, *g_trap_b;
+static volatile long g_trap_badres;
+static LONG CALLBACK veh_trap(EXCEPTION_POINTERS *ep) {
+    DWORD c = ep->ExceptionRecord->ExceptionCode;
+    if (c != STATUS_FLOAT_MULTIPLE_TRAPS && c != STATUS_FLOAT_MULTIPLE_FAULTS && c != STATUS_FLOAT_DIVIDE_BY_ZERO)
+        return EXCEPTION_CONTINUE_SEARCH;
+    InterlockedIncrement(&g_trap_n[g_trap_side & 1]);
+    if (InterlockedIncrement(&g_trap_total) > 10 * TRAP_N) TerminateProcess(GetCurrentProcess(), 0xDEAD);  /* no endless refault */
+    CONTEXT *x = ep->ContextRecord;
+#ifdef T_X64
+    x->MxCsr = (x->MxCsr | 0x1F80u) & ~MXC_FLAGS;
+    x->FltSave.MxCsr = x->MxCsr;
+#else
+    if ((x->ContextFlags & CONTEXT_EXTENDED_REGISTERS) != CONTEXT_EXTENDED_REGISTERS) {
+        printf("TRAP_NO_EXTENDED_CONTEXT=1\n"); fflush(stdout); TerminateProcess(GetCurrentProcess(), 0xBADC);
+    }
+    uint32_t m; memcpy(&m, x->ExtendedRegisters + 24, 4); m = (m | 0x1F80u) & ~MXC_FLAGS; memcpy(x->ExtendedRegisters + 24, &m, 4);
+#endif
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+static T_NOINLINE void trap_div(void) {
+    float a = 1.0f, b = 0.0f, r; uint32_t u;
+    __asm__ volatile("divss %2, %0" : "=x"(r) : "0"(a), "x"(b));
+    memcpy(&u, &r, 4);
+    if (u != 0x7F800000u) g_trap_badres++;
+}
+static void WINAPI fp_trap_b(void *p) {
+    (void)p;
+    for (;;) {
+        t_set_mxcsr(0x1D80);              /* ZM unmasked */
+        SwitchToFiber(g_trap_a);
+        g_trap_side = 1;
+        trap_div();
+    }
+}
+CHILD(fiber_mxcsr_trap) {
+    int flagged = argc > 1 ? atoi(argv[1]) : 1;
+    if (!AddVectoredExceptionHandler(1, veh_trap)) return 9;
+    g_trap_a = ConvertThreadToFiberEx(NULL, flagged ? FIBER_FLAG_FLOAT_SWITCH : 0);
+    if (!g_trap_a) return 10;
+    g_trap_b = CreateFiberEx(0, 0, flagged ? FIBER_FLAG_FLOAT_SWITCH : 0, fp_trap_b, NULL);
+    if (!g_trap_b) return 11;
+    for (int i = 0; i < TRAP_N; i++) {
+        t_set_mxcsr(0x1F80);
+        SwitchToFiber(g_trap_b);
+        g_trap_side = 0;
+        trap_div();
+    }
+    t_set_mxcsr(0x1F80);
+    printf("TRAP_A=%ld\nTRAP_B=%ld\nTRAP_BADRES=%ld\n", g_trap_n[0], g_trap_n[1], g_trap_badres);
+    fflush(stdout);
+    return 0;
+}
+static void trap_case(int flagged, int exp) {
+    static t_child_result r;
+    REQUIRE(t_child_run("fiber_mxcsr_trap", flagged ? "1" : "0", 20000, &r));
+    CHECK(!r.timed_out);
+    char v[32];
+    REQUIREF(!t_child_find(&r, "TRAP_NO_EXTENDED_CONTEXT=", v, sizeof v), "exception context lacks CONTEXT_EXTENDED_REGISTERS");
+    REQUIREF(r.exit_code == 0, "child exit 0x%lx exception 0x%lx", (unsigned long)r.exit_code, (unsigned long)r.exc_code);
+    long a = -1, b = -1, bad = -1;
+    if (t_child_find(&r, "TRAP_A=", v, sizeof v)) a = atol(v);
+    if (t_child_find(&r, "TRAP_B=", v, sizeof v)) b = atol(v);
+    if (t_child_find(&r, "TRAP_BADRES=", v, sizeof v)) bad = atol(v);
+    REQUIRE(a >= 0 && b >= 0 && bad >= 0);
+    t_info("traps_A", "%ld", a);
+    t_info("traps_B", "%ld", b);
+    CHECKF(bad == 0, "1/0 with ZM masked (or after the handler masked it) did not give +inf %ld times", bad);
+    if (exp == 1) {
+        wine_gap(a != 0 || b != TRAP_N - 1, "SwitchToFiber does not switch MXCSR / x87 control word per fiber");
+        CHECKF(a == 0, "fiber A (all masked) took %ld divide-by-zero traps: fiber B's unmasked MXCSR leaked", a);
+        CHECKF(b == TRAP_N - 1, "fiber B (ZM unmasked) took %ld traps, want %d", b, TRAP_N - 1);
+    } else if (exp == 0) {
+        CHECKF(a == TRAP_N, "shared MXCSR: fiber A took %ld traps, want %d (B's unmasked state)", a, TRAP_N);
+        CHECKF(b == 0, "shared MXCSR: fiber B took %ld traps, want 0 (A's masked state)", b);
+    }
+}
+TEST(fiber_mxcsr_unmasked_trap_per_fiber_float_switch) { trap_case(1, 1); }
+TEST(fiber_mxcsr_unmasked_trap_noflag) { trap_case(0, fp_expect(0)); }
+
+/* ======================================================================== */
+/*        frame-based SEH dispatch and longjmp unwinding on a fiber stack   */
+/* ======================================================================== */
+/* RtlDispatchException / RtlUnwindEx accept only frames inside the current stack limits (NT_TIB
+ * StackLimit/StackBase), so these work on a fiber only when SwitchToFiber swapped the TIB stack fields.
+ * A broken implementation crashes, hence a child process. */
+#define EXC_FIBER_SEH 0xE0F1BE02u
+static volatile long g_sehf_hits, g_sehf_unwinds;
+static volatile uintptr_t g_sehf_frame;
+__attribute__((used)) EXCEPTION_DISPOSITION __cdecl fx_seh_handler(EXCEPTION_RECORD *rec, void *frame, CONTEXT *ctx, void *dc);
+__attribute__((used)) EXCEPTION_DISPOSITION __cdecl fx_seh_handler(EXCEPTION_RECORD *rec, void *frame, CONTEXT *ctx, void *dc) {
+    (void)ctx; (void)dc;
+    if (rec->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)) { g_sehf_unwinds++; return ExceptionContinueSearch; }
+    if (rec->ExceptionCode != EXC_FIBER_SEH) return ExceptionContinueSearch;
+    g_sehf_frame = (uintptr_t)frame;
+    g_sehf_hits++;
+    return ExceptionContinueExecution;
+}
+#ifdef T_X64
+/* void fx_seh_call(void (*fn)(void *), void *arg): calls fn inside a frame whose language handler is fx_seh_handler */
+__asm__(
+    ".globl fx_seh_call\n.def fx_seh_call; .scl 2; .type 32; .endef\n.seh_proc fx_seh_call\nfx_seh_call:\n"
+    "  .seh_handler fx_seh_handler, @except, @unwind\n"
+    "  pushq %rbp\n  .seh_pushreg %rbp\n  subq $32, %rsp\n  .seh_stackalloc 32\n  .seh_endprologue\n"
+    "  movq %rcx, %rax\n  movq %rdx, %rcx\n  callq *%rax\n  nop\n"
+    "  addq $32, %rsp\n  popq %rbp\n  ret\n  .seh_endproc\n");
+void fx_seh_call(void (*fn)(void *), void *arg);
+#else
+typedef struct fx_reg { struct fx_reg *next; void *handler; } fx_reg;
+static T_NOINLINE void fx_seh_call(void (*fn)(void *), void *arg) {
+    volatile fx_reg r;                     /* x86: registration record on the (fiber) stack, fs:[0] chain */
+    r.handler = (void *)fx_seh_handler;
+    __asm__ volatile("movl %%fs:0, %0" : "=r"(r.next));
+    __asm__ volatile("movl %0, %%fs:0" :: "r"(&r) : "memory");
+    fn(arg);
+    __asm__ volatile("movl %0, %%fs:0" :: "r"(r.next) : "memory");
+}
+#endif
+static void raise_seh(void *p) { (void)p; RaiseException(EXC_FIBER_SEH, 0, 0, NULL); }
+#include <setjmp.h>
+static jmp_buf g_sehf_jb;
+static void do_longjmp(void *p) { (void)p; longjmp(g_sehf_jb, 7); }
+static void *g_sehf_main;
+static uintptr_t g_sehf_lo, g_sehf_hi;
+static T_NOINLINE int sehf_longjmp_probe(void) {
+    volatile int marker = 0x5A5A;
+    int rv = setjmp(g_sehf_jb);
+    if (rv == 0) { fx_seh_call(do_longjmp, NULL); return -1; }
+    return marker == 0x5A5A ? rv : -2;
+}
+static void WINAPI fp_sehf(void *p) {
+    (void)p;
+    stack_range(&g_sehf_lo, &g_sehf_hi);
+    fx_seh_call(raise_seh, NULL);
+    printf("SEHF_HITS=%ld\nSEHF_FRAME_IN_FIBER=%d\nSEHF_CUR_OK=%d\n", g_sehf_hits,
+           g_sehf_frame >= g_sehf_lo && g_sehf_frame < g_sehf_hi, GetCurrentFiber() != g_sehf_main);
+    fflush(stdout);
+    long unw0 = g_sehf_unwinds;
+    int lj = sehf_longjmp_probe();
+    printf("SEHF_LONGJMP=%d\nSEHF_UNWIND_CALLS=%ld\n", lj, g_sehf_unwinds - unw0);
+    fflush(stdout);
+    for (;;) SwitchToFiber(g_sehf_main);
+}
+CHILD(fiber_seh) {
+    (void)argc; (void)argv;
+    g_sehf_main = ConvertThreadToFiber(NULL);
+    if (!g_sehf_main) return 10;
+    void *f = CreateFiberEx(0, 256 * 1024, FIBER_FLAG_FLOAT_SWITCH, fp_sehf, NULL);
+    if (!f) return 11;
+    SwitchToFiber(f);
+    DeleteFiber(f);
+    printf("SEHF_DONE=1\n");
+    return 0;
+}
+TEST(fiber_seh_frame_handler_and_longjmp_child) {
+    static t_child_result r;
+    REQUIRE(t_child_run("fiber_seh", NULL, 20000, &r));
+    CHECK(!r.timed_out);
+    CHECKF(r.exit_code == 0, "child exit 0x%lx exception 0x%lx", (unsigned long)r.exit_code, (unsigned long)r.exc_code);
+    char v[32];
+    CHECKF(t_child_find(&r, "SEHF_HITS=", v, sizeof v) && !strcmp(v, "1"),
+           "frame-based handler on the fiber stack was not called exactly once (%s)", t_child_find(&r, "SEHF_HITS=", v, sizeof v) ? v : "missing");
+    CHECKF(t_child_find(&r, "SEHF_FRAME_IN_FIBER=", v, sizeof v) && !strcmp(v, "1"), "establisher frame not on the fiber stack");
+    CHECKF(t_child_find(&r, "SEHF_CUR_OK=", v, sizeof v) && !strcmp(v, "1"), "GetCurrentFiber wrong after the exception");
+    CHECKF(t_child_find(&r, "SEHF_LONGJMP=", v, sizeof v) && !strcmp(v, "7"), "longjmp across a SEH frame on a fiber stack: %s",
+           t_child_find(&r, "SEHF_LONGJMP=", v, sizeof v) ? v : "missing");
+    if (t_child_find(&r, "SEHF_UNWIND_CALLS=", v, sizeof v)) t_info("longjmp_unwind_handler_calls", "%s", v);
+    CHECK(strstr(r.out, "SEHF_DONE=1") != NULL);
+}
+
+/* ======================================================================== */
+/*                 user APC delivered while a fiber is running              */
+/* ======================================================================== */
+typedef struct apc_ctx {
+    void *main, *f; uintptr_t lo, hi, apc_sp; void *apc_fiber; void *apc_data; long apc_ran; DWORD wait_ret;
+    int bad_nv, mx, cw, queued; t_vregs *in, *out;
+} apc_ctx;
+static apc_ctx *g_apc;
+static void CALLBACK apc_fn(ULONG_PTR p) {
+    apc_ctx *a = (apc_ctx *)p;
+    volatile int here = 0;
+    a->apc_sp = (uintptr_t)&here;
+    a->apc_fiber = GetCurrentFiber();
+    a->apc_data = GetFiberData();
+    a->apc_ran++;
+}
+static void apc_wait(void *p) { (void)p; g_apc->wait_ret = SleepEx(0, TRUE); }
+static void WINAPI fp_apc(void *p) {
+    apc_ctx *a = (apc_ctx *)p;
+    stack_range(&a->lo, &a->hi);
+    t_set_mxcsr(0x5F80); t_set_x87_cw(0x0A7F);
+    a->queued = QueueUserAPC(apc_fn, GetCurrentThread(), (ULONG_PTR)a) != 0;
+    t_vregs_call(T_VK_XMM, a->in, a->out, apc_wait, NULL);
+#ifdef T_X64
+    a->bad_nv = !vr_eq(a->out, a->in, 6, 15, 0, 16);
+#endif
+    a->mx = (int)t_get_mxcsr(); a->cw = t_get_x87_cw();
+    for (;;) SwitchToFiber(a->main);
+}
+static void w_apc(void *p) {
+    apc_ctx *a = (apc_ctx *)p; g_apc = a;
+    a->main = ConvertThreadToFiberEx(NULL, FIBER_FLAG_FLOAT_SWITCH);
+    if (!a->main) return;
+    a->f = CreateFiberEx(0, 0, FIBER_FLAG_FLOAT_SWITCH, fp_apc, a);
+    if (a->f) { SwitchToFiber(a->f); DeleteFiber(a->f); }
+    ConvertFiberToThread();
+}
+TEST(fiber_user_apc_runs_on_fiber) {
+    if (!cpu_has(F_SSE2)) SKIP("SSE2 not usable");
+    apc_ctx a; memset(&a, 0, sizeof a);
+    a.in = vr_alloc(); a.out = vr_alloc();
+    REQUIRE(a.in && a.out);
+    t_vregs_pattern(a.in, T_VK_XMM, 0xA9C0);
+    RUN_WORKER(w_apc, &a);
+    vr_free(a.in); vr_free(a.out);
+    REQUIRE(a.main && a.f);
+    REQUIRE(a.queued);
+    /* SleepEx doc: returns WAIT_IO_COMPLETION when it returns because an APC was called */
+    CHECKF(a.wait_ret == WAIT_IO_COMPLETION, "SleepEx(0, TRUE) returned 0x%lx", (unsigned long)a.wait_ret);
+    CHECK_EQ(a.apc_ran, 1);
+    CHECKF(a.apc_fiber == a.f, "GetCurrentFiber in the APC %p, running fiber %p", a.apc_fiber, a.f);
+    CHECKF(a.apc_data == (void *)&a, "GetFiberData in the APC %p", a.apc_data);
+    CHECKF(a.apc_sp >= a.lo && a.apc_sp < a.hi, "APC ran at %p, outside the running fiber's stack [%p,%p)", (void *)a.apc_sp, (void *)a.lo, (void *)a.hi);
+    CHECKF(((unsigned)a.mx & MXC_CTRL) == 0x5F80, "fiber MXCSR 0x%04x after the APC", (unsigned)a.mx);
+    CHECKF(((unsigned)a.cw & CW_CTRL) == (0x0A7F & CW_CTRL), "fiber x87 CW 0x%04x after the APC", (unsigned)a.cw);
+#ifdef T_X64
+    CHECKF(!a.bad_nv, "xmm6-15 of the fiber changed across an alertable wait that ran an APC");
+#endif
+}
+
+/* ======================================================================== */
+/*           fibers inside a thread-pool callback (convert and back)        */
+/* ======================================================================== */
+typedef struct tp_fiber { duo *d; HANDLE done; } tp_fiber;
+static void CALLBACK tp_fiber_cb(PTP_CALLBACK_INSTANCE inst, void *p) {
+    (void)inst;
+    tp_fiber *t = (tp_fiber *)p;
+    unsigned mx0 = t_get_mxcsr(); unsigned short cw0 = t_get_x87_cw();
+    duo_thread(t->d);
+    t_set_mxcsr(mx0); t_set_x87_cw(cw0);   /* hand the pool thread back as we found it */
+    SetEvent(t->done);
+}
+TEST(fiber_in_threadpool_callback) {
+    init_mxcsr_mask();
+    static duo d; memset(&d, 0, sizeof d);
+    d.conv = 2; d.flagB = FIBER_FLAG_FLOAT_SWITCH; d.iters = 2000; d.sig = 1;
+    d.regs = cpu_has(F_SSE2) ? RK_XMM : RK_NONE;
+    d.mx[0] = 0x3F80; d.mx[1] = 0x5F80; d.cw[0] = 0x067F; d.cw[1] = 0x0A7F;
+    if (!duo_alloc(&d)) { duo_free(&d); SKIP("allocation failed"); }
+    static tp_fiber t; t.d = &d; t.done = CreateEventA(NULL, TRUE, FALSE, NULL);
+    REQUIRE(t.done != NULL);
+    if (!TrySubmitThreadpoolCallback(tp_fiber_cb, &t, NULL)) { CloseHandle(t.done); duo_free(&d); SKIP("TrySubmitThreadpoolCallback failed: %lu", (unsigned long)GetLastError()); }
+    DWORD w = WaitForSingleObject(t.done, 60000);
+    REQUIREF(w == WAIT_OBJECT_0, "thread-pool callback did not finish (wait %lu)", (unsigned long)w);   /* duo stays allocated: the callback may still use it */
+    CloseHandle(t.done);
+    CHECKF(d.err == 0, "setup error %d (GetLastError %lu)", d.err, (unsigned long)d.err_code);
+    CHECK_EQ(d.count, 2000);
+    int exp[2] = { 1, 1 };
+    duo_report_fp(&d, exp);
+    if (d.regs == RK_XMM) duo_report_regs(&d);
+    duo_free(&d);
 }
 
 /* ======================================================================== */
