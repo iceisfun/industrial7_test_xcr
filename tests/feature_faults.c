@@ -58,6 +58,9 @@
  */
 #include "t.h"
 
+/* Emulator artifacts (README "Emulated validation"), under tools/sde_run.sh only; checks unchanged. */
+#define FF_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) %s", t_sde_model(), why); } while (0)
+
 #ifndef CONTEXT_XSTATE
 #ifdef T_X64
 #define CONTEXT_XSTATE 0x00100040
@@ -781,7 +784,7 @@ static void fp_ud(const char *probe) { fp_expect_code(probe, S_ILL); }
 TEST(ud_ud2)              { fp_ud("ud_ud2"); }
 TEST(ud_ud1)              { fp_ud("ud_ud1"); }
 TEST(ud_ud0)              { fp_ud("ud_ud0"); }
-TEST(ud_rsm_outside_smm)  { fp_ud("ud_rsm"); }
+TEST(ud_rsm_outside_smm)  { FF_SDE_XFAIL("Pin asserts translating RSM (the child dies)"); fp_ud("ud_rsm"); }
 TEST(ud_lock_add_reg_dest){ fp_ud("ud_lock_add_reg"); }
 TEST(ud_lock_nop)         { fp_ud("ud_lock_nop"); }
 TEST(ud_lock_cmpxchg_reg_dest) { fp_ud("ud_lock_cmpxchg_reg"); }
@@ -909,8 +912,6 @@ TEST(feat_xsave_without_osxsave) {
 }
 
 /* ---- encodings with defined fallback behaviour (no fault) --------------------------------- */
-/* Emulator artifacts (README "Emulated validation"), under tools/sde_run.sh only; checks unchanged. */
-#define FF_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) %s", t_sde_model(), why); } while (0)
 TEST(lzcnt_or_bsr_semantics) {
     if (!cpu_hw(F_LZCNT)) FF_SDE_XFAIL("runs F3 0F BD as the host's LZCNT although its CPU model has none");
     static fp_res r; fp_expect_nofault("nf_lzcnt_or_bsr", &r);
@@ -1018,6 +1019,7 @@ TEST(priv_invd)          { fp_priv("priv_invd"); }
 TEST(priv_mov_to_dr7)    { fp_priv("priv_mov_to_dr7"); }
 TEST(priv_sysexit) {
     /* Intel: #GP at CPL!=0; AMD: #UD in long mode. Windows lists 0F 35 for any fault type -> PRIV. */
+    FF_SDE_XFAIL("Pin asserts translating SYSEXIT (the child dies)");
     static fp_res r; fp_run("priv_sysexit", &r);
     if (!cpu()->is_intel) {
         /* AMD: SYSEXIT is #UD in long mode (64-bit and compatibility); whether Windows' #UD path rewrites
@@ -1050,7 +1052,7 @@ TEST(priv_lmsw) { fp_priv_after_setup("priv_lmsw", "SMSW"); }
 TEST(priv_mov_from_cr8) { fp_priv("priv_mov_from_cr8"); }
 TEST(priv_mov_to_cr8)   { fp_priv("priv_mov_to_cr8"); }
 TEST(priv_swapgs)       { fp_priv("priv_swapgs"); }
-TEST(priv_sysret)       { fp_priv("priv_sysret"); }
+TEST(priv_sysret)       { FF_SDE_XFAIL("Pin asserts translating SYSRET (the child dies)"); fp_priv("priv_sysret"); }
 #else
 TEST(priv_x64_only)     { SKIP("MOV from CR8, SWAPGS and SYSRET probes are x64 only"); }
 #endif
@@ -1078,14 +1080,17 @@ static void fp_gp(const char *probe) {
 }
 TEST(gp_xsetbv_user_mode) {
     if (!cpu()->osxsave) { t_note("OSXSAVE clear: XSETBV is #UD"); fp_ud("priv_xsetbv"); return; }
+    FF_SDE_XFAIL("emulates XSETBV without the CPL0 check");
     fp_gp("priv_xsetbv");
 }
 TEST(gp_xgetbv_ecx2) {
     if (!cpu()->osxsave) SKIP("OSXSAVE clear: XGETBV itself is #UD");
+    FF_SDE_XFAIL("emulates XGETBV without the #GP check for an unsupported XCR index");
     fp_gp("gp_xgetbv_ecx2");
 }
 TEST(gp_xgetbv_ecx_ffffffff) {
     if (!cpu()->osxsave) SKIP("OSXSAVE clear: XGETBV itself is #UD");
+    FF_SDE_XFAIL("emulates XGETBV without the #GP check for an unsupported XCR index");
     fp_gp("gp_xgetbv_ecx_ffffffff");
 }
 TEST(gp_xgetbv_ecx1_without_xgetbv1) {
@@ -1096,8 +1101,8 @@ TEST(gp_xgetbv_ecx1_without_xgetbv1) {
 TEST(gp_movaps_misaligned)  { fp_gp("gp_movaps_misaligned"); }
 TEST(gp_ldmxcsr_reserved_bit) { fp_gp("gp_ldmxcsr_reserved"); }
 TEST(gp_fxsave_misaligned)  { if (!cpu_hw(F_FXSR)) SKIP("no FXSR"); fp_gp("gp_fxsave_misaligned"); }
-TEST(gp_xsave_misaligned)   { if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable"); fp_gp("gp_xsave_misaligned"); }
-TEST(gp_xrstor_bad_header)  { if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable"); fp_gp("gp_xrstor_bad_header"); }
+TEST(gp_xsave_misaligned)   { if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable"); FF_SDE_XFAIL("XSAVE emulation has no alignment #GP"); fp_gp("gp_xsave_misaligned"); }
+TEST(gp_xrstor_bad_header)  { if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable"); FF_SDE_XFAIL("XRSTOR emulation has no header #GP (it stops the child)"); fp_gp("gp_xrstor_bad_header"); }
 TEST(gp_int_n_dpl0_gate)    { fp_gp("gp_int_0e"); }
 static void fp_gp_int(const char *probe, const char *what) {
     static fp_res r; fp_run(probe, &r);
@@ -1106,7 +1111,7 @@ static void fp_gp_int(const char *probe, const char *what) {
     DWORD c[2] = { S_AV, S_PRIV };
     fp_expect_fault(probe, &r, c, 2, 0, FX_FAULT);
 }
-TEST(gp_int_80_not_a_system_call) { fp_gp_int("gp_int_80", "INT 80h"); }
+TEST(gp_int_80_not_a_system_call) { FF_SDE_XFAIL("Pin treats INT 80h as a Linux system call (the child dies)"); fp_gp_int("gp_int_80", "INT 80h"); }
 TEST(gp_int_21_not_a_system_call) { fp_gp_int("gp_int_21", "INT 21h"); }
 /* XSAVES/XRSTORS manage supervisor state: #GP at CPL3 when implemented (Windows: not a listed
  * privileged opcode -> ACCESS_VIOLATION; PRIVILEGED_INSTRUCTION tolerated), #UD when absent or OSXSAVE clear. */
@@ -1253,6 +1258,7 @@ TEST(trap_icebp_recorded) {
     if (r.fault) t_note("ICEBP: 0x%08lx %s ea=insn%+lld", (unsigned long)r.code, fp_code_name(r.code), r.ea);
 }
 TEST(trap_single_step_tf) {
+    FF_SDE_XFAIL("Pin cannot single-step the application (a TF trap kills the child)");
     static fp_res r; fp_run("trap_single_step", &r);
     DWORD c[1] = { S_SS };
     /* POPF sets TF: the trap is taken after the NEXT instruction (the NOP at insn) completes. */
