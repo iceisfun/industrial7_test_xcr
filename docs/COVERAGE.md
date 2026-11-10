@@ -195,6 +195,26 @@ diffs two runs).
 | scripts/run_all.ps1, compare_results.py | present (+ run_all.sh) |
 | CMakeLists.txt | present (best effort, not built here) |
 
+## Cases with no evidence on any system: for the Windows baseline run (G2) to confirm
+
+These cases only SKIP or XFAIL under Wine, so their checks have never passed anywhere. Each one now has
+a self-check path that runs without the missing API, so the checking logic is exercised. Each SKIP
+reason names the OS build the case needs. The G2 baseline on Windows 10 22H2 and Windows 11 24H2 (x64
+and WOW64) must show the result in the "expected on Windows" column. Any other result needs triage
+against the decomp or documentation cited in the source.
+
+| Case (exe) | Needs | Self-check path that runs everywhere (Wine result) | Expected on Windows |
+|---|---|---|---|
+| cap_rtlcapturecontext2_xstate_x64 (exception_xstate) | RtlCaptureContext2: Windows 10 2004 (build 19041)+, x64 | cap_reference_capture2_selfcheck_x64 runs the same checks on the hand-built reference capture in tests/capture2_ref.h, which is pinned to the 19041 ntdll disassembly (PASS) | PASS. In 19041 the export does not write the AVX component (it merges only CET_U, feature 11), so the AVX area must be left untouched or match the reference as a whole. The old hard check of the YMM uppers was wrong for 19041 and was removed. INFO ymm_upper_captured records which case occurred. |
+| cap_rtlcapturecontext2_vs_reference_x64 (exception_xstate) | same | With no export, it compares the reference against itself to self-check the comparator (SKIP after the checks pass) | PASS. Every field matches the reference field by field: flags, MXCSR, segment registers, EFlags, GPRs, Rip/Rsp, FXSAVE bytes 0-463 and the untouched fields. The XSTATE mask may differ only in bit 11. |
+| cap_rtlrestorecontext_ymm_x64, cap_ntcontinue_ymm_x64 (exception_xstate) | same | cap_rtlrestorecontext_ymm_refcapture_x64 and cap_ntcontinue_ymm_refcapture_x64 feed a reference-captured XSTATE record to RtlRestoreContext / NtContinue (PASS) | PASS |
+| ctx_rtlcapturecontext2_xstate (simd_bench), ctx_rtlcapturecontext2_xstate (context_bench) | same | ctx_capture2_reference_selfcheck (simd_bench) runs the same checks and the timing loop on the reference (PERF) | PERF |
+| thread_enabled_features_win11 (xstate_windows), api_thread_enabled_xstate_features (xcr0_probe), detect_vs_GetThreadEnabledXStateFeatures (simd_dispatch) | GetThreadEnabledXStateFeatures: Windows 11 (build 22000)+ | thread_enabled_features_oracle derives the oracle from XCR0 minus the XFD-capable components (CPUID.(0Dh,i):ECX[2]) and restricts it to what GetEnabledXStateFeatures reports (SKIP after the oracle is recorded). Wine reports 0x7 against XCR0 0x207, so PKRU is noted as a discrepancy. | PASS. Every non-optional XCR0 component is enabled for the thread, and there are no user bits outside the oracle. |
+| enable_optional_features_child (xstate_windows) | EnableProcessOptionalXStateFeatures: Windows 11 (build 22000)+ | The optional-component oracle is recorded in INFO optional_oracle. The case has no AMX host to run on. | Without AMX: PASS (only the parameter behaviour is recorded). With AMX: AFTER and NEWTHREAD (a thread created after the call) both include TILECFG and TILEDATA. |
+| special_user_apc_async_interrupt (thread_xstate) | QueueUserAPC2 special APCs: Windows 11 (build 22000) / Server 2022 (build 20348), native x64 process. The x86 build gets ERROR_NOT_SUPPORTED (50) under Wine and SKIPs. | special_user_apc_emulated_context_hijack interrupts the non-alertable spinners with SuspendThread + Get/SetThreadContext, runs the same APC routine, and resumes with NtContinue (PASS x64 and x86: 512 hijacks with full legacy restore) | x64 Win11: PASS. Win10, or the x86 build: SKIP with the build named. |
+| vch_called_after_veh_continue, vch_context_edit_takes_effect (exception_xstate) | AddVectoredContinueHandler (XP+). Wine never calls continue handlers (XFAIL). | vch_reference_dispatch_selfcheck runs the continue phase the way 19041 RtlDispatchException does: RtlpCallVectoredHandlers(rec, ctx, 1) on the same CONTEXT after a VEH continues. It applies the same expectations (PASS). | PASS (no XFAIL outside Wine) |
+| xcr0_identical_across_processor_groups (xcr0_probe) | More than 64 logical processors, or a test boot with `bcdedit /set groupsize <n>` (Windows 7 / Server 2008 R2+) | The case pins one worker per CPU of every active group with SetThreadGroupAffinity, then checks GetCurrentProcessorNumberEx (group/number), XCR0 and CPUID.(0Dh,0).EBX. It also checks that a nonexistent group is refused (Wine: error 87). On one group, it SKIPs after the group 0 checks pass. | Multi-group host: PASS. Single group: SKIP. |
+
 ## Open work (most valuable first)
 
 1. **Nothing has been validated on real Windows.** Every hard check derived from a decomp or the
