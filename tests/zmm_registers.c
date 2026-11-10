@@ -684,6 +684,8 @@ TEST(zmm_fault_kmov_ud_when_unusable) { zx_expect_ud_child("zmm_child_kmov", "VE
 
 TEST(zmm_fault_xsetbv_user_mode) {
     if (!cpu()->osxsave) SKIP("OSXSAVE=0: XGETBV/XSETBV are #UD, nothing to test");
+    if (t_sde_model())   /* emulator artifact, see README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s) emulates XSETBV without the CPL0 check: no #GP at CPL3", t_sde_model());
     REQUIREF(t_child_run("zmm_child_xsetbv", "", 10000, &g_cr), "child did not start");
     CHECK(!g_cr.timed_out);
     char v[64];
@@ -978,7 +980,16 @@ TEST(zmm_xsavec_avx512_compacted) {
     uint64_t bv, xc; memcpy(&bv, g_xarea + 512, 8); memcpy(&xc, g_xarea + 520, 8);
     t_info("xstate_bv", "0x%llx", (unsigned long long)bv);
     t_info("xcomp_bv", "0x%llx", (unsigned long long)xc);
+#ifdef T_X64
     CHECKF(xc == (rfbm | (1ull << 63)), "XCOMP_BV=0x%llx want 0x%llx", (unsigned long long)xc, (unsigned long long)(rfbm | (1ull << 63)));
+#else
+    /* SDM vol.1 13.5.5/13.13: ZMM16-31 (Hi16_ZMM, component 7) do not exist outside 64-bit mode and the
+     * XSAVE feature set does not access them there; whether XSAVEC still reports RFBM[7] in XCOMP_BV in
+     * 32-bit mode is not pinned down (Intel SDE clears it). Accept both; components 0-6 must be exact. */
+    CHECKF(xc == (rfbm | (1ull << 63)) || xc == ((rfbm & ~0x80ull) | (1ull << 63)), "XCOMP_BV=0x%llx want 0x%llx (bit 7 optional in 32-bit mode)",
+           (unsigned long long)xc, (unsigned long long)(rfbm | (1ull << 63)));
+    if (!(xc & 0x80)) t_note("32-bit XSAVEC left XCOMP_BV[7] (Hi16_ZMM) clear");
+#endif
     CHECKF((bv & 0x66) == 0x66, "XSTATE_BV=0x%llx", (unsigned long long)bv);
     uint32_t off[8];
     for (int i = 0; i < 8; i++) off[i] = (rfbm >> i & 1) && i >= 2 ? xsave_compacted_offset(rfbm, i) : 0;
@@ -2686,7 +2697,12 @@ TEST(zmm_fault_suppression_masked_load) { NEED_F(); zx_child_expect_ok("zmm_fs_m
 TEST(zmm_fault_suppression_masked_store) { NEED_F(); zx_child_expect_ok("zmm_fs_masked_store"); }
 TEST(zmm_fault_suppression_bytes_bw) { NEED_X(F_AVX512BW); zx_child_expect_ok("zmm_fs_masked_bytes_bw"); }
 TEST(zmm_fault_suppression_gather_scatter) { NEED_F(); zx_child_expect_ok("zmm_fs_gather_scatter"); }
-TEST(zmm_fault_suppression_compress_expand) { NEED_F(); zx_child_expect_ok("zmm_fs_compress_expand"); }
+TEST(zmm_fault_suppression_compress_expand) {
+    NEED_F();
+    if (t_sde_model())   /* emulator artifact (README "Emulated validation"): SDE probes the whole 64-byte operand */
+        t_expect_fail("Intel SDE (%s) faults on VPCOMPRESSD/VPEXPANDD whose popcnt(k) elements end at a guard page", t_sde_model());
+    zx_child_expect_ok("zmm_fs_compress_expand");
+}
 TEST(zmm_fault_active_lane_faults) {
     NEED_F();
     zx_child_expect_fault("zmm_ff_active_lane", STATUS_ACCESS_VIOLATION, "masked load with an active lane on PAGE_NOACCESS");
@@ -2697,6 +2713,8 @@ TEST(zmm_fault_gather_active_lane_faults) {
 }
 TEST(zmm_fault_misaligned_vmovdqa64) {
     NEED_F();
+    if (t_sde_model())   /* emulator artifact, see README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s) does not raise #GP for misaligned emulated EVEX aligned moves", t_sde_model());
     REQUIREF(t_child_run("zmm_ff_misaligned_vmovdqa64", "", 15000, &g_cr), "child did not start");
     CHECK(!g_cr.timed_out);
     char v[16];
@@ -2715,6 +2733,8 @@ TEST(zmm_fault_unmasked_fp_exceptions) {
     NEED_F();
     /* SDM 15.6 (exception class E2): masked-off elements neither set flags nor raise unmasked exceptions;
      * {sae} suppresses every FP exception; an active element with an unmasked exception raises #XM */
+    if (t_sde_model())   /* emulator artifact, see README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s) cannot deliver an unmasked #XM from an emulated EVEX instruction (Pin aborts)", t_sde_model());
     REQUIREF(t_child_run("zmm_fx_unmasked_ze", "", 15000, &g_cr), "child did not start");
     CHECK(!g_cr.timed_out);
     char v[64];

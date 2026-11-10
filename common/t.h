@@ -117,6 +117,7 @@ void t_log(const char *fmt, ...) T_PRINTF(1, 2);
 int         t_verbose(void);
 int         t_is_wine(void);          /* ntdll exports wine_get_version: use ONLY to pick XFAIL/SKIP reasons */
 const char *t_wine_version(void);     /* "" when not wine */
+const char *t_sde_model(void);        /* XCR_SDE env (tools/sde_run.sh: Intel SDE model) or NULL: use ONLY to pick XFAIL/NOTE reasons */
 const char *t_case_name(void);        /* current case or "" */
 const char *t_exe_name(void);         /* e.g. "xmm_registers" */
 const char *t_self_path(void);        /* full path of this exe */
@@ -142,6 +143,10 @@ int t_child_run(const char *name, const char *args, DWORD timeout_ms, t_child_re
 int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r);
 /* Look for a line starting with prefix in r->out; copies the rest of the line to val. */
 int t_child_find(const t_child_result *r, const char *prefix, char *val, size_t cap);
+/* 1 when running under Intel SDE (t_sde_model()) and the child's output carries an SDE error report
+ * (chip-check "instruction not valid for specified chip/xcr0", Pin abort): SDE terminated the child
+ * instead of raising the architectural exception. Use ONLY to pick an XFAIL reason. */
+int t_sde_killed_child(const t_child_result *r);
 
 /* ---- small utilities (util.c) ------------------------------------------------ */
 /* Resolve an export at run time (LoadLibraryA on first use). Use for every API that may be missing on

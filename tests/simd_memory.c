@@ -952,6 +952,8 @@ TEST(nt_vex_evex_misaligned_faults) {
     expect_av("vmovntdq_xmm_mis", -1, 0);
     expect_av("vmovntdq_ymm_mis", -1, 0);
     expect_av("vmovntdqa_ymm_mis", -1, 0);
+    if (t_sde_model() && cpu_has(F_AVX512F))   /* emulator artifact, README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s) does not raise #GP for misaligned emulated EVEX VMOVNTDQ", t_sde_model());
     expect_av("vmovntdq_zmm_mis", -1, 0);
 }
 TEST(nt_store_to_noaccess_and_readonly_faults) {
@@ -1365,6 +1367,8 @@ TEST(rdtscp_aux_stable_per_cpu) {
 }
 TEST(rdpid_equals_rdtscp_aux) {
     NEED(F_RDPID); NEED(F_RDTSCP);
+    if (t_sde_model())   /* emulator artifact, README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s) emulates RDPID with its own TSC_AUX value", t_sde_model());
     int cpus[64]; int nc = sm_cpu_list(cpus, 64);
     if (nc > 8) nc = 8;
     pr_begin();
@@ -1473,10 +1477,15 @@ TEST(cache_clflush_readonly_exec_ok)   { flush_perm_case(FL_CLFLUSH, F_CLFSH); }
 TEST(cache_clflush_noaccess_faults)    { NEED(F_CLFSH); expect_av("clflush_noacc", -1, 1); }
 TEST(cache_clflushopt_data_intact)     { flush_data_case(FL_CLFLUSHOPT, F_CLFLUSHOPT); }
 TEST(cache_clflushopt_readonly_exec_ok){ flush_perm_case(FL_CLFLUSHOPT, F_CLFLUSHOPT); }
-TEST(cache_clflushopt_noaccess_faults) { NEED(F_CLFLUSHOPT); expect_av("clflushopt_noacc", -1, 1); }
+/* Emulator artifacts (README "Emulated validation"): under tools/sde_run.sh failures after this point are
+ * expected; the checks themselves are unchanged, and a pass is reported as XPASS. */
+#define SM_SDE_XFAIL(why) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) " why, t_sde_model()); } while (0)
+/* SDE does not fault CLFLUSHOPT/CLWB on a no-access page */
+#define SM_SDE_FLUSH_XFAIL(n) do { if (t_sde_model()) t_expect_fail("Intel SDE (%s) emulates " n " without the page-permission check", t_sde_model()); } while (0)
+TEST(cache_clflushopt_noaccess_faults) { NEED(F_CLFLUSHOPT); SM_SDE_FLUSH_XFAIL("CLFLUSHOPT"); expect_av("clflushopt_noacc", -1, 1); }
 TEST(cache_clwb_data_intact)           { flush_data_case(FL_CLWB, F_CLWB); }
 TEST(cache_clwb_readonly_exec_ok)      { flush_perm_case(FL_CLWB, F_CLWB); }
-TEST(cache_clwb_noaccess_faults)       { NEED(F_CLWB); expect_av("clwb_noacc", -1, 1); }
+TEST(cache_clwb_noaccess_faults)       { NEED(F_CLWB); SM_SDE_FLUSH_XFAIL("CLWB"); expect_av("clwb_noacc", -1, 1); }
 
 TEST(cache_cldemote_hint) {
     /* CLDEMOTE (0F 1C /0) lies in the reserved-NOP hint space: a NOP where unsupported. */
@@ -1989,6 +1998,7 @@ TEST(masked_vex_active_lane_in_bad_page_faults) {
 TEST(masked_avx512_active_lane_in_bad_page_faults) {
     NEED(F_AVX512F);
     expect_av("zmm_ld_active", 0, 1);
+    SM_SDE_XFAIL("reports a fault of an emulated EVEX store as a read (ExceptionInformation[0]=0)");
     expect_av("zmm_st_active", 1, 1);
 }
 TEST(masked_avx512_aligned_move_k0_misaligned_info) {
@@ -2012,6 +2022,7 @@ T_TARGET("avx512f") T_NOINLINE static void zc_expand_d_512(void *p, const void *
 }
 TEST(masked_avx512_compress_store_bounded) {
     NEED(F_AVX512F);
+    SM_SDE_XFAIL("probes the whole 64-byte operand of VPCOMPRESSD instead of popcnt(k) elements");
     sm_region rg; REGION4(rg);
     pr_begin();
     t_rng r; t_rng_seed(&r, 0xC0);
@@ -2036,6 +2047,7 @@ TEST(masked_avx512_compress_store_bounded) {
 }
 TEST(masked_avx512_expand_load_bounded) {
     NEED(F_AVX512F);
+    SM_SDE_XFAIL("probes the whole 64-byte operand of VPEXPANDD instead of popcnt(k) elements");
     sm_region rg; REGION4(rg);
     pr_begin();
     t_rng r; t_rng_seed(&r, 0xE0);
@@ -2224,6 +2236,7 @@ TEST(gather_avx2_active_lane_in_bad_page_faults) { NEED(F_AVX2); expect_av("gath
 TEST(gather_avx512_active_lane_in_bad_page_faults) {
     NEED(F_AVX512F);
     expect_av("gather_512_active", 0, 1);
+    SM_SDE_XFAIL("reports a fault of an emulated scatter as a read (ExceptionInformation[0]=0)");
     expect_av("scatter_512_active", 1, 1);
 }
 
@@ -2312,7 +2325,10 @@ TEST(resume_gather_avx2_guard_pages)        { resume_gather_case("vpgatherdd_ymm
 TEST(resume_gather_avx2_qq_guard_pages)     { resume_gather_case("vpgatherqq_ymm", 0); }
 TEST(resume_gather_avx2_commit_on_demand)   { resume_gather_case("vpgatherdd_ymm", 1); }
 TEST(resume_gather_avx512_guard_pages)      { resume_gather_case("vpgatherdd_zmm", 0); }
-TEST(resume_gather_avx512_commit_on_demand) { resume_gather_case("vpgatherdd_zmm", 1); }
+TEST(resume_gather_avx512_commit_on_demand) {
+    SM_SDE_XFAIL("does not complete the gather elements below the faulting one before the fault");
+    resume_gather_case("vpgatherdd_zmm", 1);
+}
 TEST(resume_scatter_avx512_guard_pages)     { resume_gather_case("vpscatterdd_zmm", 0); }
 
 static void resume_masked_case(mfn fn, int es, int vb, int kmask, int is_store, const char *name) {
@@ -2557,7 +2573,10 @@ out:
     sm_region_free(&rg);
 }
 TEST(gather_fault_context_partial_avx2)   { gather_fault_context_case(0); }
-TEST(gather_fault_context_partial_avx512) { gather_fault_context_case(1); }
+TEST(gather_fault_context_partial_avx512) {
+    SM_SDE_XFAIL("does not complete the gather elements below the faulting one before the fault");
+    gather_fault_context_case(1);
+}
 
 /* ======================================================================== */
 /* locked operations                                                          */
@@ -2883,7 +2902,11 @@ TEST(movdir64b_direct_store) {
     pr_end();
     sm_vfree(b);
 }
-TEST(movdir64b_misaligned_destination_faults) { NEED(F_MOVDIR64B); expect_av("movdir64b_mis", -1, 0); }
+TEST(movdir64b_misaligned_destination_faults) {
+    NEED(F_MOVDIR64B);
+    SM_SDE_XFAIL("does not raise #GP for a misaligned MOVDIR64B destination");
+    expect_av("movdir64b_mis", -1, 0);
+}
 TEST(waitpkg_tpause_umwait_bounded) {
     NEED(F_WAITPKG); NEED(F_TSC);
     sm_fres f; run_fop("waitpkg_info", &f);

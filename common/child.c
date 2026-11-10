@@ -86,6 +86,18 @@ int t_run_self(const char *args, DWORD timeout_ms, t_child_result *r) {
         r->exc_code = r->exit_code;   /* died of an exception without reaching our filter */
     }
     t_log("child '%s' exit=0x%lx exc=0x%lx timeout=%d %.1f ms", args ? args : "", r->exit_code, r->exc_code, r->timed_out, r->ms);
+    if (t_sde_killed_child(r)) {
+        /* Under tools/sde_run.sh only, and only when SDE itself reported that it stopped the child (its
+         * chip-check terminates a process that executes an instruction the emulated CPU or XCR0 lacks,
+         * where hardware raises #UD): the case's failures become XFAIL. Checks are unchanged. */
+        const char *m = strstr(r->out, "SDE-ERROR");
+        if (!m) m = strstr(r->out, "SDE ERROR");
+        if (!m) m = strstr(r->out, "Tool (or Pin) caused signal");
+        char line[160]; size_t n = 0;
+        while (m && m[n] && m[n] != '\n' && m[n] != '\r' && n < sizeof line - 1) { line[n] = m[n]; n++; }
+        line[n] = 0;
+        t_expect_fail("Intel SDE (%s) terminated the child instead of raising the architectural exception: %s", t_sde_model(), line);
+    }
     return 1;
 }
 

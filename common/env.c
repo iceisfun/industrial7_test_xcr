@@ -24,6 +24,28 @@ static DWORD reg_dword(HKEY root, const char *path, const char *name) {
     return v;
 }
 
+/* XCR_SDE=<model> is set by tools/sde_run.sh when the exe runs under the Intel SDE emulator. SDE
+ * emulates CPUID/XGETBV and the instructions the host lacks, but not everything around them (see
+ * README "Emulated validation"). Tests use this ONLY to pick XFAIL/NOTE reasons for such emulator
+ * artifacts; a check must never be skipped or relaxed because of it. */
+const char *t_sde_model(void) {
+    static char buf[32]; static volatile LONG done;
+    if (!done) {
+        char tmp[32];
+        DWORD n = GetEnvironmentVariableA("XCR_SDE", tmp, sizeof tmp);
+        if (n == 0 || n >= sizeof tmp) tmp[0] = 0;
+        memcpy(buf, tmp, sizeof buf);
+        InterlockedExchange(&done, 1);
+    }
+    return buf[0] ? buf : NULL;
+}
+
+int t_sde_killed_child(const t_child_result *r) {
+    if (!t_sde_model() || !r) return 0;
+    return strstr(r->out, "SDE-ERROR") != NULL || strstr(r->out, "SDE ERROR") != NULL ||
+           strstr(r->out, "Tool (or Pin) caused signal") != NULL;
+}
+
 const t_env *t_env_get(void) {
     if (g_env_done) return &g_env;
     t_env *e = &g_env;
@@ -75,6 +97,7 @@ void t_env_print(FILE *f) {
     static char feats[4096];
     fprintf(f, "ENV   exe=%s arch=%s wow64=%d os=%lu.%lu.%lu.%lu (%s)%s%s\n", t_exe_name(), T_ARCH, e->wow64,
             e->os_major, e->os_minor, e->os_build, e->os_ubr, e->os_product, e->wine[0] ? " wine=" : "", e->wine);
+    if (t_sde_model()) fprintf(f, "ENV   sde=%s (emulated CPU: results marked SDE are emulator artifacts)\n", t_sde_model());
     fprintf(f, "ENV   cpu=\"%s\" vendor=%s family=0x%x model=0x%x stepping=%u hypervisor=%d%s%s ncpu=%d\n",
             c->brand, c->vendor, c->family, c->model, c->stepping, c->hypervisor, c->hv_vendor[0] ? " hv=" : "", c->hv_vendor, e->ncpu);
     fprintf(f, "ENV   osxsave=%d xcr0=0x%llx xcr0_supported=0x%llx xss_supported=0x%llx xsave_size=%u/%u api_xstate=0x%llx%s\n",
@@ -96,6 +119,7 @@ void t_env_write_json(FILE *f, const char *exe, const char *version) {
     fprintf(f, ",\"arch\":\"%s\",\"wow64\":%s,\"native_machine\":%u,\"timestamp\":\"%s\"", T_ARCH, e->wow64 ? "true" : "false", e->native_machine, ts);
     fprintf(f, ",\"os\":{\"major\":%lu,\"minor\":%lu,\"build\":%lu,\"ubr\":%lu,\"product\":", e->os_major, e->os_minor, e->os_build, e->os_ubr);
     jstr(f, e->os_product); fprintf(f, "},\"wine\":"); jstr(f, e->wine);
+    if (t_sde_model()) { fprintf(f, ",\"sde\":"); jstr(f, t_sde_model()); }
     fprintf(f, ",\"cpu\":{\"vendor\":"); jstr(f, c->vendor);
     fprintf(f, ",\"brand\":"); jstr(f, c->brand);
     fprintf(f, ",\"signature\":\"0x%08x\",\"family\":%u,\"model\":%u,\"stepping\":%u,\"max_basic\":\"0x%x\",\"max_ext\":\"0x%x\",\"hypervisor\":%s,\"hv_vendor\":",
