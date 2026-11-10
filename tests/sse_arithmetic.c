@@ -36,11 +36,12 @@ typedef union {
 
 /* ---------------------------------------------------------------- reporting */
 static int g_vec, g_bad;
-static long g_total_vec;
 #define VFAIL_MAX 6
+#define ITER_SCALE 4   /* multiplies every random sweep; runtime stays well under a few seconds */
 static void vbegin(void) { g_vec = g_bad = 0; }
-#define VCHECK(ok, ...) do { g_vec++; g_total_vec++; if (!(ok)) { if (g_bad++ < VFAIL_MAX) CHECKF(0, __VA_ARGS__); } } while (0)
+#define VCHECK(ok, ...) do { g_vec++; if (!(ok)) { if (g_bad++ < VFAIL_MAX) CHECKF(0, __VA_ARGS__); } } while (0)
 static void vend_(const char *file, int line, const char *label) {
+    t_info(label, "%d vectors", g_vec);
     t_check(g_bad == 0, file, line, label, "%s: %d of %d vectors mismatched", label, g_bad, g_vec);
 }
 #define VEND(label) vend_(__FILE__, __LINE__, label)
@@ -215,7 +216,7 @@ static void run_fop(const fop_t *o, uint64_t seed) {
             if (!(o->modes & (1 << m))) continue;
             int daz = m == 4, rc = daz ? 0 : m;
             if (daz && !daz_supported()) continue;
-            for (int it = 0; it < o->iters; it++) {
+            for (int it = 0; it < o->iters * ITER_SCALE; it++) {
                 V128 a, b, d, w, care;
                 fill_any(&r, &a, o->ga, o->fa, NULL);
                 fill_any(&r, &b, o->gb, o->fb, (o->fa && o->fa == o->fb) ? &a : NULL);
@@ -1048,7 +1049,7 @@ static void run_iop(const iop_t *o, uint64_t seed) {
     t_rng r; t_rng_seed(&r, seed);
     vbegin();
     for (int imm = o->imm_lo; imm <= o->imm_hi; imm++)
-        for (int it = 0; it < o->iters; it++) {
+        for (int it = 0; it < o->iters * ITER_SCALE; it++) {
             V128 a, b, d, w;
             gen_int(&r, &a);
             if (o->gen_b == GB_COUNT) gen_count(&r, &b);
@@ -1787,5 +1788,466 @@ TEST(sse41_movntdqa_wb_memory) {
         V128 d;
         __asm__ volatile("movntdqa %1, %0" : "=x"(d.v) : "m"(buf[i].v));
         CHECKF(!memcmp(&d, &buf[i], 16), "movntdqa [%d]: %s want %s", i, hx(&d, 8), hx(&buf[i], 8));
+    }
+}
+
+/* ================================================================ SSE4.2 string compares
+ * Model = SDM Vol.2 "4.1 Imm8 Control Byte Operation for PCMPESTRI/PCMPESTRM/PCMPISTRI/PCMPISTRM":
+ * imm[1:0] source format (ub/uw/sb/sw), imm[3:2] aggregation (equal any, ranges, equal each,
+ * equal ordered), imm[5:4] polarity (+, -, masked+, masked-), imm[6] index msb / mask expanded.
+ * Invalid-element overrides per Table 4-7; IntRes2 masked(-) inverts only valid reg/mem elements.
+ * Flags: CF = IntRes2 != 0, ZF = reg/mem (xmm2) has an invalid element, SF = xmm1 has one,
+ * OF = IntRes2[0], AF = PF = 0. ECX = index or 16/8 if none. Explicit lengths: |EAX|, |EDX|
+ * saturated to 16/8 (INT_MIN is not used: its absolute value is not representable). */
+typedef struct { uint32_t idx; V128 mask; uint8_t cf, zf, sf, of, pf; } pcs_t;
+static int pcs_elem(const V128 *v, int i, int imm) {
+    switch (imm & 3) { case 0: return v->b[i]; case 1: return v->w[i]; case 2: return v->sb[i]; default: return v->sw[i]; }
+}
+static int pcs_implicit_len(const V128 *v, int imm) {
+    int n = (imm & 1) ? 8 : 16;
+    for (int i = 0; i < n; i++) if (pcs_elem(v, i, imm) == 0) return i;
+    return n;
+}
+static int pcs_explicit_len(int32_t l, int imm) {
+    int n = (imm & 1) ? 8 : 16;
+    int64_t a = l < 0 ? -(int64_t)l : l;
+    return a > n ? n : (int)a;
+}
+static void pcs_model(const V128 *a, const V128 *b, int la, int lb, int imm, pcs_t *o) {
+    int n = (imm & 1) ? 8 : 16, agg = (imm >> 2) & 3, pol = (imm >> 4) & 3;
+    static uint8_t br[16][16];
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++) {
+            int va = i < la, vb = j < lb, v;
+            if (va && vb) {
+                int x = pcs_elem(a, i, imm), y = pcs_elem(b, j, imm);
+                v = agg == 1 ? ((i & 1) ? y <= x : y >= x) : x == y;
+            } else if (!va && !vb) v = agg >= 2;
+            else if (!va) v = agg == 3;
+            else v = 0;
+            br[i][j] = (uint8_t)v;
+        }
+    uint32_t r1 = 0;
+    for (int j = 0; j < n; j++) {
+        int v = 0;
+        switch (agg) {
+        case 0: for (int i = 0; i < n; i++) v |= br[i][j]; break;
+        case 1: for (int i = 0; i + 1 < n; i += 2) v |= br[i][j] & br[i + 1][j]; break;
+        case 2: v = br[j][j]; break;
+        default: v = 1; for (int k = 0; k < n - j; k++) v &= br[k][j + k]; break;
+        }
+        r1 |= (uint32_t)v << j;
+    }
+    uint32_t full = (1u << n) - 1, r2;
+    switch (pol) {
+    case 1: r2 = ~r1 & full; break;
+    case 3: r2 = r1 ^ ((1u << lb) - 1); break;
+    default: r2 = r1; break;
+    }
+    if (!r2) o->idx = (uint32_t)n;
+    else if (imm & 0x40) { int k = n - 1; while (!((r2 >> k) & 1)) k--; o->idx = (uint32_t)k; }
+    else { int k = 0; while (!((r2 >> k) & 1)) k++; o->idx = (uint32_t)k; }
+    memset(&o->mask, 0, sizeof o->mask);
+    if (imm & 0x40) { for (int j = 0; j < n; j++) if ((r2 >> j) & 1) { if (n == 8) o->mask.w[j] = 0xFFFF; else o->mask.b[j] = 0xFF; } }
+    else o->mask.d[0] = r2;
+    o->cf = r2 != 0; o->zf = lb < n; o->sf = la < n; o->of = r2 & 1; o->pf = 0;
+}
+
+#define PCESI_C(n) case n: __asm__ volatile("pcmpestri %10, %7, %6" : "=c"(o->idx), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf) \
+    : "x"(a->v), "x"(b->v), "a"(la), "d"(lb), "i"(n)); break;
+#define PCISI_C(n) case n: __asm__ volatile("pcmpistri %8, %7, %6" : "=c"(o->idx), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf) \
+    : "x"(a->v), "x"(b->v), "i"(n)); break;
+#define PCESM_C(n) case n: __asm__ volatile("pcmpestrm %10, %7, %6\n\tmovdqa %%xmm0, %0" : "=x"(o->mask.v), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf) \
+    : "x"(a->v), "x"(b->v), "a"(la), "d"(lb), "i"(n) : "xmm0"); break;
+#define PCISM_C(n) case n: __asm__ volatile("pcmpistrm %8, %7, %6\n\tmovdqa %%xmm0, %0" : "=x"(o->mask.v), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf) \
+    : "x"(a->v), "x"(b->v), "i"(n) : "xmm0"); break;
+/* memory source operand (no alignment requirement for these instructions) */
+#define PCESIM_C(n) case n: __asm__ volatile("pcmpestri %10, %7, %6" : "=c"(o->idx), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf) \
+    : "x"(a->v), "m"(*(const unsigned char (*)[16])bm), "a"(la), "d"(lb), "i"(n)); break;
+#define PCISIM_C(n) case n: __asm__ volatile("pcmpistri %8, %7, %6" : "=c"(o->idx), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf) \
+    : "x"(a->v), "m"(*(const unsigned char (*)[16])bm), "i"(n)); break;
+static T_NOINLINE void do_pcmpestri(const V128 *a, const V128 *b, int32_t la, int32_t lb, int imm, pcs_t *o) { switch (imm) { I128(PCESI_C) } }
+static T_NOINLINE void do_pcmpistri(const V128 *a, const V128 *b, int imm, pcs_t *o) { switch (imm) { I128(PCISI_C) } }
+static T_NOINLINE void do_pcmpestrm(const V128 *a, const V128 *b, int32_t la, int32_t lb, int imm, pcs_t *o) { switch (imm) { I128(PCESM_C) } }
+static T_NOINLINE void do_pcmpistrm(const V128 *a, const V128 *b, int imm, pcs_t *o) { switch (imm) { I128(PCISM_C) } }
+static T_NOINLINE void do_pcmpestri_m(const V128 *a, const unsigned char *bm, int32_t la, int32_t lb, int imm, pcs_t *o) { switch (imm) { I128(PCESIM_C) } }
+static T_NOINLINE void do_pcmpistri_m(const V128 *a, const unsigned char *bm, int imm, pcs_t *o) { switch (imm) { I128(PCISIM_C) } }
+
+static void gen_str(t_rng *r, V128 *v, const V128 *rel) {
+    static const uint8_t AB[] = { 'a', 'b', 'c', 'z', 'A', '0', 0x80, 0xFF, 0x7F, 0x01, 0x61 };
+    static const uint16_t AW[] = { 0x0061, 0x0062, 0x7FFF, 0x8000, 0xFFFF, 0x0001, 0x6161, 0x0100 };
+    t_rng_fill(r, v, 16);
+    switch (t_rng_range(r, 6)) {
+    case 0: break;
+    case 1: case 2: for (int i = 0; i < 16; i++) v->b[i] = AB[t_rng_range(r, T_COUNTOF(AB))]; break;
+    case 3: for (int i = 0; i < 8; i++) v->w[i] = AW[t_rng_range(r, T_COUNTOF(AW))]; break;
+    default:
+        if (rel) {   /* shifted / mutated copy of the other operand: matches for equal each / ordered */
+            int sh = (int)t_rng_range(r, 6);
+            for (int i = 0; i < 16; i++) v->b[i] = rel->b[(i + sh) & 15];
+            if (t_rng_range(r, 2)) v->b[t_rng_range(r, 16)] ^= 1;
+        } else for (int i = 0; i < 16; i++) v->b[i] = AB[t_rng_range(r, 4)];
+    }
+    if (t_rng_range(r, 3) == 0) { v->b[t_rng_range(r, 16)] = 0; }       /* NUL byte (implicit length) */
+    if (t_rng_range(r, 4) == 0) { v->w[t_rng_range(r, 8)] = 0; }        /* NUL word */
+}
+static int32_t gen_len(t_rng *r) {
+    static const int32_t L[] = { 0, 1, 7, 8, 9, 15, 16, 17, -1, -8, -9, -16, -17, 0x7FFFFFFF, -0x7FFFFFFF, 1000, -1000, 255, 65536 };
+    return t_rng_range(r, 3) ? (int32_t)t_rng_range(r, 41) - 20 : L[t_rng_range(r, T_COUNTOF(L))];
+}
+static int pcs_eq(const pcs_t *g, const pcs_t *w, int want_mask) {
+    if (g->cf != w->cf || g->zf != w->zf || g->sf != w->sf || g->of != w->of || g->pf != w->pf) return 0;
+    return want_mask ? !memcmp(&g->mask, &w->mask, 16) : g->idx == w->idx;
+}
+#define PCS_FMT "imm=0x%02x a=%s b=%s la=%d lb=%d: got idx=%u CF%d ZF%d SF%d OF%d PF%d mask=%s, want idx=%u CF%d ZF%d SF%d OF%d mask=%s"
+#define PCS_ARGS(imm, a, b, la, lb, g, w) imm, hx(a, 1), hx(b, 1), (int)(la), (int)(lb), g.idx, g.cf, g.zf, g.sf, g.of, g.pf, hx(&g.mask, 1), \
+    w.idx, w.cf, w.zf, w.sf, w.of, hx(&w.mask, 1)
+
+static void run_pcmpstr(int expl, int want_mask, uint64_t seed, const char *name) {
+    t_rng r; t_rng_seed(&r, seed);
+    vbegin();
+    for (int imm = 0; imm < 128; imm++)
+        for (int it = 0; it < 120 * ITER_SCALE; it++) {
+            V128 a, b; gen_str(&r, &a, NULL); gen_str(&r, &b, &a);
+            int32_t la = gen_len(&r), lb = gen_len(&r);
+            pcs_t g, w; memset(&g, 0, sizeof g);
+            int ea = expl ? pcs_explicit_len(la, imm) : pcs_implicit_len(&a, imm);
+            int eb = expl ? pcs_explicit_len(lb, imm) : pcs_implicit_len(&b, imm);
+            pcs_model(&a, &b, ea, eb, imm, &w);
+            if (expl && want_mask) do_pcmpestrm(&a, &b, la, lb, imm, &g);
+            else if (expl) do_pcmpestri(&a, &b, la, lb, imm, &g);
+            else if (want_mask) do_pcmpistrm(&a, &b, imm, &g);
+            else do_pcmpistri(&a, &b, imm, &g);
+            if (!want_mask) { memset(&g.mask, 0, 16); memset(&w.mask, 0, 16); }
+            VCHECK(pcs_eq(&g, &w, want_mask), "%s " PCS_FMT, name, PCS_ARGS(imm, &a, &b, la, lb, g, w));
+        }
+    VEND(name);
+}
+TEST(sse42_pcmpestri_imm_sweep) { NEED(F_SSE42); run_pcmpstr(1, 0, 0x42A001, "pcmpestri"); }
+TEST(sse42_pcmpestrm_imm_sweep) { NEED(F_SSE42); run_pcmpstr(1, 1, 0x42A002, "pcmpestrm"); }
+TEST(sse42_pcmpistri_imm_sweep) { NEED(F_SSE42); run_pcmpstr(0, 0, 0x42A003, "pcmpistri"); }
+TEST(sse42_pcmpistrm_imm_sweep) { NEED(F_SSE42); run_pcmpstr(0, 1, 0x42A004, "pcmpistrm"); }
+
+/* m128 operand at every misalignment, including the last 16 bytes before a no-access page */
+TEST(sse42_pcmpstr_unaligned_memory_operand) {
+    NEED(F_SSE42);
+    void *base = NULL;
+    unsigned char *pg = (unsigned char *)t_guarded_alloc(64, &base);
+    REQUIRE(pg != NULL);
+    t_rng r; t_rng_seed(&r, 0x42A005);
+    vbegin();
+    for (int imm = 0; imm < 128; imm++)
+        for (int it = 0; it < 12; it++) {
+            V128 a, b; gen_str(&r, &a, NULL); gen_str(&r, &b, &a);
+            int off = it == 0 ? 48 : (int)t_rng_range(&r, 49);
+            memcpy(pg + off, &b, 16);
+            int32_t la = gen_len(&r), lb = gen_len(&r);
+            pcs_t g, w; memset(&g, 0, sizeof g); memset(&w, 0, sizeof w);
+            pcs_model(&a, &b, pcs_explicit_len(la, imm), pcs_explicit_len(lb, imm), imm, &w);
+            do_pcmpestri_m(&a, pg + off, la, lb, imm, &g);
+            memset(&w.mask, 0, 16);
+            VCHECK(pcs_eq(&g, &w, 0), "pcmpestri m128+%d " PCS_FMT, off, PCS_ARGS(imm, &a, &b, la, lb, g, w));
+            memset(&g, 0, sizeof g);
+            pcs_model(&a, &b, pcs_implicit_len(&a, imm), pcs_implicit_len(&b, imm), imm, &w);
+            do_pcmpistri_m(&a, pg + off, imm, &g);
+            memset(&w.mask, 0, 16);
+            VCHECK(pcs_eq(&g, &w, 0), "pcmpistri m128+%d " PCS_FMT, off, PCS_ARGS(imm, &a, &b, 0, 0, g, w));
+        }
+    VEND("pcmpstr m128");
+    t_guarded_free(base);
+}
+
+TEST(sse42_pcmpstr_known_answers) {
+    NEED(F_SSE42);
+    static const struct { const char *set, *str; int imm; uint32_t idx; uint8_t cf, zf, sf, of; } t[] = {
+        { "aeiou", "hello world", 0x00, 1, 1, 1, 1, 0 },          /* equal any: first vowel */
+        { "aeiou", "hello world", 0x40, 7, 1, 1, 1, 0 },          /* ... last vowel ('o' of world) */
+        { "az", "ABCdef", 0x04, 3, 1, 1, 1, 0 },                  /* ranges a-z: first lowercase */
+        { "az", "ABCdef", 0x14, 0, 1, 1, 1, 1 },                  /* negative: first non-lowercase */
+        { "lo", "hello", 0x0C, 3, 1, 1, 1, 0 },                   /* equal ordered: substring */
+        { "xyz", "hello", 0x0C, 16, 0, 1, 1, 0 },                 /* not found */
+        { "abcd", "abXd", 0x18, 2, 1, 1, 1, 0 },                  /* equal each, negative: first difference */
+        { "abcd", "abXd", 0x38, 2, 1, 1, 1, 0 },                  /* equal each, masked(-) */
+        { "abc", "abc", 0x18, 16, 0, 1, 1, 0 },                   /* identical, negative: invalid pairs are "equal" */
+        { "abc", "abc", 0x38, 3, 1, 1, 1, 0 },                    /* identical, masked(-): index of the terminator */
+        { "abc", "abd", 0x08, 0, 1, 1, 1, 1 },                    /* equal each positive */
+        { "", "abc", 0x00, 16, 0, 1, 1, 0 },                      /* empty set */
+        { "0123456789abcdef", "0123456789abcdeX", 0x18, 15, 1, 0, 0, 0 },   /* no NUL: ZF = SF = 0 */
+    };
+    for (size_t i = 0; i < T_COUNTOF(t); i++) {
+        V128 a = { 0 }, b = { 0 };
+        memcpy(&a, t[i].set, strlen(t[i].set) > 16 ? 16 : strlen(t[i].set));
+        memcpy(&b, t[i].str, strlen(t[i].str) > 16 ? 16 : strlen(t[i].str));
+        pcs_t g, w; memset(&g, 0, sizeof g);
+        do_pcmpistri(&a, &b, t[i].imm, &g);
+        CHECKF(g.idx == t[i].idx && g.cf == t[i].cf && g.zf == t[i].zf && g.sf == t[i].sf && g.of == t[i].of,
+               "pcmpistri(\"%s\", \"%s\", 0x%02x): idx=%u CF%d ZF%d SF%d OF%d want idx=%u CF%d ZF%d SF%d OF%d", t[i].set, t[i].str, t[i].imm,
+               g.idx, g.cf, g.zf, g.sf, g.of, t[i].idx, t[i].cf, t[i].zf, t[i].sf, t[i].of);
+        pcs_model(&a, &b, pcs_implicit_len(&a, t[i].imm), pcs_implicit_len(&b, t[i].imm), t[i].imm, &w);
+        CHECKF(w.idx == t[i].idx && w.cf == t[i].cf && w.zf == t[i].zf && w.sf == t[i].sf && w.of == t[i].of,
+               "model self-check #%u: idx=%u CF%d ZF%d SF%d OF%d", (unsigned)i, w.idx, w.cf, w.zf, w.sf, w.of);
+    }
+    /* word elements, explicit lengths, and the two mask formats */
+    V128 a = { .w = { 0x1234, 0, 0, 0, 0, 0, 0, 0 } }, b = { .w = { 1, 2, 0x1234, 0, 0, 0, 0, 0 } };
+    pcs_t g; memset(&g, 0, sizeof g);
+    do_pcmpistri(&a, &b, 0x01, &g);
+    CHECKF(g.idx == 2 && g.cf == 1, "pcmpistri uw equal any: idx=%u CF%d", g.idx, g.cf);
+    do_pcmpestri(&a, &b, 0, 16, 0x00, &g);
+    CHECKF(g.idx == 16 && g.cf == 0 && g.sf == 1 && g.zf == 0, "pcmpestri eax=0: idx=%u CF%d SF%d ZF%d", g.idx, g.cf, g.sf, g.zf);
+    do_pcmpestri(&a, &b, -100, -5, 0x01, &g);   /* |eax| saturates to 8, |edx| = 5 */
+    CHECKF(g.idx == 2 && g.sf == 0 && g.zf == 1, "pcmpestri negative lengths: idx=%u SF%d ZF%d", g.idx, g.sf, g.zf);
+    V128 s2 = { 0 }, str = { 0 }; memcpy(&s2, "ab", 2); memcpy(&str, "xaybz", 5);
+    do_pcmpistrm(&s2, &str, 0x40, &g);
+    V128 want = { 0 }; want.b[1] = want.b[3] = 0xFF;
+    CHECKF(!memcmp(&g.mask, &want, 16), "pcmpistrm byte mask: %s", hx(&g.mask, 1));
+    do_pcmpistrm(&s2, &str, 0x00, &g);
+    CHECKF(g.mask.d[0] == 0x0A && g.mask.d[1] == 0 && g.mask.q[1] == 0, "pcmpistrm bit mask: %s", hx(&g.mask, 4));
+}
+
+/* ================================================================ CRC32 (SSE4.2): CRC-32C, reflected poly 0x82F63B78, no pre/post inversion */
+static uint32_t crc32c_sw(uint32_t crc, const void *p, size_t n) {
+    const uint8_t *s = (const uint8_t *)p;
+    while (n--) { crc ^= *s++; for (int k = 0; k < 8; k++) crc = (crc >> 1) ^ (0x82F63B78u & (0u - (crc & 1))); }
+    return crc;
+}
+TEST(sse42_crc32_vs_software) {
+    NEED(F_SSE42);
+    t_rng r; t_rng_seed(&r, 0x42A011);
+    vbegin();
+    for (int it = 0; it < 5000; it++) {
+        uint32_t c0 = it < 8 ? E32[it] : t_rng_u32(&r);
+        uint64_t v = it % 7 == 0 ? E64[t_rng_range(&r, T_COUNTOF(E64))] : t_rng_next(&r);
+        uint8_t v8 = (uint8_t)v; uint16_t v16 = (uint16_t)v; uint32_t v32 = (uint32_t)v;
+        uint32_t c;
+        c = c0; __asm__ volatile("crc32b %1, %0" : "+r"(c) : "q"(v8));
+        VCHECK(c == crc32c_sw(c0, &v8, 1), "crc32b(0x%08x, 0x%02x)=0x%08x want 0x%08x", c0, v8, c, crc32c_sw(c0, &v8, 1));
+        c = c0; __asm__ volatile("crc32b %1, %0" : "+r"(c) : "m"(v8));
+        VCHECK(c == crc32c_sw(c0, &v8, 1), "crc32b m8");
+        c = c0; __asm__ volatile("crc32w %1, %0" : "+r"(c) : "r"(v16));
+        VCHECK(c == crc32c_sw(c0, &v16, 2), "crc32w(0x%08x, 0x%04x)=0x%08x want 0x%08x", c0, v16, c, crc32c_sw(c0, &v16, 2));
+        c = c0; __asm__ volatile("crc32l %1, %0" : "+r"(c) : "r"(v32));
+        VCHECK(c == crc32c_sw(c0, &v32, 4), "crc32l(0x%08x, 0x%08x)=0x%08x want 0x%08x", c0, v32, c, crc32c_sw(c0, &v32, 4));
+        c = c0; __asm__ volatile("crc32l %1, %0" : "+r"(c) : "m"(v32));
+        VCHECK(c == crc32c_sw(c0, &v32, 4), "crc32l m32");
+#ifdef T_X64
+        uint64_t c64 = ((uint64_t)t_rng_u32(&r) << 32) | c0;      /* upper half of the destination is ignored */
+        __asm__ volatile("crc32q %1, %0" : "+r"(c64) : "r"(v));
+        VCHECK(c64 == crc32c_sw(c0, &v, 8), "crc32q(0x%08x, 0x%016llx)=0x%llx want 0x%08x (zero-extended)", c0, (unsigned long long)v,
+               (unsigned long long)c64, crc32c_sw(c0, &v, 8));
+        uint64_t c32 = ~0ull; uint32_t cin = c0;
+        __asm__ volatile("mov %2, %k0\n\tcrc32l %1, %k0" : "=&r"(c32) : "r"(v32), "r"(cin));
+        VCHECK(c32 == crc32c_sw(c0, &v32, 4), "crc32l r32 must zero-extend into r64: 0x%llx", (unsigned long long)c32);
+#endif
+    }
+    VEND("crc32 vs software CRC32C");
+    /* standard check value: CRC-32C("123456789") = 0xE3069283 (init ~0, final xor ~0) */
+    static const char msg[] = "123456789";
+    uint32_t c = ~0u;
+    for (int i = 0; i < 9; i++) { uint8_t ch = (uint8_t)msg[i]; __asm__ volatile("crc32b %1, %0" : "+r"(c) : "q"(ch)); }
+    CHECKF(~c == 0xE3069283u, "CRC-32C(\"123456789\") = 0x%08x want 0xE3069283", ~c);
+    CHECKF(~crc32c_sw(~0u, msg, 9) == 0xE3069283u, "software CRC-32C self-check");
+    /* a buffer through the 32-bit form (and 64-bit form on x64) equals the bytewise result */
+    unsigned char buf[4096]; t_rng_fill(&r, buf, sizeof buf);
+    uint32_t c4 = ~0u;
+    for (size_t i = 0; i < sizeof buf; i += 4) { uint32_t w; memcpy(&w, buf + i, 4); __asm__ volatile("crc32l %1, %0" : "+r"(c4) : "r"(w)); }
+    CHECKF(c4 == crc32c_sw(~0u, buf, sizeof buf), "crc32l over 4 KB: 0x%08x want 0x%08x", c4, crc32c_sw(~0u, buf, sizeof buf));
+#ifndef T_X64
+    t_note("CRC32 r64 (REX.W) is x64-only: not applicable to this x86 build");
+#endif
+}
+
+/* ================================================================ GPR bit instructions */
+static uint64_t gen_bits(t_rng *r) {
+    uint64_t x = t_rng_next(r);
+    switch (t_rng_range(r, 8)) {
+    case 0: return 0;
+    case 1: return 1ull << t_rng_range(r, 64);
+    case 2: return (1ull << t_rng_range(r, 64)) - 1;
+    case 3: return ~0ull;
+    case 4: return x >> t_rng_range(r, 64);
+    case 5: return x << t_rng_range(r, 64);
+    case 6: return E64[t_rng_range(r, T_COUNTOF(E64))];
+    default: return x;
+    }
+}
+static int ref_popc(uint64_t x) { int n = 0; while (x) { n += (int)(x & 1); x >>= 1; } return n; }
+static int ref_lz(uint64_t x, int w) { int n = 0; for (int i = w - 1; i >= 0 && !((x >> i) & 1); i--) n++; return n; }
+static int ref_tz(uint64_t x, int w) { int n = 0; for (int i = 0; i < w && !((x >> i) & 1); i++) n++; return n; }
+
+TEST(gpr_popcnt) {
+    NEED(F_POPCNT);
+    t_rng r; t_rng_seed(&r, 0xB17001);
+    vbegin();
+    for (int it = 0; it < 5000; it++) {
+        uint64_t x = gen_bits(&r);
+        uint16_t x16 = (uint16_t)x, o16; uint32_t x32 = (uint32_t)x, o32;
+        uint8_t zf, cf, of, sf, pf;
+        __asm__ volatile("popcnt %6, %0" : "=r"(o16), "=@ccz"(zf), "=@ccc"(cf), "=@cco"(of), "=@ccs"(sf), "=@ccp"(pf) : "r"(x16));
+        VCHECK(o16 == ref_popc(x16) && zf == (x16 == 0) && !cf && !of && !sf && !pf, "popcnt r16(0x%x)=%u ZF%d CF%d OF%d SF%d PF%d", x16, o16, zf, cf, of, sf, pf);
+        __asm__ volatile("popcnt %6, %0" : "=r"(o32), "=@ccz"(zf), "=@ccc"(cf), "=@cco"(of), "=@ccs"(sf), "=@ccp"(pf) : "r"(x32));
+        VCHECK(o32 == (uint32_t)ref_popc(x32) && zf == (x32 == 0) && !cf && !of && !sf && !pf, "popcnt r32(0x%x)=%u ZF%d CF%d OF%d SF%d PF%d", x32, o32, zf, cf, of, sf, pf);
+        __asm__ volatile("popcnt %6, %0" : "=r"(o32), "=@ccz"(zf), "=@ccc"(cf), "=@cco"(of), "=@ccs"(sf), "=@ccp"(pf) : "m"(x32));
+        VCHECK(o32 == (uint32_t)ref_popc(x32) && zf == (x32 == 0), "popcnt m32(0x%x)=%u", x32, o32);
+#ifdef T_X64
+        uint64_t o64;
+        __asm__ volatile("popcnt %6, %0" : "=r"(o64), "=@ccz"(zf), "=@ccc"(cf), "=@cco"(of), "=@ccs"(sf), "=@ccp"(pf) : "r"(x));
+        VCHECK(o64 == (uint64_t)ref_popc(x) && zf == (x == 0) && !cf && !of && !sf && !pf, "popcnt r64(0x%llx)=%llu", (unsigned long long)x, (unsigned long long)o64);
+#endif
+    }
+    VEND("popcnt");
+}
+TEST(gpr_lzcnt) {
+    /* without LZCNT the F3 0F BD encoding executes as BSR, so absence is a SKIP, never a probe */
+    NEED(F_LZCNT);
+    t_rng r; t_rng_seed(&r, 0xB17002);
+    vbegin();
+    for (int it = 0; it < 5000; it++) {
+        uint64_t x = gen_bits(&r);
+        uint16_t x16 = (uint16_t)x, o16; uint32_t x32 = (uint32_t)x, o32; uint8_t zf, cf;
+        __asm__ volatile("lzcnt %3, %0" : "=r"(o16), "=@ccz"(zf), "=@ccc"(cf) : "r"(x16));
+        VCHECK(o16 == ref_lz(x16, 16) && cf == (x16 == 0) && zf == (o16 == 0), "lzcnt r16(0x%x)=%u ZF%d CF%d", x16, o16, zf, cf);
+        __asm__ volatile("lzcnt %3, %0" : "=r"(o32), "=@ccz"(zf), "=@ccc"(cf) : "r"(x32));
+        VCHECK(o32 == (uint32_t)ref_lz(x32, 32) && cf == (x32 == 0) && zf == (o32 == 0), "lzcnt r32(0x%x)=%u ZF%d CF%d", x32, o32, zf, cf);
+#ifdef T_X64
+        uint64_t o64;
+        __asm__ volatile("lzcnt %3, %0" : "=r"(o64), "=@ccz"(zf), "=@ccc"(cf) : "r"(x));
+        VCHECK(o64 == (uint64_t)ref_lz(x, 64) && cf == (x == 0) && zf == (o64 == 0), "lzcnt r64(0x%llx)=%llu ZF%d CF%d", (unsigned long long)x, (unsigned long long)o64, zf, cf);
+#endif
+    }
+    VEND("lzcnt");
+}
+TEST(gpr_tzcnt) {
+    NEED(F_BMI1);   /* TZCNT is BMI1; without it F3 0F BC executes as BSF */
+    t_rng r; t_rng_seed(&r, 0xB17003);
+    vbegin();
+    for (int it = 0; it < 5000; it++) {
+        uint64_t x = gen_bits(&r);
+        uint16_t x16 = (uint16_t)x, o16; uint32_t x32 = (uint32_t)x, o32; uint8_t zf, cf;
+        __asm__ volatile("tzcnt %3, %0" : "=r"(o16), "=@ccz"(zf), "=@ccc"(cf) : "r"(x16));
+        VCHECK(o16 == ref_tz(x16, 16) && cf == (x16 == 0) && zf == (o16 == 0), "tzcnt r16(0x%x)=%u ZF%d CF%d", x16, o16, zf, cf);
+        __asm__ volatile("tzcnt %3, %0" : "=r"(o32), "=@ccz"(zf), "=@ccc"(cf) : "r"(x32));
+        VCHECK(o32 == (uint32_t)ref_tz(x32, 32) && cf == (x32 == 0) && zf == (o32 == 0), "tzcnt r32(0x%x)=%u ZF%d CF%d", x32, o32, zf, cf);
+#ifdef T_X64
+        uint64_t o64;
+        __asm__ volatile("tzcnt %3, %0" : "=r"(o64), "=@ccz"(zf), "=@ccc"(cf) : "r"(x));
+        VCHECK(o64 == (uint64_t)ref_tz(x, 64) && cf == (x == 0) && zf == (o64 == 0), "tzcnt r64(0x%llx)=%llu ZF%d CF%d", (unsigned long long)x, (unsigned long long)o64, zf, cf);
+#endif
+    }
+    VEND("tzcnt");
+}
+TEST(gpr_bsf_bsr) {
+    /* baseline instructions: ZF = (source == 0); destination is architecturally undefined for a zero
+     * source (Intel) / unchanged (AMD), so only nonzero sources are value-checked */
+    t_rng r; t_rng_seed(&r, 0xB17004);
+    vbegin();
+    int zero_unchanged = 1, zero_seen = 0;
+    for (int it = 0; it < 5000; it++) {
+        uint64_t x = gen_bits(&r);
+        uint32_t x32 = (uint32_t)x, f = 0xA5A5A5A5u, b = 0xA5A5A5A5u; uint8_t zf1, zf2;
+        __asm__ volatile("bsf %2, %0" : "+r"(f), "=@ccz"(zf1) : "r"(x32));
+        __asm__ volatile("bsr %2, %0" : "+r"(b), "=@ccz"(zf2) : "r"(x32));
+        if (x32) {
+            VCHECK(!zf1 && !zf2 && f == (uint32_t)ref_tz(x32, 32) && b == (uint32_t)(31 - ref_lz(x32, 32)),
+                   "bsf/bsr r32(0x%x) = %u/%u ZF%d/%d", x32, f, b, zf1, zf2);
+        } else {
+            zero_seen = 1;
+            VCHECK(zf1 && zf2, "bsf/bsr(0): ZF%d/%d want 1", zf1, zf2);
+            if (f != 0xA5A5A5A5u || b != 0xA5A5A5A5u) zero_unchanged = 0;
+        }
+        uint16_t x16 = (uint16_t)x, f16 = 0x5A5A, b16 = 0x5A5A;
+        __asm__ volatile("bsf %2, %0" : "+r"(f16), "=@ccz"(zf1) : "r"(x16));
+        __asm__ volatile("bsr %2, %0" : "+r"(b16), "=@ccz"(zf2) : "r"(x16));
+        if (x16) VCHECK(!zf1 && !zf2 && f16 == ref_tz(x16, 16) && b16 == 15 - ref_lz(x16, 16), "bsf/bsr r16(0x%x) = %u/%u", x16, f16, b16);
+        else VCHECK(zf1 && zf2, "bsf/bsr r16(0): ZF%d/%d", zf1, zf2);
+#ifdef T_X64
+        uint64_t f64 = 0, b64 = 0;
+        __asm__ volatile("bsf %2, %0" : "+r"(f64), "=@ccz"(zf1) : "r"(x));
+        __asm__ volatile("bsr %2, %0" : "+r"(b64), "=@ccz"(zf2) : "r"(x));
+        if (x) VCHECK(!zf1 && !zf2 && f64 == (uint64_t)ref_tz(x, 64) && b64 == (uint64_t)(63 - ref_lz(x, 64)), "bsf/bsr r64(0x%llx)", (unsigned long long)x);
+        else VCHECK(zf1 && zf2, "bsf/bsr r64(0)");
+#endif
+    }
+    VEND("bsf/bsr");
+    if (zero_seen) t_info("bsf_bsr_zero_source_dest", "%s", zero_unchanged ? "unchanged" : "modified");
+}
+TEST(gpr_movbe_load_store) {
+    NEED(F_MOVBE);
+    t_rng r; t_rng_seed(&r, 0xB17005);
+    vbegin();
+    for (int it = 0; it < 3000; it++) {
+        uint64_t x = gen_bits(&r);
+        uint16_t m16 = (uint16_t)x, o16; uint32_t m32 = (uint32_t)x, o32;
+        __asm__ volatile("movbe %1, %0" : "=r"(o16) : "m"(m16));
+        VCHECK(o16 == (uint16_t)((m16 >> 8) | (m16 << 8)), "movbe r16 <- m16(0x%04x) = 0x%04x", m16, o16);
+        __asm__ volatile("movbe %1, %0" : "=r"(o32) : "m"(m32));
+        VCHECK(o32 == __builtin_bswap32(m32), "movbe r32 <- m32(0x%08x) = 0x%08x", m32, o32);
+        uint32_t s32 = 0; __asm__ volatile("movbe %1, %0" : "=m"(s32) : "r"(m32));
+        VCHECK(s32 == __builtin_bswap32(m32), "movbe m32 <- r32(0x%08x) = 0x%08x", m32, s32);
+        uint16_t s16 = 0; __asm__ volatile("movbe %1, %0" : "=m"(s16) : "r"(m16));
+        VCHECK(s16 == (uint16_t)((m16 >> 8) | (m16 << 8)), "movbe m16 <- r16(0x%04x) = 0x%04x", m16, s16);
+#ifdef T_X64
+        uint64_t o64, s64 = 0;
+        __asm__ volatile("movbe %1, %0" : "=r"(o64) : "m"(x));
+        VCHECK(o64 == __builtin_bswap64(x), "movbe r64 <- m64(0x%llx)", (unsigned long long)x);
+        __asm__ volatile("movbe %1, %0" : "=m"(s64) : "r"(x));
+        VCHECK(s64 == __builtin_bswap64(x), "movbe m64 <- r64(0x%llx)", (unsigned long long)x);
+#endif
+    }
+    VEND("movbe");
+}
+/* ---- known answers for integer ops (hand-derived, one lane pattern broadcast) */
+TEST(sse2_ssse3_int_known_answers) {
+    NEED(F_SSE2);
+    static const struct { const char *name; int feat; iop_fn op; int lane; uint64_t a, b, want; } t[] = {
+        { "paddsw max+1", F_SSE2, op_paddsw, 2, 0x7FFF, 0x0001, 0x7FFF },
+        { "paddsw min+min", F_SSE2, op_paddsw, 2, 0x8000, 0x8000, 0x8000 },
+        { "psubsw min-1", F_SSE2, op_psubsw, 2, 0x8000, 0x0001, 0x8000 },
+        { "psubsb 0-min", F_SSE2, op_psubsb, 1, 0x00, 0x80, 0x7F },
+        { "paddusb ff+1", F_SSE2, op_paddusb, 1, 0xFF, 0x01, 0xFF },
+        { "psubusw 1-2", F_SSE2, op_psubusw, 2, 0x0001, 0x0002, 0x0000 },
+        { "pmaddwd min*min*2", F_SSE2, op_pmaddwd, 4, 0x80008000, 0x80008000, 0x80000000 },
+        { "pmaddwd -1*-1*2", F_SSE2, op_pmaddwd, 4, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000002 },
+        { "pmulhw min*min", F_SSE2, op_pmulhw, 2, 0x8000, 0x8000, 0x4000 },
+        { "pmulhw -1*1", F_SSE2, op_pmulhw, 2, 0xFFFF, 0x0001, 0xFFFF },
+        { "pmulhuw ffff*ffff", F_SSE2, op_pmulhuw, 2, 0xFFFF, 0xFFFF, 0xFFFE },
+        { "pmullw 0x100*0x100", F_SSE2, op_pmullw, 2, 0x0100, 0x0100, 0x0000 },
+        { "pmuludq max", F_SSE2, op_pmuludq, 8, 0xFFFFFFFFFFFFFFFFull, 0xFFFFFFFFFFFFFFFFull, 0xFFFFFFFE00000001ull },
+        { "pavgb ff,ff", F_SSE2, op_pavgb, 1, 0xFF, 0xFF, 0xFF },
+        { "pavgb 0,1", F_SSE2, op_pavgb, 1, 0x00, 0x01, 0x01 },
+        { "psadbw ff vs 0", F_SSE2, op_psadbw, 8, 0xFFFFFFFFFFFFFFFFull, 0, 0x7F8 },
+        { "packsswb 0x8000", F_SSE2, op_packsswb, 2, 0x8000, 0x8000, 0x8080 },
+        { "packuswb -1/0x100", F_SSE2, op_packuswb, 4, 0x0100FFFF, 0x0100FFFF, 0xFF00FF00 },
+        { "packssdw 0x12345678", F_SSE2, op_packssdw, 4, 0x12345678, 0x12345678, 0x7FFF7FFF },
+        { "packssdw -0x12345678", F_SSE2, op_packssdw, 4, 0xEDCBA988, 0xEDCBA988, 0x80008000 },
+        { "pcmpgtb 0x80>0x7f", F_SSE2, op_pcmpgtb, 1, 0x80, 0x7F, 0x00 },
+        { "pcmpgtd -1>min", F_SSE2, op_pcmpgtd, 4, 0xFFFFFFFF, 0x80000000, 0xFFFFFFFF },
+        { "psraw by 16", F_SSE2, op_psraw, 8, 0x8000800080008000ull, 16, 0xFFFFFFFFFFFFFFFFull },
+        { "psllq by 64", F_SSE2, op_psllq, 8, 0xFFFFFFFFFFFFFFFFull, 64, 0 },
+        { "psrlq by 63", F_SSE2, op_psrlq, 8, 0x8000000000000000ull, 63, 1 },
+        { "pabsb 0x80", F_SSSE3, NULL, 1, 0, 0x80, 0x80 },
+        { "pmulhrsw min*min", F_SSSE3, NULL, 2, 0x8000, 0x8000, 0x8000 },
+        { "pmaddubsw ff*7f*2", F_SSSE3, NULL, 2, 0xFFFF, 0x7F7F, 0x7FFF },
+        { "pmaddubsw ff*80*2", F_SSSE3, NULL, 2, 0xFFFF, 0x8080, 0x8000 },
+        { "phaddsw", F_SSSE3, NULL, 2, 0x7FFF, 0x7FFF, 0x7FFF },
+        { "psignw 5,-1", F_SSSE3, NULL, 2, 0x0005, 0xFFFF, 0xFFFB },
+        { "psignw 5,0", F_SSSE3, NULL, 2, 0x0005, 0x0000, 0x0000 },
+        { "pmulld", F_SSE41, NULL, 4, 0x00010001, 0x00010001, 0x00020001 },
+        { "packusdw -1/0x12345", F_SSE41, NULL, 8, 0x00012345FFFFFFFFull, 0x00012345FFFFFFFFull, 0xFFFF0000FFFF0000ull },
+    };
+    for (size_t i = 0; i < T_COUNTOF(t); i++) {
+        if (!cpu_has(t[i].feat)) continue;
+        iop_fn fn = t[i].op;
+        if (!fn) {
+            const char *n = t[i].name;
+            fn = !strncmp(n, "pabsb", 5) ? op_pabsb : !strncmp(n, "pmulhrsw", 8) ? op_pmulhrsw : !strncmp(n, "pmaddubsw", 9) ? op_pmaddubsw :
+                 !strncmp(n, "phaddsw", 7) ? op_phaddsw : !strncmp(n, "psignw", 6) ? op_psignw : !strncmp(n, "pmulld", 6) ? op_pmulld : op_packusdw;
+        }
+        V128 a, b, d, w;
+        for (int k = 0; k < 16; k += t[i].lane) {
+            memcpy(a.b + k, &t[i].a, (size_t)t[i].lane); memcpy(b.b + k, &t[i].b, (size_t)t[i].lane); memcpy(w.b + k, &t[i].want, (size_t)t[i].lane);
+        }
+        if (strstr(t[i].name, " by ")) { b.q[0] = t[i].b; b.q[1] = 0; }
+        d = a; fn(&d, &b, 0);
+        CHECKF(!memcmp(&d, &w, 16), "%s: got %s want %s", t[i].name, hx(&d, t[i].lane), hx(&w, t[i].lane));
     }
 }
