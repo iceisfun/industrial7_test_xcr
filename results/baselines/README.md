@@ -36,13 +36,15 @@ Wow64Get/SetThreadContext) has only met Wine, where it is XFAIL or SKIP.
 
 ## Recording a Windows baseline
 
-On the Windows machine, with `build\x64`, `build\x86` and `scripts\` copied (or a checkout):
+On Linux, `scripts/pack_windows.sh` builds and packs `build/x64`, `build/x86`, `scripts/` and
+`corpus/` into `build/xcr-windows-<version>.zip`. On the Windows machine, unzip it and run
 
 ```
-powershell -ExecutionPolicy Bypass -File scripts\run_all.ps1 -Baseline auto [-Note "bare metal, VBS off"]
+scripts\run_baseline.cmd "bare metal, VBS off"
+rem or: powershell -ExecutionPolicy Bypass -File scripts\run_all.ps1 -Baseline auto [-Note "..."]
 ```
 
-That writes `results\baselines\<slug>\`. Before committing it, triage it on any host with Python 3:
+That writes `results\baselines\<slug>\` (and `results\baseline-<slug>.zip` to carry back). Before committing it, triage it on any host with Python 3:
 
 ```
 python3 scripts/compare_results.py --triage results/baselines/<slug>
