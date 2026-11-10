@@ -286,6 +286,149 @@ CHILD(report) {
     return 0;
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * Label-based fault skipping (instructions of variable length, e.g. XRSTOR with a memory operand)
+ * ------------------------------------------------------------------------------------------- */
+static volatile ULONG_PTR g_lbl_fault, g_lbl_resume;
+static LONG CALLBACK xp_lbl_veh(EXCEPTION_POINTERS *ep) {
+    if (!g_armed || (ULONG_PTR)ep->ExceptionRecord->ExceptionAddress != g_lbl_fault) return EXCEPTION_CONTINUE_SEARCH;
+    g_armed = 0;
+    g_hits++;
+    g_code = ep->ExceptionRecord->ExceptionCode;
+    g_faddr = (ULONG_PTR)ep->ExceptionRecord->ExceptionAddress;
+#ifdef T_X64
+    ep->ContextRecord->Rip = g_lbl_resume;
+#else
+    ep->ContextRecord->Eip = (DWORD)g_lbl_resume;
+#endif
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+
+/* XSAVE (or XSAVEC) the current state into area with RFBM = rfbm, OR (lo,hi) into the 8 header bytes at
+ * area+off, then XRSTOR the image with the same RFBM. Everything is one asm block, so if the XRSTOR does
+ * not fault it restores exactly the registers that were just saved (no compiler-held value is disturbed).
+ * The XRSTOR address and its resume point are published for xp_lbl_veh before it executes. */
+static T_NOINLINE void xp_xrstor_probe(uint8_t *area, uint32_t off, uint64_t orv, uint64_t rfbm, int compacted) {
+    uint32_t *tgt = (uint32_t *)(area + off);
+    uint32_t lo = (uint32_t)orv, hi = (uint32_t)(orv >> 32);
+    memset(area + 512, 0, 64);   /* header: XSAVE/XSAVEC leave bytes 63:8 (resp. 63:16) alone */
+    if (compacted)
+        __asm__ volatile(
+#ifdef T_X64
+            "lea 1f(%%rip), %%rcx\n\tmov %%rcx, %[gf]\n\tlea 2f(%%rip), %%rcx\n\tmov %%rcx, %[gr]\n\t"
+#else
+            "movl $1f, %[gf]\n\tmovl $2f, %[gr]\n\t"
+#endif
+            "xsavec (%[p])\n\torl %[lo], (%[t])\n\torl %[hi], 4(%[t])\n\t"
+            "1: xrstor (%[p])\n\t2:"
+            : [gf] "=m"(g_lbl_fault), [gr] "=m"(g_lbl_resume)
+            : [p] "r"(area), [t] "r"(tgt), [lo] "r"(lo), [hi] "r"(hi), "a"((uint32_t)rfbm), "d"((uint32_t)(rfbm >> 32))
+#ifdef T_X64
+            : "rcx", "memory");
+#else
+            : "memory");
+#endif
+    else
+        __asm__ volatile(
+#ifdef T_X64
+            "lea 1f(%%rip), %%rcx\n\tmov %%rcx, %[gf]\n\tlea 2f(%%rip), %%rcx\n\tmov %%rcx, %[gr]\n\t"
+#else
+            "movl $1f, %[gf]\n\tmovl $2f, %[gr]\n\t"
+#endif
+            "xsave (%[p])\n\torl %[lo], (%[t])\n\torl %[hi], 4(%[t])\n\t"
+            "1: xrstor (%[p])\n\t2:"
+            : [gf] "=m"(g_lbl_fault), [gr] "=m"(g_lbl_resume)
+            : [p] "r"(area), [t] "r"(tgt), [lo] "r"(lo), [hi] "r"(hi), "a"((uint32_t)rfbm), "d"((uint32_t)(rfbm >> 32))
+#ifdef T_X64
+            : "rcx", "memory");
+#else
+            : "memory");
+#endif
+}
+
+/* XRSTOR header validation against XCR0 (SDM Vol.1 13.8.1 / XRSTOR #GP(0) list):
+ *   mode std : standard form, XSTATE_BV sets a bit that is clear in XCR0            -> #GP
+ *   mode cmp : compacted form, XCOMP_BV[62:0] sets a bit that is clear in XCR0       -> #GP
+ *   mode rsvd: standard form with header bytes 23:8 nonzero; compacted form with bytes 63:16 nonzero -> #GP
+ * Each mode first runs a control (unmodified image) that must NOT fault. Prints a summary. */
+CHILD(xrstor_probe) {
+    const char *mode = argc > 1 ? argv[1] : "std";
+    if (!cpu()->osxsave) { printf("NO_OSXSAVE=1\n"); return 0; }
+    uint64_t xcr0 = t_xgetbv(0);
+    uint64_t rfbm = ~0ull & ~T_XS_AMX_STATE;   /* never touch XFD-armable state */
+    for (int i = 0; i < 64; i++) if (cpu()->comp[i].xfd) rfbm &= ~(1ull << i);
+    int cmp = !strcmp(mode, "cmp");
+    uint8_t *area = (uint8_t *)VirtualAlloc(NULL, 65536, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!area) { printf("NOMEM=1\n"); return 0; }
+    PVOID h = AddVectoredExceptionHandler(1, xp_lbl_veh);
+    /* control */
+    g_hits = 0; g_armed = 1;
+    xp_xrstor_probe(area, 512, 0, rfbm, cmp);
+    g_armed = 0;
+    printf("CTRL_FAULT=%ld\n", (long)g_hits);
+    if (g_hits) printf("CTRL_CODE=0x%08lx\n", (unsigned long)g_code);
+    int tried = 0, codes_ok = 1, addr_ok = 1;
+    uint64_t missed = 0;
+    DWORD first = 0;
+    struct { uint32_t off; uint64_t v; int c; } rs[4] = { { 520, 1, 0 }, { 528, 1, 0 }, { 528, 1, 1 }, { 568, 1ull << 40, 1 } };
+    int n = !strcmp(mode, "rsvd") ? (cpu_has(F_XSAVEC) ? 4 : 2) : 64;
+    for (int i = 0; i < n; i++) {
+        uint32_t off; uint64_t v; int c;
+        if (!strcmp(mode, "rsvd")) { off = rs[i].off; v = rs[i].v; c = rs[i].c; }
+        else {
+            if ((xcr0 >> i) & 1) continue;
+            if (cmp && i == 63) continue;   /* XCOMP_BV[63] is the format bit itself */
+            off = cmp ? 520 : 512; v = 1ull << i; c = cmp;
+        }
+        tried++;
+        g_hits = 0; g_armed = 1;
+        xp_xrstor_probe(area, off, v, rfbm, c);
+        g_armed = 0;
+        if (!g_hits) { missed |= 1ull << (i & 63); continue; }
+        if (!first) first = g_code;
+        if (g_code != XP_STATUS_AV && g_code != XP_STATUS_PRIV) codes_ok = 0;
+        if (g_faddr != g_lbl_fault) addr_ok = 0;
+    }
+    if (h) RemoveVectoredExceptionHandler(h);
+    printf("TRIED=%d\nMISSED=0x%llx\nCODES_OK=%d\nADDR_OK=%d\nFIRSTCODE=0x%08lx\n", tried, (unsigned long long)missed, codes_ok,
+           addr_ok, (unsigned long)first);
+    printf("XCR0_BEFORE=0x%llx\nXCR0_AFTER=0x%llx\n", (unsigned long long)xcr0, (unsigned long long)t_xgetbv(0));
+    VirtualFree(area, 0, MEM_RELEASE);
+    return 0;
+}
+
+/* LOCK XGETBV: the LOCK prefix makes XGETBV #UD (SDM XGETBV exceptions). No handler: must die. */
+CHILD(xgetbv_lock) {
+    if (!cpu()->osxsave) { printf("NO_OSXSAVE=1\n"); return 0; }
+    uint32_t lo = 0, hi = 0;
+    __asm__ volatile(".byte 0xf0, 0x0f, 0x01, 0xd0" : "=a"(lo), "=d"(hi) : "c"(0) : "memory");
+    printf("SURVIVED=1\nVALUE=0x%llx\n", (unsigned long long)hi << 32 | lo);
+    return 0;
+}
+
+#ifdef T_X64
+/* 64-bit mode: XGETBV ignores RCX[63:32] and zero-extends EAX/EDX into RAX/RDX (SDM XGETBV). */
+static T_NOINLINE void xp_xgetbv_wide(uint64_t rcx, uint64_t *rax, uint64_t *rdx) {
+    uint64_t a = 0xDEADBEEF00000000ull | 0x13572468u, d = 0xCAFEF00D00000000ull | 0x24681357u;
+    __asm__ volatile("xgetbv" : "+a"(a), "+d"(d) : "c"(rcx));
+    *rax = a; *rdx = d;
+}
+CHILD(xgetbv_wide) {
+    if (!cpu()->osxsave) { printf("NO_OSXSAVE=1\n"); return 0; }
+    uint64_t a, d;
+    xp_xgetbv_wide(0, &a, &d);
+    printf("PLAIN_RAX=0x%llx\nPLAIN_RDX=0x%llx\n", (unsigned long long)a, (unsigned long long)d);
+    xp_xgetbv_wide(0xFFFFFFFF00000000ull, &a, &d);
+    printf("HI0_RAX=0x%llx\nHI0_RDX=0x%llx\n", (unsigned long long)a, (unsigned long long)d);
+    if (cpu()->xinuse_valid) {
+        xp_xgetbv_wide(0x8000000000000001ull, &a, &d);
+        printf("HI1_RAX=0x%llx\nHI1_RDX=0x%llx\n", (unsigned long long)a, (unsigned long long)d);
+    }
+    printf("XCR0=0x%llx\nDONE=1\n", (unsigned long long)t_xgetbv(0));
+    return 0;
+}
+#endif
+
 /* VEX / EVEX instructions used when the state is NOT enabled (children only: must #UD). */
 T_TARGET("avx") static T_NOINLINE void ud_probe_avx_ymm(void) {
     __asm__ volatile("vxorps %%ymm0, %%ymm0, %%ymm0\n\tvzeroupper" ::: "xmm0", "memory");
@@ -705,6 +848,69 @@ TEST(xsave_header_within_xcr0) {
     VirtualFree(area, 0, MEM_RELEASE);
 }
 
+TEST(xsaveopt_header_within_xcr0) {
+    xp_raw x; xp_need_xcr0(&x);
+    if (!cpu_has(F_XSAVEOPT)) SKIP("XSAVEOPT not available");
+    uint8_t *area = (uint8_t *)VirtualAlloc(NULL, 65536, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    REQUIRE(area);
+    for (uint32_t i = x.d0.ebx; i < x.d0.ebx + 512 && i < 65536; i++) area[i] = 0xCC;
+    uint64_t rfbm = xp_safe_rfbm();
+    t_xsaveopt(area, rfbm);
+    t_xsaveopt(area, rfbm);   /* second save may use the modified optimization: header still exact */
+    uint64_t xstate_bv; memcpy(&xstate_bv, area + 512, 8);
+    t_info("xstate_bv", "0x%llx", (unsigned long long)xstate_bv);
+    CHECKF((xstate_bv & ~(x.xcr0 & rfbm)) == 0, "XSAVEOPT XSTATE_BV 0x%llx outside XCR0&RFBM 0x%llx",
+           (unsigned long long)xstate_bv, (unsigned long long)(x.xcr0 & rfbm));
+    int canary_ok = 1;
+    for (uint32_t i = x.d0.ebx; i < x.d0.ebx + 512 && i < 65536; i++) if (area[i] != 0xCC) { canary_ok = 0; break; }
+    CHECKF(canary_ok, "XSAVEOPT wrote beyond CPUID.(0Dh,0):EBX=%u", x.d0.ebx);
+    VirtualFree(area, 0, MEM_RELEASE);
+}
+
+/* XRSTOR enforces XCR0 in hardware: the effective XCR0 must reject every header bit XGETBV(0) says is
+ * disabled. Runs in a child (each probe #GPs; a VEH skips it). */
+static void expect_xrstor_rejects(const char *mode, const char *what) {
+    REQUIREF(t_child_run("xrstor_probe", mode, 10000, &g_cr), "child did not start (error %lu)", g_cr.spawn_error);
+    REQUIREF(!g_cr.timed_out, "child timed out");
+    CHECKF(g_cr.exc_code == 0, "child died of exception 0x%08lx (fault not delivered to its VEH?)", g_cr.exc_code);
+    uint64_t ctrl = 1, tried = 0, missed = 0, codes = 0, addr = 0, first = 0, b = 0, a = 0;
+    REQUIREF(child_u64(&g_cr, "CTRL_FAULT=", &ctrl), "no CTRL_FAULT line; output: %.400s", g_cr.out);
+    CHECKF(ctrl == 0, "control: XRSTOR of an unmodified fresh image faulted (code %s)", strstr(g_cr.out, "CTRL_CODE=") ? strstr(g_cr.out, "CTRL_CODE=") + 10 : "?");
+    CHECK(child_u64(&g_cr, "TRIED=", &tried));
+    CHECK(child_u64(&g_cr, "MISSED=", &missed));
+    CHECK(child_u64(&g_cr, "CODES_OK=", &codes));
+    CHECK(child_u64(&g_cr, "ADDR_OK=", &addr));
+    child_u64(&g_cr, "FIRSTCODE=", &first);
+    t_info("probes", "%llu (%s)", (unsigned long long)tried, what);
+    if (tried) t_info("exception_code", "0x%08llx", (unsigned long long)first);
+    if (!tried) { t_note("nothing to probe: every bit is enabled"); return; }
+    CHECKF(missed == 0, "XRSTOR accepted %s: probe bits 0x%llx did not #GP", what, (unsigned long long)missed);
+    CHECKF(codes == 1, "#GP must surface as STATUS_ACCESS_VIOLATION or STATUS_PRIVILEGED_INSTRUCTION (first 0x%08llx)",
+           (unsigned long long)first);
+    CHECKF(addr == 1, "#GP is a fault: ExceptionAddress must be the XRSTOR");
+    CHECK(child_u64(&g_cr, "XCR0_BEFORE=", &b));
+    CHECK(child_u64(&g_cr, "XCR0_AFTER=", &a));
+    CHECK_EQ(a, b);
+}
+
+TEST(xrstor_rejects_xstate_bv_outside_xcr0) {
+    xp_raw x; xp_need_xcr0(&x);
+    if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable");
+    expect_xrstor_rejects("std", "XSTATE_BV bits clear in XCR0 (standard form)");
+}
+
+TEST(xrstor_compacted_rejects_xcomp_bv_outside_xcr0) {
+    xp_raw x; xp_need_xcr0(&x);
+    if (!cpu_has(F_XSAVEC)) SKIP("XSAVEC (compaction) not available");
+    expect_xrstor_rejects("cmp", "XCOMP_BV[62:0] bits clear in XCR0 (compacted form)");
+}
+
+TEST(xrstor_rejects_reserved_header_bytes) {
+    xp_raw x; xp_need_xcr0(&x);
+    if (!cpu_has(F_XSAVE)) SKIP("XSAVE not usable");
+    expect_xrstor_rejects("rsvd", "nonzero reserved XSAVE header bytes");
+}
+
 /* =============================================================================================
  * 5. XINUSE (XGETBV with ECX=1): result = XCR0 AND XINUSE; a component not in its initial
  *    configuration has XINUSE[i]=1 (the converse need not hold).
@@ -826,6 +1032,21 @@ TEST(xgetbv1_pkru_info) {
 TEST(xgetbv1_gp_when_unsupported) {
     xp_raw x; xp_need_xcr0(&x);
     if (x.xg1) SKIP("XGETBV ECX=1 is supported (the #GP rule cannot be exercised)");
+    /* SDM: #GP when ECX=1 and CPUID.(0Dh,1):EAX[2]=0. XGETBV never causes a VM exit, so a hypervisor that
+     * hides XG1 in CPUID on hardware that has it cannot make it fault: a non-fault is recorded, not failed
+     * (that is the processor/hypervisor, not the OS contract). If it does fault, it must fault cleanly. */
+    REQUIREF(t_child_run("xgetbv_index", "1", 5000, &g_cr), "child did not start");
+    REQUIRE(!g_cr.timed_out);
+    uint64_t f = 0, v = 0;
+    CHECKF(g_cr.exc_code == 0, "child died of exception 0x%08lx", g_cr.exc_code);
+    REQUIRE(child_u64(&g_cr, "FAULTED=", &f));
+    if (!f) {
+        child_u64(&g_cr, "VALUE=", &v);
+        t_note("XGETBV(1) executed although CPUID.(0Dh,1):EAX[2]=0 (returned 0x%llx): CPUID is masked (hypervisor?)",
+               (unsigned long long)v);
+        CHECKF((v & ~x.xcr0) == 0, "XGETBV(1) value 0x%llx outside XCR0 0x%llx", (unsigned long long)v, (unsigned long long)x.xcr0);
+        return;
+    }
     expect_gp_fault("xgetbv_index", "1", 0);
     uint64_t un = 0;
     CHECK(child_u64(&g_cr, "UNCHANGED=", &un) && un == 1);
@@ -848,6 +1069,43 @@ TEST(xgetbv_index2_info) {
     t_info("xgetbv2", "faulted=%llu code=0x%08llx value=0x%llx", (unsigned long long)f, (unsigned long long)code, (unsigned long long)v);
     if (!f) t_note("XGETBV(2) did not fault (returned 0x%llx)", (unsigned long long)v);
     CHECK(g_cr.exc_code == 0);
+}
+
+TEST(xgetbv_lock_prefix_ud) {
+    xp_raw x; xp_need_xcr0(&x);
+    REQUIREF(t_child_run("xgetbv_lock", "", 5000, &g_cr), "child did not start");
+    REQUIRE(!g_cr.timed_out);
+    t_info("exception_code", "0x%08lx", g_cr.exc_code);
+    CHECKF(!strstr(g_cr.out, "SURVIVED=1"), "LOCK XGETBV executed (must be #UD)");
+    /* #UD -> STATUS_ILLEGAL_INSTRUCTION; a lock-prefix #UD may also be reported as STATUS_INVALID_LOCK_SEQUENCE */
+    CHECKF(g_cr.exc_code == XP_STATUS_ILL || g_cr.exc_code == 0xC000001Eu,
+           "expected STATUS_ILLEGAL_INSTRUCTION (or STATUS_INVALID_LOCK_SEQUENCE), got 0x%08lx", g_cr.exc_code);
+}
+
+TEST(xgetbv_64bit_operand_semantics) {
+#ifdef T_X64
+    xp_raw x; xp_need_xcr0(&x);
+    REQUIREF(t_child_run("xgetbv_wide", "", 5000, &g_cr), "child did not start");
+    REQUIRE(!g_cr.timed_out);
+    CHECKF(g_cr.exc_code == 0, "XGETBV with RCX[63:32] != 0 faulted (0x%08lx): the high half of RCX must be ignored", g_cr.exc_code);
+    uint64_t a = 0, d = 0;
+    REQUIREF(child_u64(&g_cr, "PLAIN_RAX=", &a) && child_u64(&g_cr, "PLAIN_RDX=", &d), "output: %.300s", g_cr.out);
+    CHECKF(a == (uint32_t)x.xcr0 && d == (x.xcr0 >> 32), "XGETBV(0): RAX=0x%llx RDX=0x%llx, want the zero-extended halves of 0x%llx",
+           (unsigned long long)a, (unsigned long long)d, (unsigned long long)x.xcr0);
+    if (child_u64(&g_cr, "HI0_RAX=", &a) && child_u64(&g_cr, "HI0_RDX=", &d))
+        CHECKF(a == (uint32_t)x.xcr0 && d == (x.xcr0 >> 32), "RCX=0xFFFFFFFF00000000: RAX=0x%llx RDX=0x%llx, want XCR0 0x%llx",
+               (unsigned long long)a, (unsigned long long)d, (unsigned long long)x.xcr0);
+    else CHECKF(0, "no HI0 lines");
+    if (x.xg1) {
+        if (child_u64(&g_cr, "HI1_RAX=", &a) && child_u64(&g_cr, "HI1_RDX=", &d)) {
+            CHECKF((a >> 32) == 0 && (d >> 32) == 0, "RCX=0x8000000000000001: RAX/RDX upper halves not cleared (0x%llx, 0x%llx)",
+                   (unsigned long long)a, (unsigned long long)d);
+            CHECKF(((d << 32 | (a & 0xFFFFFFFFu)) & ~x.xcr0) == 0, "XGETBV(1) with RCX[63:32] set returned bits outside XCR0");
+        } else CHECKF(0, "no HI1 lines");
+    }
+#else
+    SKIP("64-bit operand rules (RCX[63:32] ignored, RAX/RDX zero-extended) apply to 64-bit mode only");
+#endif
 }
 
 /* =============================================================================================
@@ -976,6 +1234,8 @@ TEST(xcr0_constant_across_many_threads) {
     CHECK_EQ(bad, 0);
 }
 
+T_TARGET("avx") static T_NOINLINE int exec_avx_ymm(void);
+
 TEST(xcr0_constant_over_time) {
     xp_raw x; xp_need_xcr0(&x);
     int bad = 0;
@@ -986,8 +1246,8 @@ TEST(xcr0_constant_over_time) {
         t_cpuid_regs r; cpuid_ex(1, 0, &r);
         if (!((r.ecx >> 27) & 1)) bad++;
     }
-    if (cpu_has(F_AVX)) {   /* using AVX state does not change XCR0 */
-        uint64_t a, b; xinuse_avx_ymm(&a, &b);
+    if (cpu_has(F_AVX)) {   /* using AVX state does not change XCR0 (no XGETBV(1) here: it needs F_XGETBV1) */
+        CHECK(exec_avx_ymm());
         Sleep(5);
         if (t_xgetbv(0) != x.xcr0) bad++;
     }
@@ -1028,6 +1288,87 @@ TEST(xcr0_same_in_child_process) {
     CHECK(child_u64(&g_cr, "D0EBX=", &ebx));   CHECK_EQ(ebx, x.d0.ebx);
     pfn_GetEnabledXStateFeatures gef = api_gef();
     if (gef) { CHECK(child_u64(&g_cr, "API=", &api)); CHECK_EQ(api, gef()); }
+}
+
+/* XCR0 must not move while another thread suspends, captures and rewrites this thread's context. */
+static volatile LONG g_ctx_stop;
+typedef struct { uint64_t ref; volatile LONG64 reads, bad; uint64_t badval; } xp_ctxw;
+static DWORD WINAPI xp_ctx_worker(void *p) {
+    xp_ctxw *w = (xp_ctxw *)p;
+    DWORD t0 = GetTickCount();
+    while (!g_ctx_stop) {
+        for (int i = 0; i < 256; i++) {
+            uint64_t v = t_xgetbv(0);
+            if (v != w->ref) { if (!w->bad) w->badval = v; w->bad++; }
+        }
+        w->reads += 256;
+        if (GetTickCount() - t0 > 4000) break;
+    }
+    return 0;
+}
+TEST(xcr0_unchanged_under_thread_context_ops) {
+    xp_raw x; xp_need_xcr0(&x);
+    static xp_ctxw w;
+    static CONTEXT ctx __attribute__((aligned(16)));
+    memset(&w, 0, sizeof w);
+    w.ref = x.xcr0;
+    g_ctx_stop = 0;
+    HANDLE h = CreateThread(NULL, 64 * 1024, xp_ctx_worker, &w, 0, NULL);
+    if (!h) SKIP("CreateThread failed: %lu", GetLastError());
+    /* let the worker reach its XGETBV loop first (bounded) so the context operations hit it there */
+    for (DWORD t0 = GetTickCount(); w.reads == 0 && GetTickCount() - t0 < 2000;) Sleep(1);
+    LONG64 reads_before = w.reads;
+    int ok_get = 0, ok_set = 0, cycles = 0;
+    for (int i = 0; i < 200; i++) {
+        if (SuspendThread(h) == (DWORD)-1) break;
+        memset(&ctx, 0, sizeof ctx);
+        ctx.ContextFlags = CONTEXT_FULL | CONTEXT_FLOATING_POINT;
+        if (GetThreadContext(h, &ctx)) { ok_get++; if (SetThreadContext(h, &ctx)) ok_set++; }
+        ResumeThread(h);
+        cycles++;
+        if ((i & 7) == 0) Sleep(0);
+    }
+    g_ctx_stop = 1;
+    CHECK(WaitForSingleObject(h, 6000) == WAIT_OBJECT_0);
+    CloseHandle(h);
+    t_info("context_ops", "cycles=%d get=%d set=%d worker_reads=%lld", cycles, ok_get, ok_set, (long long)w.reads);
+    CHECK_EQ(cycles, 200);
+    CHECK_EQ(ok_get, 200);
+    CHECK_EQ(ok_set, 200);
+    CHECKF(reads_before > 0, "worker thread never ran its XGETBV loop within 2 s");
+    CHECKF(w.bad == 0, "worker saw XCR0 0x%llx (%lld times) instead of 0x%llx", (unsigned long long)w.badval, (long long)w.bad,
+           (unsigned long long)x.xcr0);
+    CHECK_EQ(t_xgetbv(0), x.xcr0);
+}
+
+TEST(xcr0_identical_across_processor_groups) {
+    xp_raw x; xp_need_xcr0(&x);
+    const t_env *e = t_env_get();
+    __typeof__(&GetActiveProcessorGroupCount) gc = T_PROC("kernel32.dll", GetActiveProcessorGroupCount);
+    __typeof__(&GetActiveProcessorCount) pc = T_PROC("kernel32.dll", GetActiveProcessorCount);
+    __typeof__(&SetThreadGroupAffinity) sga = T_PROC("kernel32.dll", SetThreadGroupAffinity);
+    int groups = gc ? gc() : e->active_groups;
+    t_info("groups", "%d", groups);
+    if (groups < 2 || !pc || !sga) SKIP("single processor group (the per-CPU case covers it)");
+    for (int g = 0; g < groups && g < 64; g++) {
+        DWORD n = pc((WORD)g);
+        if (!n) continue;
+        static xp_tres r;
+        memset(&r, 0, sizeof r);
+        HANDLE h = CreateThread(NULL, 64 * 1024, xp_cpu_worker, &r, CREATE_SUSPENDED, NULL);
+        if (!h) { t_note("CreateThread failed for group %d", g); continue; }
+        GROUP_AFFINITY ga; memset(&ga, 0, sizeof ga);
+        ga.Group = (WORD)g;
+        ga.Mask = n >= 8 * sizeof(KAFFINITY) ? ~(KAFFINITY)0 : (((KAFFINITY)1 << n) - 1);
+        int pinned = sga(h, &ga, NULL) != 0;
+        ResumeThread(h);
+        CHECK(WaitForSingleObject(h, 5000) == WAIT_OBJECT_0);
+        CloseHandle(h);
+        if (!pinned) { t_note("SetThreadGroupAffinity(group %d) failed", g); continue; }
+        CHECKF(r.ran, "group %d worker did not run", g);
+        CHECKF(r.xcr0 == x.xcr0, "group %d: XCR0 0x%llx differs from 0x%llx", g, (unsigned long long)r.xcr0, (unsigned long long)x.xcr0);
+        CHECKF(r.d0ebx == x.d0.ebx, "group %d: CPUID.(0Dh,0):EBX differs", g);
+    }
 }
 
 /* Run another exe with a timeout and capture stdout into r->out (minimal, for the other-arch build). */
@@ -1093,8 +1434,12 @@ TEST(xcr0_same_in_other_architecture_process) {
         CHECK(child_u64(&r, "API=", &api));
         if (api != gef()) t_note("GetEnabledXStateFeatures differs: 0x%llx (%s) vs 0x%llx (%s)", (unsigned long long)api, arch,
                                  (unsigned long long)gef(), T_ARCH);
-        /* the user-state part must agree: both processes run on the same XCR0 */
-        CHECK_EQ(api & x.sup, gef() & x.sup);
+        /* x87/SSE/AVX/AVX-512 (bits 0-7, the XSTATE_* features every Windows defines) must agree: both
+         * processes run on the same XCR0. Optional (XFD/on-demand, e.g. AMX) components may legitimately be
+         * reported differently to a WOW64 process: recorded only. */
+        CHECK_EQ(api & x.sup & 0xFF, gef() & x.sup & 0xFF);
+        if ((api ^ gef()) & x.sup & ~0xFFull)
+            t_note("optional user components reported differently: 0x%llx", (unsigned long long)((api ^ gef()) & x.sup & ~0xFFull));
     }
 }
 
