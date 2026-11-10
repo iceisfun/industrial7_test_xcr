@@ -77,6 +77,9 @@
 #define PF_AVX512F_INSTRUCTIONS_AVAILABLE 41
 #endif
 
+#ifndef CONTEXT_XSTATE
+#define CONTEXT_XSTATE (CONTEXT_i386 | 0x40L)   /* x86 value (winnt.h); mingw defines it for AMD64 only */
+#endif
 #define SD_STATUS_ILLEGAL 0xC000001Du
 #define SD_ENV_FORCE "SIMD_DISPATCH_FORCE"
 
@@ -681,10 +684,16 @@ static sd_disp *sd_global(void) {
 static sd_fnptr sd_fn(const sd_disp *d, int k) { return g_impl[d->sel[k]].fn; }
 
 /* The "machine truth" used to judge the dispatcher: the correct gate on the real CPU. */
-static const sd_caps *sd_truth(void) {
-    static sd_caps c; static volatile LONG done;
-    if (!done) { sd_detect(&c, &sd_real, GATE_CORRECT, 0); InterlockedExchange(&done, 1); }
-    return &c;
+static sd_caps g_truth;
+static BOOL CALLBACK sd_truth_cb(PINIT_ONCE o, PVOID p, PVOID *ctx) {
+    (void)o; (void)p; (void)ctx;
+    sd_detect(&g_truth, &sd_real, GATE_CORRECT, 0);
+    return TRUE;
+}
+static const sd_caps *sd_truth(void) {   /* computed once; safe to call first from any thread */
+    static INIT_ONCE once = INIT_ONCE_STATIC_INIT;
+    InitOnceExecuteOnce(&once, sd_truth_cb, NULL, NULL);
+    return &g_truth;
 }
 static int sd_usable_id(int id) { return sd_impl_usable(id, sd_truth()->usable); }
 static const char *sd_req_str(int id) { static char b[160]; return sd_caps_str(b, sizeof b, g_impl[id].req); }
@@ -906,6 +915,24 @@ CHILD(forced) {
         if (is_sel) selected_calls += g_calls[i]; else unselected += g_calls[i];
     }
     printf("VERIFY_MISMATCH=%llu\nUNSELECTED_CALLS=%ld\nSELECTED_CALLS=%ld\nDONE=1\n", (unsigned long long)bad, unselected, selected_calls);
+    return 0;
+}
+
+/* <exe> --child=global : the process-wide dispatcher as an application initializes it (SIMD_DISPATCH_FORCE) */
+CHILD(global) {
+    (void)argc; (void)argv;
+    sd_disp *d = sd_global();
+    printf("FORCE_INVALID=%d\n", g_disp_force_invalid);
+    sd_print_disp(d);
+    sd_calls_reset();
+    uint64_t bad = sd_workload(d, 0x610BA1, 600, 400);
+    long unselected = 0;
+    for (int i = 0; i < I_N; i++) {
+        int is_sel = 0;
+        for (int k = 0; k < K_COUNT; k++) if (d->sel[k] == i) is_sel = 1;
+        if (!is_sel) unselected += g_calls[i];
+    }
+    printf("VERIFY_MISMATCH=%llu\nUNSELECTED_CALLS=%ld\nDONE=1\n", (unsigned long long)bad, unselected);
     return 0;
 }
 
@@ -1335,7 +1362,7 @@ TEST(detect_vs_GetEnabledXStateFeatures) {
     CHECKF((api & 3) == 3, "GetEnabledXStateFeatures()=0x%llx lacks the legacy x87/SSE bits that are always enabled", (unsigned long long)api);
     CHECK_EQ(api, gef());   /* stable */
     if (t_env_get()->api_xstate_present) CHECK_EQ(api, t_env_get()->api_xstate_features);
-    static const struct { uint64_t bit; const char *n; } ub[] = { { 2, "AVX" }, { 0x20, "OPMASK" }, { 0x40, "ZMM_Hi256" }, { 0x80, "Hi16_ZMM" } };
+    static const struct { uint64_t bit; const char *n; } ub[] = { { 0x4, "AVX" }, { 0x20, "OPMASK" }, { 0x40, "ZMM_Hi256" }, { 0x80, "Hi16_ZMM" } };
     int disagree = 0;
     for (size_t i = 0; i < T_COUNTOF(ub); i++) {
         int a = !!(api & ub[i].bit), x = c->osxsave && (c->xcr0 & ub[i].bit);
@@ -1382,6 +1409,98 @@ TEST(detect_RtlGetEnabledExtendedFeatures_mask_filter) {
     const sd_caps *c = sd_truth();
     if (c->osxsave && ((all & 0xE6) != (c->xcr0 & 0xE6)))
         t_note("Rtl-reported vector state 0x%llx differs from XCR0 vector state 0x%llx", (unsigned long long)(all & 0xE6), (unsigned long long)(c->xcr0 & 0xE6));
+}
+
+/* Compare what an application deciding from mask `api` would pick with the correct dispatcher.
+ * Under-selection is a NOTE (functional, slower). Over-selection of an implementation whose state
+ * XCR0 lacks is run in a child: a FAIL only if it then really faults. Returns #over-selections. */
+static int sd_compare_api_driven(const char *what, uint64_t api) {
+    const sd_caps *c = sd_truth();
+    sd_disp ad; sd_disp_make(&ad, TIER_AVX512, GATE_API, api);
+    int over = 0;
+    for (int k = 0; k < K_COUNT; k++) {
+        int sa = ad.sel[k], s0 = sd_select(k, c->usable, TIER_AVX512);
+        if (sa == s0) continue;
+        if (sel_tier(sa) < sel_tier(s0)) { t_note("%s-driven dispatch under-selects %s: %s instead of %s (functional, slower)", what, sd_kname[k], sd_iname(sa), sd_iname(s0)); continue; }
+        if (sd_usable_id(sa)) continue;
+        over++;
+        static t_child_result r; char arg[16]; snprintf(arg, sizeof arg, "%d", sa);
+        if (!t_child_run("run_impl", arg, 10000, &r)) { CHECKF(0, "could not start run_impl child"); continue; }
+        CHECKF(!r.timed_out && r.exc_code == 0,
+               "%s reports state 0x%llx that XCR0=0x%llx lacks; an app trusting it runs %s and dies with 0x%lx",
+               what, (unsigned long long)api, (unsigned long long)c->xcr0, g_impl[sa].name, (unsigned long)r.exc_code);
+        if (!r.exc_code) t_note("%s ran without fault although XCR0 does not enable its state", g_impl[sa].name);
+    }
+    return over;
+}
+
+/* App-style detection through the CONTEXT API: "is there an AVX / AVX-512 area in an XSTATE context?"
+ * kernelbase!LocateXStateFeature (19041 decomp): ids 0/1 -> legacy area; otherwise, when the context
+ * has CONTEXT_XSTATE, ntdll!RtlLocateExtendedFeature2(.., &KUSER_SHARED_DATA.XState) returns NULL
+ * unless id is in (EnabledFeatures | EnabledUserVisibleSupervisorFeatures), the same mask
+ * RtlGetEnabledExtendedFeatures(~0) returns. So: located => GetEnabledXStateFeatures has the bit
+ * (hard check). Agreement with XCR0 is a NOTE (guidance 10.3). */
+TEST(detect_vs_context_xstate_api) {
+    pfn_gef_t gef = (pfn_gef_t)t_proc("kernel32.dll", "GetEnabledXStateFeatures");
+    __typeof__(&InitializeContext) ic = T_PROC("kernel32.dll", InitializeContext);
+    __typeof__(&LocateXStateFeature) loc = T_PROC("kernel32.dll", LocateXStateFeature);
+    if (!gef || !ic || !loc) SKIP("InitializeContext/LocateXStateFeature/GetEnabledXStateFeatures not exported");
+    const sd_caps *c = sd_truth();
+    uint64_t api = gef();
+    if ((api & ~3ull) == 0) {
+        t_note("GetEnabledXStateFeatures=0x%llx: no extended state reported, XSTATE contexts carry no AVX area", (unsigned long long)api);
+        if (c->ymm_ok) t_note("but XCR0=0x%llx enables YMM state: a context-API-driven app under-selects", (unsigned long long)c->xcr0);
+        SKIP("no extended XSTATE features enabled by the OS API");
+    }
+    DWORD flags = CONTEXT_ALL | CONTEXT_XSTATE, len = 0;
+    SetLastError(0);
+    BOOL ok = ic(NULL, flags, NULL, &len);
+    DWORD err = GetLastError();
+    /* documented: NULL Buffer -> FALSE, ERROR_INSUFFICIENT_BUFFER, *ContextLength = required size */
+    CHECKF(!ok && err == ERROR_INSUFFICIENT_BUFFER, "InitializeContext(NULL) returned %d err=%lu", ok, (unsigned long)err);
+    REQUIREF(len >= sizeof(CONTEXT) && len < (1u << 20), "InitializeContext required length %lu", (unsigned long)len);
+    void *buf = malloc(len);
+    REQUIRE(buf);
+    PCONTEXT ctx = NULL; DWORD len2 = len;
+    ok = ic(buf, flags, &ctx, &len2);
+    if (!ok || !ctx) { DWORD e = GetLastError(); free(buf); REQUIREF(0, "InitializeContext(CONTEXT_ALL|CONTEXT_XSTATE) failed err=%lu", (unsigned long)e); }
+    static const struct { DWORD id; const char *n; } fs[] = { { 2, "AVX" }, { 5, "OPMASK" }, { 6, "ZMM_Hi256" }, { 7, "Hi16_ZMM" } };
+    uint64_t located = 0;
+    for (size_t i = 0; i < T_COUNTOF(fs); i++) {
+        DWORD flen = 0;
+        void *p = loc(ctx, fs[i].id, &flen);
+        uint64_t bit = 1ull << fs[i].id;
+        int a = !!(api & bit), x = c->osxsave && (c->xcr0 & bit);
+        t_info(fs[i].n, "located=%d len=%lu api=%d xcr0=%d", p != NULL, (unsigned long)flen, a, x);
+        CHECKF(!p || a, "LocateXStateFeature(%s) found an area but GetEnabledXStateFeatures=0x%llx lacks the bit",
+               fs[i].n, (unsigned long long)api);
+        if (p) {
+            located |= bit;
+            CHECKF((uint8_t *)p >= (uint8_t *)ctx && (uint8_t *)p + flen <= (uint8_t *)buf + len,
+                   "LocateXStateFeature(%s) area %p+%lu outside the context buffer", fs[i].n, p, (unsigned long)flen);
+        }
+        if (!!p != x) t_note("XSTATE %s: located in a CONTEXT_XSTATE context=%d but XCR0=%d", fs[i].n, p != NULL, x);
+    }
+    free(buf);
+    t_info("context_located_mask", "0x%llx", (unsigned long long)located);
+    int over = sd_compare_api_driven("LocateXStateFeature", located | 3);
+    t_info("over_selections", "%d", over);
+}
+
+/* Windows 11 GetThreadEnabledXStateFeatures: optional API (guidance 10.2). Its value is recorded and
+ * compared with XCR0 as NOTE only; an over-claim that would make an app fault is a FAIL. */
+TEST(detect_vs_GetThreadEnabledXStateFeatures) {
+    pfn_gef_t gte = (pfn_gef_t)t_proc("kernel32.dll", "GetThreadEnabledXStateFeatures");
+    if (!gte) SKIP("GetThreadEnabledXStateFeatures not exported (pre-Windows 11 API set)");
+    const sd_caps *c = sd_truth();
+    uint64_t t = gte();
+    t_info("thread_enabled_xstate", "0x%llx", (unsigned long long)t);
+    CHECK_EQ(t, gte());
+    pfn_gef_t gef = (pfn_gef_t)t_proc("kernel32.dll", "GetEnabledXStateFeatures");
+    if (gef && (t & ~gef())) t_note("thread-enabled 0x%llx has bits outside GetEnabledXStateFeatures 0x%llx", (unsigned long long)t, (unsigned long long)gef());
+    if (c->osxsave && (t & 0xE6) != (c->xcr0 & 0xE6))
+        t_note("thread-enabled vector state 0x%llx differs from XCR0 vector state 0x%llx", (unsigned long long)(t & 0xE6), (unsigned long long)(c->xcr0 & 0xE6));
+    sd_compare_api_driven("GetThreadEnabledXStateFeatures", t);
 }
 
 TEST(detect_naive_dispatchers_never_safer_than_correct) {
@@ -1546,6 +1665,21 @@ TEST(synth_exhaustive_selection_invariants) {
     t_info("combinations", "%llu", combos);
 }
 
+TEST(synth_xcr0_high_and_unrelated_bits_ignored) {
+    /* Only XCR0[7:5,2:1] gate these tiers; bits in EDX (XCR0[63:32]) or other components must not matter. */
+    static const struct { uint64_t x; int ymm, zmm; } t[] = {
+        { 0x0000000100000007ull, 1, 0 }, { 0xFFFFFFFF00000003ull, 0, 0 }, { 0x80000000000000E7ull, 1, 1 },
+        { 0x0000000000080207ull, 1, 0 }, { 0x00000000000602E3ull, 0, 0 }, { 0xFFFFFFFFFFFFFFFFull, 1, 1 },
+    };
+    for (size_t i = 0; i < T_COUNTOF(t); i++) {
+        sd_fake f; fake_make(&f, SD_ALL_CAPS, 1, t[i].x, 0xD);
+        sd_caps c; int sel[K_COUNT]; fake_detect(&f, GATE_CORRECT, &c, sel, TIER_AVX512);
+        CHECKF(c.ymm_ok == t[i].ymm && c.zmm_ok == t[i].zmm, "XCR0=0x%llx: ymm=%d zmm=%d, want %d %d",
+               (unsigned long long)t[i].x, c.ymm_ok, c.zmm_ok, t[i].ymm, t[i].zmm);
+        CHECK_EQ(sel_tier(sel[K_ADD_U32]), t[i].zmm ? TIER_AVX512 : t[i].ymm ? TIER_AVX2 : TIER_SSE2);
+    }
+}
+
 TEST(synth_gate_bug_variants_demonstrated) {
     /* AVX hardware, OS with XSAVE enabled but YMM state off: only the correct gate is safe */
     sd_fake f; fake_make(&f, SD_ALL_CAPS, 1, 0x3, 0xD);
@@ -1694,6 +1828,34 @@ TEST(dispatch_concurrent_use) {
     t_info("threads", "%d", nt);
 }
 
+/* Thread-pool callbacks (OS-created threads the app does not own) use the dispatch table. */
+static struct { volatile LONG bad, done; HANDLE ev; } g_tp;
+static void CALLBACK sd_tp_cb(PTP_CALLBACK_INSTANCE inst, PVOID ctx) {
+    (void)inst;
+    uint64_t b = sd_workload(sd_global(), 0x7B00 + (uint64_t)(uintptr_t)ctx, 120, 512);
+    if (b) InterlockedExchangeAdd(&g_tp.bad, (LONG)b);
+    if (InterlockedIncrement(&g_tp.done) == 64) SetEvent(g_tp.ev);
+}
+TEST(dispatch_from_threadpool_callbacks) {
+    __typeof__(&TrySubmitThreadpoolCallback) sub = T_PROC("kernel32.dll", TrySubmitThreadpoolCallback);
+    if (!sub) SKIP("TrySubmitThreadpoolCallback not available");
+    sd_global();
+    g_tp.bad = 0; g_tp.done = 0;
+    g_tp.ev = CreateEventA(NULL, TRUE, FALSE, NULL);
+    REQUIRE(g_tp.ev);
+    int submitted = 0;
+    for (int i = 0; i < 64; i++) if (sub(sd_tp_cb, (PVOID)(uintptr_t)i, NULL)) submitted++;
+    if (submitted < 64) {   /* callbacks that did run still count; wait for them before leaving */
+        for (int w = 0; w < 200 && g_tp.done < submitted; w++) Sleep(10);
+        if (g_tp.done >= submitted) CloseHandle(g_tp.ev);
+        SKIP("only %d of 64 thread-pool callbacks could be submitted", submitted);
+    }
+    DWORD w = WaitForSingleObject(g_tp.ev, 30000);
+    CHECKF(w == WAIT_OBJECT_0, "thread-pool callbacks did not finish (%ld of 64 done)", (long)g_tp.done);
+    CHECKF(g_tp.bad == 0, "%ld dispatched results in thread-pool callbacks differed from reference", (long)g_tp.bad);
+    if (w == WAIT_OBJECT_0) CloseHandle(g_tp.ev);
+}
+
 /* --force=<tier> through a child process */
 static void sd_force_case(const char *args, int expect_cap, const char *expect_src, int expect_invalid) {
     static t_child_result r;
@@ -1745,6 +1907,49 @@ TEST(force_cli_overrides_env) {
     sd_force_case("--force=scalar", TIER_SCALAR, "cli", 0);
     SetEnvironmentVariableA(SD_ENV_FORCE, NULL);
 }
+/* The env knob read by the process-wide dispatcher (sd_global) in a fresh process. */
+static void sd_global_env_case(const char *val, int expect_cap, int expect_invalid) {
+    static t_child_result r;
+    REQUIRE(SetEnvironmentVariableA(SD_ENV_FORCE, val));
+    int started = t_child_run("global", NULL, 30000, &r);
+    SetEnvironmentVariableA(SD_ENV_FORCE, NULL);
+    REQUIRE(started);
+    CHECK(!r.timed_out); CHECK_EQ(r.exc_code, 0); CHECK_EQ(r.exit_code, 0);
+    long long v = -1;
+    CHECKF(sd_find_int(&r, "FORCE_INVALID=", &v) && v == expect_invalid, "%s=%s: invalid flag", SD_ENV_FORCE, val);
+    CHECKF(sd_find_int(&r, "CAP=", &v) && v == expect_cap, "%s=%s: cap", SD_ENV_FORCE, val);
+    const sd_caps *c = sd_truth();
+    for (int k = 0; k < K_COUNT; k++) {
+        char pfx[32]; snprintf(pfx, sizeof pfx, "SEL_%s=", sd_kname[k]);
+        int want = sd_select(k, c->usable, expect_cap);
+        CHECKF(sd_find_int(&r, pfx, &v) && v == want, "%s=%s: %s picked %lld, expected %s", SD_ENV_FORCE, val, sd_kname[k], v, sd_iname(want));
+    }
+    CHECK(sd_find_int(&r, "VERIFY_MISMATCH=", &v) && v == 0);
+    CHECK(sd_find_int(&r, "UNSELECTED_CALLS=", &v) && v == 0);
+    CHECK(sd_find_int(&r, "DONE=", &v) && v == 1);
+}
+TEST(force_env_global_dispatcher) {
+    sd_global_env_case("scalar", TIER_SCALAR, 0);
+    sd_global_env_case("SSE4", TIER_SSE4, 0);
+    sd_global_env_case("avx2", TIER_AVX2, 0);
+    sd_global_env_case("auto", TIER_AVX512, 0);
+    sd_global_env_case("bogus-tier", TIER_AVX512, 1);
+}
+/* A whole run of this exe with the env knob: the dispatcher-level cases must still pass at that cap. */
+TEST(force_env_whole_run) {
+    static t_child_result r;
+    REQUIRE(SetEnvironmentVariableA(SD_ENV_FORCE, "scalar"));
+    int started = t_run_self("--filter=dispatch_table_complete_and_reported,dispatch_concurrent_use", 60000, &r);
+    SetEnvironmentVariableA(SD_ENV_FORCE, NULL);
+    REQUIRE(started);
+    CHECK(!r.timed_out); CHECK_EQ(r.exc_code, 0);
+    CHECKF(r.exit_code == 0, "run with %s=scalar exited %lu", SD_ENV_FORCE, (unsigned long)r.exit_code);
+    CHECKF(strstr(r.out, "caps this run at scalar") != NULL, "the capped run did not report its cap");
+    CHECKF(strstr(r.out, "add_u32_scalar") != NULL, "the capped run did not select add_u32_scalar");
+    char v[256] = "";
+    CHECKF(t_child_find(&r, "SUMMARY ", v, sizeof v) && strstr(v, "total=2 ") && strstr(v, " fail=0 "), "summary: %s", v);
+}
+
 TEST(force_parse_names) {
     CHECK_EQ(sd_parse_tier("scalar"), TIER_SCALAR); CHECK_EQ(sd_parse_tier("SSE2"), TIER_SSE2);
     CHECK_EQ(sd_parse_tier("sse4"), TIER_SSE4);     CHECK_EQ(sd_parse_tier("sse42"), TIER_SSE4);
@@ -1770,11 +1975,15 @@ TEST(misdetect_avx2_without_xcr0_check) {
 TEST(misdetect_avx512_without_zmm_state_check) {
     const sd_caps *c = sd_truth();
     if (!(c->hw & SD_AVX512F)) SKIP("CPU does not advertise AVX-512F");
+    if ((c->hw & (SD_AVX | SD_AVX2)) != (SD_AVX | SD_AVX2))
+        SKIP("AVX-512F advertised without AVX/AVX2: the add_u32 AVX-512 implementation (needs all three) is never picked");
     if (c->zmm_ok) SKIP("XCR0=0x%llx enables opmask/ZMM state: the YMM-only gate bug is not observable", (unsigned long long)c->xcr0);
     if (!c->ymm_ok) SKIP("YMM state not enabled either; covered by misdetect_avx2_without_xcr0_check");
     static t_child_result r;
     REQUIRE(t_child_run("misdetect", "avx512", 10000, &r));
     CHECK(!r.timed_out);
+    char pick[64] = ""; t_child_find(&r, "PICK=", pick, sizeof pick);
+    CHECKF(!strcmp(pick, "add_u32_avx512"), "YMM-only-gated dispatcher picked '%s'", pick);
     CHECKF(r.exc_code == SD_STATUS_ILLEGAL, "EVEX with XCR0[7:5] != 111b must #UD; child exc=0x%lx", (unsigned long)r.exc_code);
 }
 TEST(misdetect_control_correct_gate_survives) {
@@ -1996,8 +2205,18 @@ TEST(add_f32_under_nondefault_mxcsr) {
     REQUIRE(a && b && g && rf);
     sd_fill(K_ADD_F32, 4, (uint8_t *)a, (n + 64) * 4, 11);
     sd_fill(K_ADD_F32, 4, (uint8_t *)b, (n + 64) * 4, 12);
+    /* MXCSR_MASK (FXSAVE bytes 28..31; 0 means the default 0xFFBF): setting a bit outside it makes
+     * LDMXCSR #GP (SDM Vol.1 11.6.6). DAZ (bit 6) is not architecturally guaranteed. */
+    static uint8_t fx[512] T_ALIGN(64);
+    t_fxsave(fx);
+    uint32_t mmask; memcpy(&mmask, fx + 28, 4);
+    if (!mmask) mmask = 0xFFBF;
+    t_info("mxcsr_mask", "0x%x", mmask);
     unsigned saved = t_get_mxcsr();
+    int tested = 0;
     for (size_t m = 0; m < T_COUNTOF(modes); m++) {
+        if (modes[m] & ~mmask) { t_note("MXCSR mode 0x%04x skipped: bits outside MXCSR_MASK 0x%x", modes[m], mmask); continue; }
+        tested++;
         t_set_mxcsr(modes[m]);
         for (int id = 0; id < I_N; id++) {
             if (g_impl[id].kernel != K_ADD_F32 || !sd_usable_id(id)) continue;
@@ -2015,6 +2234,7 @@ TEST(add_f32_under_nondefault_mxcsr) {
     }
     t_set_mxcsr(saved);
     _aligned_free(a); _aligned_free(b); _aligned_free(g); _aligned_free(rf);
+    CHECKF(tested >= 4, "only %d MXCSR modes were testable (mask 0x%x)", tested, mmask);
 }
 
 TEST(impls_preserve_fp_control_state) {
