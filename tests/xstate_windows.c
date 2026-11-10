@@ -2394,9 +2394,10 @@ TEST(exec_xinuse_vs_context_mask) {
 }
 
 /* ======================= K. Windows 11 optional features ================== */
+#define WIN11_API_REASON "(needs Windows 11, build 22000, or later)"
 TEST(thread_enabled_features_win11) {
     DWORD64 en = enabled();
-    if (!X.GetThreadEnabledXStateFeatures) SKIP("GetThreadEnabledXStateFeatures not exported (Windows 11+)");
+    if (!X.GetThreadEnabledXStateFeatures) SKIP("GetThreadEnabledXStateFeatures not exported " WIN11_API_REASON "; thread_enabled_features_oracle has the self-check");
     DWORD64 th = X.GetThreadEnabledXStateFeatures();
     t_info("thread_enabled_features", "0x%llx", (unsigned long long)th);
     CHECKF((th & 3) == 3, "thread features 0x%llx lack x87|SSE", (unsigned long long)th);
@@ -2406,6 +2407,42 @@ TEST(thread_enabled_features_win11) {
     uint64_t opt = en & ~th;
     if (opt) t_note("features enabled system-wide but not yet for this thread (optional, e.g. AMX): 0x%llx", (unsigned long long)opt);
 }
+
+/* Oracle for GetThreadEnabledXStateFeatures that needs no Windows 11: the user components the OS enabled in
+ * XCR0, minus those that support extended feature disable (CPUID.(0Dh,i):ECX[2], SDM vol. 1 13.2), which Windows
+ * treats as optional and enables per process only through EnableProcessOptionalXStateFeatures (AMX TILEDATA
+ * today). Before that call a thread must have every non-optional XCR0 component (it may already use them);
+ * whether optional ones are already on is recorded (a process may have enabled them early). */
+static uint64_t thread_enabled_oracle(uint64_t *optional) {
+    const t_cpu_info *c = cpu();
+    uint64_t user = c->osxsave ? c->xcr0 : 3, opt = 0;
+    for (int i = 2; i < 64; i++) if (((user >> i) & 1) && c->comp[i].xfd) opt |= 1ull << i;
+    *optional = opt;
+    return user & ~opt;
+}
+TEST(thread_enabled_features_oracle) {
+    DWORD64 en = enabled();
+    uint64_t opt = 0, orc = thread_enabled_oracle(&opt);
+    /* XCR0 components GetEnabledXStateFeatures does not report (e.g. PKRU under a compatibility layer) are a
+     * reporting discrepancy, recorded here and judged by the api_* cases; the oracle keeps only reported ones */
+    if ((orc | opt) & ~en) t_note("XCR0 components 0x%llx not reported by GetEnabledXStateFeatures 0x%llx: excluded from the oracle",
+                                  (unsigned long long)((orc | opt) & ~en), (unsigned long long)en);
+    orc &= en | 3; opt &= en;
+    t_info("oracle", "thread-enabled 0x%llx optional (XFD-capable, in XCR0) 0x%llx", (unsigned long long)orc, (unsigned long long)opt);
+    CHECKF((orc & 3) == 3, "oracle 0x%llx lacks x87|SSE", (unsigned long long)orc);
+    if (!X.GetThreadEnabledXStateFeatures) SKIP("GetThreadEnabledXStateFeatures not exported " WIN11_API_REASON "; oracle recorded");
+    DWORD64 th = X.GetThreadEnabledXStateFeatures();
+    t_info("thread_enabled_features", "0x%llx", (unsigned long long)th);
+    CHECKF((orc & ~th) == 0, "GetThreadEnabledXStateFeatures 0x%llx lacks non-optional XCR0 components 0x%llx", (unsigned long long)th,
+           (unsigned long long)(orc & ~th));
+    uint64_t user_extra = th & ~(orc | opt) & cpu()->xcr0 & en;
+    CHECKF(user_extra == 0, "thread features 0x%llx include user components 0x%llx outside the oracle", (unsigned long long)th,
+           (unsigned long long)user_extra);
+    if (th & opt) t_note("optional components 0x%llx already enabled for this thread before EnableProcessOptionalXStateFeatures",
+                         (unsigned long long)(th & opt));
+    if (th & ~cpu()->xcr0) t_note("thread features include non-XCR0 bits 0x%llx (supervisor components)", (unsigned long long)(th & ~cpu()->xcr0));
+}
+static DWORD WINAPI optional_newthread(void *p) { *(DWORD64 *)p = X.GetThreadEnabledXStateFeatures(); return 0; }
 
 CHILD(enable_optional) {
     (void)argc; (void)argv;
@@ -2424,6 +2461,10 @@ CHILD(enable_optional) {
         BOOL ok = X.EnableProcessOptionalXStateFeatures(req);
         printf("AMX_RET=%d\nAMX_ERR=%lu\n", ok, GetLastError());
         printf("AFTER=0x%llx\n", (unsigned long long)X.GetThreadEnabledXStateFeatures());
+        /* process-wide by name: a thread created afterwards must have the features too */
+        DWORD64 nt = 0;
+        HANDLE h = CreateThread(NULL, 64 * 1024, optional_newthread, &nt, 0, NULL);
+        if (h) { if (WaitForSingleObject(h, 5000) == WAIT_OBJECT_0) printf("NEWTHREAD=0x%llx\n", (unsigned long long)nt); CloseHandle(h); }
     }
     SetLastError(0);
     BOOL bad = X.EnableProcessOptionalXStateFeatures(1ull << 62);
@@ -2434,7 +2475,10 @@ CHILD(enable_optional) {
 
 TEST(enable_optional_features_child) {
     DWORD64 en = enabled();
-    if (!X.EnableProcessOptionalXStateFeatures) SKIP("EnableProcessOptionalXStateFeatures not exported (Windows 11+)");
+    uint64_t opt = 0; (void)thread_enabled_oracle(&opt);
+    t_info("optional_oracle", "XFD-capable XCR0 components 0x%llx", (unsigned long long)opt);
+    if (!X.EnableProcessOptionalXStateFeatures)
+        SKIP("EnableProcessOptionalXStateFeatures not exported " WIN11_API_REASON "%s", opt ? "; this CPU HAS optional components" : "");
     static t_child_result r;
     REQUIREF(t_child_run("enable_optional", NULL, 15000, &r), "spawn failed: error %lu", r.spawn_error);
     CHECK(!r.timed_out);
@@ -2449,6 +2493,10 @@ TEST(enable_optional_features_child) {
             CHECKF(t_child_find(&r, "AFTER=", v, sizeof v), "no AFTER line");
             unsigned long long after = strtoull(v, NULL, 16);
             CHECKF((after & (en & T_XS_AMX_STATE)) == (en & T_XS_AMX_STATE), "AMX enabled (TRUE) but thread features 0x%llx lack it", after);
+            if (t_child_find(&r, "NEWTHREAD=", v, sizeof v)) {
+                unsigned long long nt = strtoull(v, NULL, 16);
+                CHECKF((nt & (en & T_XS_AMX_STATE)) == (en & T_XS_AMX_STATE), "thread created after enabling AMX lacks it (0x%llx)", nt);
+            } else CHECKF(0, "no NEWTHREAD line; output:\n%s", r.out);
         } else {
             t_note("EnableProcessOptionalXStateFeatures(AMX) returned %s", v);
         }

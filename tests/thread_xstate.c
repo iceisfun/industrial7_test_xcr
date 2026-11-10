@@ -1395,6 +1395,9 @@ typedef struct sapc {
     volatile LONG apc_runs, apc_wrong, apc_bad;
     unsigned long long chunks, bad_low, bad_ext, bad_leak, bad_env, ext_apc_value;
     unsigned mx; unsigned short cw;
+    void *hj_buf[64];                  /* emulated special APC: one saved-context buffer per hijack (no reuse) */
+    int hj_n;
+    volatile LONG hj_entered;
 } sapc;
 static void CALLBACK sapc_fn(ULONG_PTR p) {
     sapc *s = (sapc *)p;
@@ -1444,11 +1447,83 @@ static DWORD WINAPI sapc_main(void *p) {
     t_set_mxcsr(MX_DEFAULT); t_set_x87_cw(CW_DEFAULT);
     return 0;
 }
-TEST(special_user_apc_async_interrupt) {
+/* Emulated special user APC (self-check path that needs no QueueUserAPC2): what the kernel does for a special
+ * user APC is to interrupt the thread wherever it is in user mode, run KiUserApcDispatcher -> the routine on the
+ * thread's own stack, and resume the interrupted context with NtContinue. The emulation does the same from user
+ * mode: SuspendThread; GetThreadContext(FULL | FLOATING_POINT [| EXTENDED_REGISTERS on x86] [| XSTATE]) into a
+ * buffer used only once; SetThreadContext(CONTROL | INTEGER) with the IP at sapc_hijack_entry, the SP 512 bytes
+ * below the interrupted one, the arguments (s, saved context); ResumeThread. The entry runs the same routine as
+ * the real APC and NtContinue(saved, FALSE). Every check of the real case applies unchanged, so a PASS here
+ * validates the detection logic and the Get/SetThreadContext + NtContinue round trip of an asynchronously
+ * interrupted non-alertable thread; the QueueUserAPC2 delivery itself still needs the case above. */
+typedef LONG (NTAPI *sapc_ntcontinue_t)(PCONTEXT, BOOLEAN);
+static sapc_ntcontinue_t g_sapc_ntcontinue;
+static void __cdecl sapc_hijack_entry(sapc *s, CONTEXT *c) {
+    InterlockedIncrement(&s->hj_entered);
+    sapc_fn((ULONG_PTR)s);
+    g_sapc_ntcontinue(c, FALSE);
+    ExitThread(0xDEADu);               /* NtContinue does not return on success */
+}
+#ifdef T_X64
+#define SAPC_HJ_FLAGS (CONTEXT_FULL | CONTEXT_FLOATING_POINT)
+#define SAPC_CONTEXT_XSTATE 0x100040u
+#else
+#define SAPC_HJ_FLAGS (CONTEXT_FULL | CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS)
+#define SAPC_CONTEXT_XSTATE 0x10040u
+#endif
+/* returns 1 hijacked, 0 skipped (pool exhausted / thread gone), -1 a context API failed (err in *err) */
+static int sapc_hijack(sapc *s, DWORD64 xmask, DWORD *err) {
+    static T_ALIGN(64) CONTEXT nc;
+    if (s->hj_n >= (int)T_COUNTOF(s->hj_buf)) return 0;
+    __typeof__(&InitializeContext) ic = xmask ? T_PROC("kernel32.dll", InitializeContext) : NULL;
+    __typeof__(&SetXStateFeaturesMask) sm = xmask ? T_PROC("kernel32.dll", SetXStateFeaturesMask) : NULL;
+    DWORD flags = SAPC_HJ_FLAGS | (ic && sm ? SAPC_CONTEXT_XSTATE : 0), len = 0;
+    void *buf; CONTEXT *c = NULL;
+    if (flags & SAPC_CONTEXT_XSTATE) {
+        ic(NULL, flags, NULL, &len);
+        buf = len ? calloc(1, len) : NULL;
+        if (!buf || !ic(buf, flags, &c, &len) || !c || !sm(c, xmask)) { free(buf); *err = GetLastError(); return -1; }
+    } else {
+        buf = _aligned_malloc(sizeof(CONTEXT), 64);
+        if (!buf) return 0;
+        memset(buf, 0, sizeof(CONTEXT)); c = (CONTEXT *)buf; c->ContextFlags = flags;
+    }
+    s->hj_buf[s->hj_n++] = buf;
+    if (SuspendThread(s->h) == (DWORD)-1) { *err = GetLastError(); return 0; }
+    int r = 1;
+    if (!GetThreadContext(s->h, c)) { *err = GetLastError(); r = -1; }
+    else {
+        memcpy(&nc, c, sizeof nc);
+        nc.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+#ifdef T_X64
+        uintptr_t sp = ((uintptr_t)c->Rsp - 512u) & ~(uintptr_t)15;
+        sp -= 8; *(uintptr_t *)sp = 0;                  /* entry: RSP = 8 mod 16, [RSP] = return address */
+        nc.Rsp = sp; nc.Rip = (DWORD64)(uintptr_t)sapc_hijack_entry;
+        nc.Rcx = (DWORD64)(uintptr_t)s; nc.Rdx = (DWORD64)(uintptr_t)c;
+#else
+        uintptr_t sp = ((uintptr_t)c->Esp - 512u) & ~(uintptr_t)15;
+        sp -= 12; ((uintptr_t *)sp)[0] = 0; ((uintptr_t *)sp)[1] = (uintptr_t)s; ((uintptr_t *)sp)[2] = (uintptr_t)c;
+        nc.Esp = (DWORD)sp; nc.Eip = (DWORD)(uintptr_t)sapc_hijack_entry;
+#endif
+        if (!SetThreadContext(s->h, &nc)) { *err = GetLastError(); r = -1; }
+    }
+    ResumeThread(s->h);
+    return r;
+}
+static void sapc_case(int emulate) {
     if (!cpu_has(F_SSE2)) SKIP("SSE2 not usable");
-    qapc2_t q2 = (qapc2_t)t_proc("kernel32.dll", "QueueUserAPC2");
-    if (!q2) q2 = (qapc2_t)t_proc("kernelbase.dll", "QueueUserAPC2");
-    if (!q2) SKIP("QueueUserAPC2 not exported (special user APCs need Windows 11)");
+    qapc2_t q2 = NULL;
+    DWORD64 xmask = 0;
+    if (!emulate) {
+        q2 = (qapc2_t)t_proc("kernel32.dll", "QueueUserAPC2");
+        if (!q2) q2 = (qapc2_t)t_proc("kernelbase.dll", "QueueUserAPC2");
+        if (!q2) SKIP("QueueUserAPC2 not exported (special user APCs need Windows 11, build 22000, or Server 2022, build 20348); "
+                      "special_user_apc_emulated_context_hijack covers the restore path");
+    } else {
+        g_sapc_ntcontinue = (sapc_ntcontinue_t)t_proc("ntdll.dll", "NtContinue");
+        if (!g_sapc_ntcontinue) SKIP("ntdll!NtContinue not exported");
+        if (cpu()->osxsave) xmask = t_env_get()->api_xstate_features & cpu()->xcr0 & ~3ull;
+    }
     int kind = best_kind();
     DWORD_PTR cpus[64]; int ncpu = cpu_masks(cpus, 64); if (ncpu < 1) ncpu = 1;
     int k = ncpu + 1; if (k < 2) k = 2; if (k > 8) k = 8;
@@ -1469,25 +1544,50 @@ TEST(special_user_apc_async_interrupt) {
         started++;
     }
     /* queue from the case thread for a bounded time; each spinner gets one special APC per round */
-    unsigned long long queued = 0; DWORD qerr = 0; int unsupported = 0;
+    unsigned long long queued = 0; DWORD qerr = 0; int unsupported = 0, hj_fail = 0;
     if (started == k) {
         uint64_t t0 = t_qpc();
         while (!unsupported && t_qpc_ms(t0, t_qpc()) < (double)dur_ms(16)) {
             for (int i = 0; i < k; i++) {
-                if (q2(sapc_fn, ss[i].h, (ULONG_PTR)&ss[i], 1 /* QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC */)) queued++;
+                if (emulate) {
+                    int r = sapc_hijack(&ss[i], xmask, &qerr);
+                    if (r > 0) queued++;
+                    else if (r < 0) { hj_fail++; if (!queued) unsupported = 1; }
+                } else if (q2(sapc_fn, ss[i].h, (ULONG_PTR)&ss[i], 1 /* QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC */)) queued++;
                 else { qerr = GetLastError(); if (!queued) unsupported = 1; }
             }
-            Sleep(1);
+            Sleep(emulate ? 3 : 1);
         }
     }
     stop = 1;
     int hung = 0;
+    unsigned long long entered = 0;
     for (int i = 0; i < started; i++) {
         if (WaitForSingleObject(ss[i].h, 10000) != WAIT_OBJECT_0) { hung++; TerminateThread(ss[i].h, 1); WaitForSingleObject(ss[i].h, 2000); }
+        DWORD ec = 0; GetExitCodeThread(ss[i].h, &ec);
+        if (emulate) CHECKF(ec != 0xDEADu, "spinner %d: NtContinue of the saved context returned (emulated APC)", i);
         CloseHandle(ss[i].h);
     }
+    for (int i = 0; i < k; i++) {
+        entered += (unsigned long long)ss[i].hj_entered;
+        for (int j = 0; j < ss[i].hj_n; j++) {
+            if (xmask && T_PROC("kernel32.dll", InitializeContext)) free(ss[i].hj_buf[j]); else _aligned_free(ss[i].hj_buf[j]);
+        }
+    }
     if (started < k) { _aligned_free(ss); SKIP("CreateThread failed after %d of %d spinners", started, k); }
-    if (unsupported) { _aligned_free(ss); SKIP("QueueUserAPC2(SPECIAL_USER_APC) rejected (err %lu)", qerr); }
+    if (unsupported && !emulate) {
+        _aligned_free(ss);
+        SKIP("QueueUserAPC2(SPECIAL_USER_APC) rejected (err %lu%s): special user APCs need a native x64 process on Windows 11 (build "
+             "22000) or Server 2022 (build 20348); special_user_apc_emulated_context_hijack covers the restore path", qerr,
+             qerr == ERROR_NOT_SUPPORTED ? ", ERROR_NOT_SUPPORTED" : "");
+    }
+    CHECKF(!unsupported, "context hijack failed from the start: Suspend/Get/SetThreadContext error %lu", qerr);
+    if (emulate) {
+        CHECKF(hj_fail == 0, "%d Get/SetThreadContext calls failed during the emulated APCs (last error %lu)", hj_fail, qerr);
+        CHECKF(entered == queued, "%llu hijacks, %llu entries into the emulated APC", queued, entered);
+        t_info("hijack_context", "flags 0x%lx xstate_mask 0x%llx", (unsigned long)(SAPC_HJ_FLAGS | (xmask ? SAPC_CONTEXT_XSTATE : 0)),
+               (unsigned long long)xmask);
+    }
     unsigned long long runs = 0, wrong = 0, abad = 0, low = 0, ext = 0, leak = 0, env = 0, chunks = 0, extapc = 0;
     for (int i = 0; i < k; i++) {
         sapc *s = &ss[i];
@@ -1502,8 +1602,9 @@ TEST(special_user_apc_async_interrupt) {
     CHECKF(leak == 0, "%llu register qwords held another thread's pattern", leak);
     CHECKF(low == 0, "%llu legacy XMM registers of the interrupted spin not restored (low 128 bits)", low);
     CHECKF(env == 0, "%llu spin chunks with MXCSR control / x87 CW changed by an asynchronous APC", env);
-    if (runs == 0 && t_is_wine()) t_expect_fail("wine: special user APC not delivered to a non-alertable thread");
+    if (runs == 0 && !emulate && t_is_wine()) t_expect_fail("wine: special user APC not delivered to a non-alertable thread");
     CHECKF(runs > 0, "no special user APC was delivered to a spinning (non-alertable) thread (%llu queued)", queued);
+    if (emulate) CHECKF(runs == queued, "%llu emulated APCs completed of %llu hijacks", runs, queued);
     t_info("kind", "%s", kind_name(kind));
     t_info("spinners", "%d", k);
     t_info("apcs_queued", "%llu", queued);
@@ -1513,6 +1614,8 @@ TEST(special_user_apc_async_interrupt) {
     t_info("extended_state_holding_apc_values", "%llu", extapc);
     if (ext) t_note("extended (non-legacy) vector state of the interrupted thread changed across special APCs: %llu registers", ext);
 }
+TEST(special_user_apc_async_interrupt) { sapc_case(0); }
+TEST(special_user_apc_emulated_context_hijack) { sapc_case(1); }
 
 /* ======================================================================================
  * 2. thread churn: create + join 1000 threads; parent state unchanged, children start clean
