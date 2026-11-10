@@ -182,7 +182,9 @@ typedef void (*vref_fn)(V128 *r, const V128 *a, const V128 *b, int rc, int daz, 
 #define FOPI(nm, insn, SWEEP) static T_NOINLINE void fop_##nm(V128 *d, const V128 *s, uint32_t *mx, int imm) { \
     switch (imm) { SWEEP(FOPI_C_##nm) default: break; } }
 
-enum { MODE_DAZ = 4 };
+/* MXCSR environments of the random sweeps: 0..3 = RC (RN, RD, RU, RZ); 4 = RN+DAZ; 5 = RN+FTZ;
+ * 6 = RD+FTZ+DAZ (the model implements FTZ, see softfp.h) */
+enum { MODE_DAZ = 4, MODE_FTZ_RN = 5, MODE_FTZ_DAZ_RD = 6, MODE_COUNT = 7 };
 typedef struct {
     const char *name; int feat; fop_fn op; vref_fn ref;
     int ga, gb;           /* generator kinds for a (dest) and b (source) */
@@ -205,27 +207,31 @@ static void fill_any(t_rng *r, V128 *v, int kind, const sf_fmt *f, const V128 *r
     fill_fp(r, v, f, kind, rel);
 }
 
-static const char *RCN[] = { "RN", "RD", "RU", "RZ", "RN+DAZ" };
+static const char *RCN[] = { "RN", "RD", "RU", "RZ", "RN+DAZ", "RN+FTZ", "RD+FTZ+DAZ" };
 
 static void run_fop(const fop_t *o, uint64_t seed) {
     if (!cpu_has(o->feat)) { t_note("%s: %s not usable, not tested", o->name, cpu_feature_name(o->feat)); return; }
     t_rng r; t_rng_seed(&r, seed);
     vbegin();
     for (int imm = o->imm_lo; imm <= o->imm_hi; imm++) {
-        for (int m = 0; m < 5; m++) {
+        for (int m = 0; m < MODE_COUNT; m++) {
             if (!(o->modes & (1 << m))) continue;
-            int daz = m == 4, rc = daz ? 0 : m;
+            int daz = m == MODE_DAZ || m == MODE_FTZ_DAZ_RD, ftz = m >= MODE_FTZ_RN;
+            int rc = m < MODE_DAZ ? m : m == MODE_FTZ_DAZ_RD ? RC_RD : RC_RN;
             if (daz && !daz_supported()) continue;
+            uint32_t mx0 = 0x1F80u | ((uint32_t)rc << 13) | (daz ? 0x40u : 0) | (ftz ? 0x8000u : 0);
             for (int it = 0; it < o->iters * ITER_SCALE; it++) {
                 V128 a, b, d, w, care;
                 fill_any(&r, &a, o->ga, o->fa, NULL);
                 fill_any(&r, &b, o->gb, o->fb, (o->fa && o->fa == o->fb) ? &a : NULL);
                 d = a;
-                uint32_t mx = 0x1F80u | ((uint32_t)rc << 13) | (daz ? 0x40u : 0);
+                uint32_t mx = mx0;
                 o->op(&d, &b, &mx, imm);
                 uint32_t fl = 0; int unc = 0;
                 memset(&care, 0xFF, sizeof care);
+                sf_ftz = ftz;
                 o->ref(&w, &a, &b, rc, daz, &fl, &unc, &care, imm);
+                sf_ftz = 0;
                 int ok = 1;
                 for (int i = 0; i < 16; i++) if ((d.b[i] ^ w.b[i]) & care.b[i]) ok = 0;
                 uint32_t gf = mx & 0x3F;
@@ -234,7 +240,7 @@ static void run_fop(const fop_t *o, uint64_t seed) {
                 VCHECK(ok && fok, "%s imm=0x%02x %s: a=%s b=%s got=%s want=%s flags got=0x%02x want=0x%02x%s",
                        o->name, imm, RCN[m], hx(&a, lane), hx(&b, lane), hx(&d, lane), hx(&w, lane), gf, fl,
                        unc ? " (flags not compared)" : "");
-                if ((mx & ~0x3Fu) != (0x1F80u | ((uint32_t)rc << 13) | (daz ? 0x40u : 0)))
+                if ((mx & ~0x3Fu) != mx0)
                     VCHECK(0, "%s: MXCSR control bits changed: 0x%08x", o->name, mx);
             }
         }
@@ -340,7 +346,7 @@ FOPI(dpps, "dpps", I256)
 FOPI(dppd, "dppd", I256)
 #undef INSN_
 
-#define ALLM 0x1F
+#define ALLM 0x7F
 #define F32P(nm, ga, gb, it) { #nm, F_SSE, fop_##nm, vr_##nm, ga, gb, &SF32, &SF32, 0, 0, ALLM, it, 0 }
 #define F64P(nm, ga, gb, it) { #nm, F_SSE2, fop_##nm, vr_##nm, ga, gb, &SF64, &SF64, 0, 0, ALLM, it, 0 }
 #define F32S(nm, ref, it) { #nm, F_SSE, fop_##nm, vr_##ref, GK_ANY, GK_ANY, &SF32, &SF32, 0, 0, ALLM, it, 0 }
@@ -499,13 +505,15 @@ static void run_fka(const fka *t, size_t n, int dbl) {
         /* the model must agree with the hand-derived answer too */
         uint32_t fl = 0; int unc = 0; uint64_t mw = 0;
         int rc = (t[i].mx >> 13) & 3, daz = (t[i].mx >> 6) & 1;
-        if (!(t[i].mx & 0x8000)) {   /* model does not do FTZ */
+        sf_ftz = (t[i].mx & 0x8000) != 0;
+        {
             if (!strcmp(t[i].op, "add")) mw = sf_add(f, t[i].a, t[i].b, 0, rc, daz, &fl, &unc);
             else if (!strcmp(t[i].op, "sub")) mw = sf_add(f, t[i].a, t[i].b, 1, rc, daz, &fl, &unc);
             else if (!strcmp(t[i].op, "mul")) mw = sf_mul(f, t[i].a, t[i].b, rc, daz, &fl, &unc);
             else if (!strcmp(t[i].op, "div")) mw = sf_div(f, t[i].a, t[i].b, rc, daz, &fl, &unc);
             else if (!strcmp(t[i].op, "sqrt")) mw = sf_sqrt(f, t[i].b, rc, daz, &fl, &unc);
             else mw = sf_minmax(f, t[i].a, t[i].b, !strcmp(t[i].op, "max"), daz, &fl, &unc);
+            sf_ftz = 0;
             CHECKF(mw == t[i].want && fl == t[i].flags, "model self-check #%u %s: model 0x%llx/0x%02x want 0x%llx/0x%02x",
                    (unsigned)i, t[i].op, (unsigned long long)mw, fl, (unsigned long long)t[i].want, t[i].flags);
         }
@@ -591,6 +599,19 @@ TEST(sse_fp32_known_answers) {
         { "max", 0xFF800000, 0x7F800000, MXRN, 0x7F800000, 0 },
         { "min", 0xBF800000, 0x3F800000, MXRN, 0xBF800000, 0 },
         { "max", 0x00000001, 0x00000000, MXRN, 0x00000001, FL_DE },
+        /* tininess is detected AFTER rounding (unbounded exponent) for SSE: 2^-126 * (1 - 2^-46) rounds
+         * to 2^-126 at 24 bits, so RN gives min normal with PE only; RZ stays tiny -> UE */
+        { "mul", 0x00800001, 0x3F7FFFFE, MXRN, 0x00800000, FL_PE },
+        { "mul", 0x00800001, 0x3F7FFFFE, MXRZ, 0x007FFFFF, FL_UE | FL_PE },
+        { "mul", 0x00800001, 0x3F7FFFFE, MXFTZ, 0x00800000, FL_PE },             /* not tiny: FTZ inactive */
+        { "mul", 0x00FFFFFF, 0x3F000000, MXFTZ, 0x00000000, FL_UE | FL_PE },     /* tiny, exact: flushed */
+        { "add", 0x00000003, 0x00000005, MXFTZ, 0x00000000, FL_DE | FL_UE | FL_PE }, /* exact tiny sum flushed */
+        { "sub", 0x00800001, 0x00800000, MXFTZ, 0x00000000, FL_UE | FL_PE },     /* 2^-149 difference flushed */
+        { "sub", 0x80800000, 0x80800001, MXFTZ, 0x00000000, FL_UE | FL_PE },     /* +2^-149 -> +0 */
+        { "sub", 0x80800001, 0x80800000, MXFTZ, 0x80000000, FL_UE | FL_PE },     /* -2^-149 -> -0 */
+        { "min", 0x3F800000, 0x00000001, MXFTZ, 0x00000001, FL_DE },             /* FTZ leaves MIN alone */
+        { "div", 0x00800000, 0x40000000, MXFTZ, 0x00000000, FL_UE | FL_PE },     /* 2^-127 exact, flushed */
+        { "sqrt", 0, 0x00000002, MXFTZ, 0x1A800000, FL_DE },                     /* sqrt(2^-148) = 2^-74: FTZ only acts on results */
     };
     run_fka(t, T_COUNTOF(t), 0);
 }
@@ -627,6 +648,11 @@ TEST(sse2_fp64_known_answers) {
         { "max", 0x8000000000000000ull, 0x0000000000000000ull, MXRN, 0x0000000000000000ull, 0 },
         { "min", 0x7FF8000000000000ull, 0x3FF0000000000000ull, MXRN, 0x3FF0000000000000ull, FL_IE },
         { "max", 0x3FF0000000000000ull, 0x7FF0000000000001ull, MXRN, 0x7FF0000000000001ull, FL_IE },
+        /* 2^-1022 * (1 + 2^-52) * (1 - 2^-52) = 2^-1022 * (1 - 2^-104): tiny before rounding, not after */
+        { "mul", 0x0010000000000001ull, 0x3FEFFFFFFFFFFFFEull, MXRN, 0x0010000000000000ull, FL_PE },
+        { "mul", 0x0010000000000001ull, 0x3FEFFFFFFFFFFFFEull, MXRZ, 0x000FFFFFFFFFFFFFull, FL_UE | FL_PE },
+        { "add", 0x0000000000000003ull, 0x0000000000000005ull, MXFTZ, 0x0000000000000000ull, FL_DE | FL_UE | FL_PE },
+        { "sub", 0x8010000000000001ull, 0x8010000000000000ull, MXFTZ, 0x8000000000000000ull, FL_UE | FL_PE },
     };
     run_fka(t, T_COUNTOF(t), 1);
 }
@@ -766,6 +792,18 @@ TEST(sse41_dpps_dppd) {
     MX_RUN(insn " %3, %0", : "+x"(d->v), "=m"(sv_), "+m"(*mx) : "x"(s->v)); }
 FOPU(rcpps, "rcpps") FOPU(rsqrtps, "rsqrtps") FOPU(rcpss, "rcpss") FOPU(rsqrtss, "rsqrtss")
 static double u2d32(uint32_t u) { float f; memcpy(&f, &u, 4); return (double)f; }
+/* RCPPS tiny-result boundaries (SDM RCPPS "Operation" note; the SDM sentence is easy to read backwards):
+ *   |x| <= 1.11111111110100000000000B * 2^125 (0x7E7FE800) never gives a tiny result
+ *        (1/x >= 2^-126 * (1 + 1.5*2^-12), so even the worst allowed error stays normal);
+ *   |x| >= 1.00000000000110000000001B * 2^126 (0x7E800C01) always gives a tiny result, flushed to
+ *        signed 0.0 (1/x <= 2^-126 * (1 - 3*2^-12));
+ *   in between: implementation-dependent. Normal inputs near 2^-126 do NOT overflow (1/2^-126 = 2^126
+ *   is finite): only zero and denormal inputs (denormal = treated as 0.0) give signed infinity.
+ *   The check region stops one step below 0x7E7FE800 because at the boundary itself an allowed
+ *   error of exactly -1.5*2^-12 lands a hair under 2^-126. Observed (Intel): rcpps(0x00800000) =
+ *   0x7E7FF000, rcpps(0x7E7FE800) = 0x00801000, rcpps(0x7E800000) = 0. */
+#define RCP_NOTTINY_MAX 0x7E7FE000u
+#define RCP_TINY_MIN    0x7E800C01u
 
 TEST(sse_rcpps_rsqrtps_accuracy) {
     NEED(F_SSE);
@@ -779,16 +817,17 @@ TEST(sse_rcpps_rsqrtps_accuracy) {
             /* normal inputs whose reciprocal is a normal (exponent 2..251) */
             uint32_t ex = 1 + (uint32_t)t_rng_range(&r, 253), m = t_rng_u32(&r) & 0x7FFFFF;
             if (it < 2048 && i == 0) { ex = 127; m = (uint32_t)it << 12; }   /* sweep the mantissa table */
+            if (i == 1 && (it & 7) == 1) { ex = 1; m &= 0x1FFF; }            /* smallest normals: finite result */
+            if (i == 2 && (it & 7) == 2) { ex = 252 + (uint32_t)t_rng_range(&r, 2); m |= 0x7FE000; m ^= (uint32_t)t_rng_range(&r, 0x4000); } /* tiny boundary */
             b.d[i] = (t_rng_range(&r, 2) ? 0x80000000u : 0) | (ex << 23) | m;
         }
         uint32_t mx = 0x1F80; fop_rcpps(&d, &b, &mx, 0);
         uint32_t mx2 = 0x1F80; V128 bp = b; for (int i = 0; i < 4; i++) bp.d[i] &= 0x7FFFFFFF;
         fop_rsqrtps(&e, &bp, &mx2, 0);
         for (int i = 0; i < 4; i++) {
-                uint32_t ax = b.d[i] & 0x7FFFFFFF;
-            if (ax >= 0x7E7FE800u) { VCHECK((d.d[i] & 0x7FFFFFFF) == 0 && (d.d[i] >> 31) == (b.d[i] >> 31), "rcpps(0x%08x)=0x%08x want signed 0 (tiny result flushed)", b.d[i], d.d[i]); }
-            else if (ax <= 0x00800C01u) { VCHECK(d.d[i] == ((b.d[i] & 0x80000000u) | 0x7F800000u), "rcpps(0x%08x)=0x%08x want signed inf", b.d[i], d.d[i]); }
-            else if (ax >= 0x7E000000u || ax < 0x00801000u) { /* between the documented guarantees: not pinned */ }
+            uint32_t ax = b.d[i] & 0x7FFFFFFF;
+            if (ax >= RCP_TINY_MIN) { VCHECK((d.d[i] & 0x7FFFFFFF) == 0 && (d.d[i] >> 31) == (b.d[i] >> 31), "rcpps(0x%08x)=0x%08x want signed 0 (tiny result flushed)", b.d[i], d.d[i]); }
+            else if (ax >= RCP_NOTTINY_MAX) { /* between the documented guarantees: implementation-dependent */ }
             else {
                 double x = u2d32(b.d[i]), y = u2d32(d.d[i]), err = y * x - 1.0;
                 if (err < 0) err = -err;
@@ -836,6 +875,32 @@ TEST(sse_rcp_rsqrt_special_values) {
         } else CHECKF(d.d[0] == t[i].rcp && d.d[3] == t[i].rcp, "rcpps(0x%08x)=0x%08x want 0x%08x", t[i].x, d.d[0], t[i].rcp);
         CHECKF(e.d[0] == t[i].rsq && e.d[3] == t[i].rsq, "rsqrtps(0x%08x)=0x%08x want 0x%08x", t[i].x, e.d[0], t[i].rsq);
         CHECKF((mx & 0x3F) == 0 && (mx2 & 0x3F) == 0, "rcp/rsqrt(0x%08x) flags 0x%02x/0x%02x want none", t[i].x, mx & 0x3F, mx2 & 0x3F);
+    }
+    /* RCPPS range edges: smallest normals give a finite reciprocal within the bound (no overflow);
+     * |x| >= 0x7E800C01 must flush to signed zero; |x| < 0x7E7FE000 must still be within the bound. */
+    static const uint32_t fin[] = { 0x00800000, 0x80800000, 0x00800C01, 0x00801000, 0x0080FFFF, 0x7E7FDFFF, 0xFE7FD000, 0x7E000000 };
+    for (size_t i = 0; i < T_COUNTOF(fin); i++) {
+        V128 b, d = { 0 }; for (int l = 0; l < 4; l++) b.d[l] = fin[i];
+        uint32_t mx = 0x1F80; fop_rcpps(&d, &b, &mx, 0);
+        double err = __builtin_fabs(u2d32(d.d[0]) * u2d32(fin[i]) - 1.0);
+        CHECKF(err <= 1.5 / 4096 && (d.d[0] >> 31) == (fin[i] >> 31) && (mx & 0x3F) == 0,
+               "rcpps(0x%08x)=0x%08x rel err %.3g (must be finite, normal, within 1.5*2^-12)", fin[i], d.d[0], err);
+    }
+    static const uint32_t tiny[] = { 0x7E800C01, 0xFE800C01, 0x7E900000, 0x7F000000, 0x7F7FFFFF, 0xFF7FFFFF };
+    for (size_t i = 0; i < T_COUNTOF(tiny); i++) {
+        V128 b, d = { .d = { 1, 1, 1, 1 } }; for (int l = 0; l < 4; l++) b.d[l] = tiny[i];
+        uint32_t mx = 0x1F80; fop_rcpps(&d, &b, &mx, 0);
+        CHECKF(d.d[0] == (tiny[i] & 0x80000000u) && d.d[3] == d.d[0] && (mx & 0x3F) == 0,
+               "rcpps(0x%08x)=0x%08x flags 0x%02x: want signed 0.0, no flags (tiny result flushed)", tiny[i], d.d[0], mx & 0x3F);
+    }
+    /* between the guarantees: record what this implementation does */
+    {
+        V128 b, d = { 0 }; for (int l = 0; l < 4; l++) b.d[l] = 0x7E800000;
+        uint32_t mx = 0x1F80; fop_rcpps(&d, &b, &mx, 0);
+        t_info("rcpps_2pow126", "0x%08x", d.d[0]);
+        for (int l = 0; l < 4; l++) b.d[l] = 0x7E7FF000;
+        mx = 0x1F80; fop_rcpps(&d, &b, &mx, 0);
+        t_info("rcpps_0x7E7FF000", "0x%08x", d.d[0]);
     }
 }
 
@@ -2250,4 +2315,353 @@ TEST(sse2_ssse3_int_known_answers) {
         d = a; fn(&d, &b, 0);
         CHECKF(!memcmp(&d, &w, 16), "%s: got %s want %s", t[i].name, hx(&d, t[i].lane), hx(&w, t[i].lane));
     }
+}
+
+/* ================================================================ SSE/SSE2/SSSE3 integer forms on MMX registers
+ * SSE added PAVGB/PAVGW/PMINUB/PMAXUB/PMINSW/PMAXSW/PMULHUW/PSADBW/PSHUFW/PEXTRW/PINSRW/PMOVMSKB for
+ * MMX registers, SSE2 added PADDQ/PSUBQ/PMULUDQ mm, SSSE3 defines every instruction for mm as well
+ * (no prefix). Same reference models on 64-bit operands. Each helper ends with EMMS so the x87 tag word
+ * is empty again before any C code (the x86 build does float math on x87). */
+#define MMOP(nm, insn) static T_NOINLINE uint64_t mm_##nm(uint64_t a, uint64_t b) { uint64_t r; \
+    __asm__ volatile("movq %1, %%mm0\n\tmovq %2, %%mm1\n\t" insn " %%mm1, %%mm0\n\tmovq %%mm0, %0\n\temms" \
+                     : "=m"(r) : "m"(a), "m"(b) : "mm0", "mm1"); return r; }
+MMOP(pavgb, "pavgb") MMOP(pavgw, "pavgw") MMOP(pminub, "pminub") MMOP(pmaxub, "pmaxub") MMOP(pminsw, "pminsw")
+MMOP(pmaxsw, "pmaxsw") MMOP(pmulhuw, "pmulhuw") MMOP(psadbw, "psadbw")
+MMOP(paddq, "paddq") MMOP(psubq, "psubq") MMOP(pmuludq, "pmuludq")
+MMOP(pabsb, "pabsb") MMOP(pabsw, "pabsw") MMOP(pabsd, "pabsd") MMOP(psignb, "psignb") MMOP(psignw, "psignw") MMOP(psignd, "psignd")
+MMOP(pmaddubsw, "pmaddubsw") MMOP(pmulhrsw, "pmulhrsw") MMOP(pshufb, "pshufb")
+MMOP(phaddw, "phaddw") MMOP(phaddd, "phaddd") MMOP(phaddsw, "phaddsw") MMOP(phsubw, "phsubw") MMOP(phsubd, "phsubd") MMOP(phsubsw, "phsubsw")
+
+typedef uint64_t (*mmop_fn)(uint64_t, uint64_t);
+enum { MMK_LANE, MMK_HORIZ, MMK_PSHUFB };
+typedef struct { const char *name; int feat; mmop_fn op; iref_fn ref; int kind; } mmop_t;
+
+static uint64_t mm_ref(const mmop_t *o, uint64_t a, uint64_t b) {
+    V128 A = { 0 }, B = { 0 }, R;
+    switch (o->kind) {
+    case MMK_HORIZ:   /* 64-bit form: pairs of a, then pairs of b == low half of the 128-bit form on a:b */
+        A.q[0] = a; A.q[1] = b; o->ref(&R, &A, &B, 0); return R.q[0];
+    case MMK_PSHUFB: {
+        V128 t = { 0 }; t.q[0] = a; uint8_t c[8]; memcpy(c, &b, 8); uint8_t out[8];
+        for (int i = 0; i < 8; i++) out[i] = (c[i] & 0x80) ? 0 : t.b[c[i] & 7];   /* index = bits 2:0 */
+        uint64_t r; memcpy(&r, out, 8); return r;
+    }
+    default:          /* lane-wise (incl. PSADBW / PMULUDQ, whose low half uses only the low 64 bits) */
+        A.q[0] = a; B.q[0] = b; o->ref(&R, &A, &B, 0); return R.q[0];
+    }
+}
+
+TEST(mmx_forms_sse_ssse3_integer) {
+    NEED(F_MMX);
+    NEED(F_SSE);
+    static const mmop_t t[] = {
+        { "pavgb mm", F_SSE, mm_pavgb, ref_pavgb, MMK_LANE }, { "pavgw mm", F_SSE, mm_pavgw, ref_pavgw, MMK_LANE },
+        { "pminub mm", F_SSE, mm_pminub, ref_pminub, MMK_LANE }, { "pmaxub mm", F_SSE, mm_pmaxub, ref_pmaxub, MMK_LANE },
+        { "pminsw mm", F_SSE, mm_pminsw, ref_pminsw, MMK_LANE }, { "pmaxsw mm", F_SSE, mm_pmaxsw, ref_pmaxsw, MMK_LANE },
+        { "pmulhuw mm", F_SSE, mm_pmulhuw, ref_pmulhuw, MMK_LANE }, { "psadbw mm", F_SSE, mm_psadbw, ref_psadbw, MMK_LANE },
+        { "paddq mm", F_SSE2, mm_paddq, ref_paddq, MMK_LANE }, { "psubq mm", F_SSE2, mm_psubq, ref_psubq, MMK_LANE },
+        { "pmuludq mm", F_SSE2, mm_pmuludq, ref_pmuludq, MMK_LANE },
+        { "pabsb mm", F_SSSE3, mm_pabsb, ref_pabsb, MMK_LANE }, { "pabsw mm", F_SSSE3, mm_pabsw, ref_pabsw, MMK_LANE },
+        { "pabsd mm", F_SSSE3, mm_pabsd, ref_pabsd, MMK_LANE }, { "psignb mm", F_SSSE3, mm_psignb, ref_psignb, MMK_LANE },
+        { "psignw mm", F_SSSE3, mm_psignw, ref_psignw, MMK_LANE }, { "psignd mm", F_SSSE3, mm_psignd, ref_psignd, MMK_LANE },
+        { "pmaddubsw mm", F_SSSE3, mm_pmaddubsw, ref_pmaddubsw, MMK_LANE }, { "pmulhrsw mm", F_SSSE3, mm_pmulhrsw, ref_pmulhrsw, MMK_LANE },
+        { "pshufb mm", F_SSSE3, mm_pshufb, NULL, MMK_PSHUFB },
+        { "phaddw mm", F_SSSE3, mm_phaddw, ref_phaddw, MMK_HORIZ }, { "phaddd mm", F_SSSE3, mm_phaddd, ref_phaddd, MMK_HORIZ },
+        { "phaddsw mm", F_SSSE3, mm_phaddsw, ref_phaddsw, MMK_HORIZ }, { "phsubw mm", F_SSSE3, mm_phsubw, ref_phsubw, MMK_HORIZ },
+        { "phsubd mm", F_SSSE3, mm_phsubd, ref_phsubd, MMK_HORIZ }, { "phsubsw mm", F_SSSE3, mm_phsubsw, ref_phsubsw, MMK_HORIZ },
+    };
+    for (size_t k = 0; k < T_COUNTOF(t); k++) {
+        if (!cpu_has(t[k].feat)) { t_note("%s: %s not usable, not tested", t[k].name, cpu_feature_name(t[k].feat)); continue; }
+        t_rng r; t_rng_seed(&r, 0x3A0001 + k * 31);
+        vbegin();
+        for (int it = 0; it < 1500; it++) {
+            V128 va, vb; gen_int(&r, &va); gen_int(&r, &vb);
+            uint64_t a = va.q[it & 1], b = (it % 9 == 0) ? a : vb.q[(it >> 1) & 1];
+            uint64_t got = t[k].op(a, b), want = mm_ref(&t[k], a, b);
+            VCHECK(got == want, "%s a=0x%016llx b=0x%016llx: got 0x%016llx want 0x%016llx", t[k].name,
+                   (unsigned long long)a, (unsigned long long)b, (unsigned long long)got, (unsigned long long)want);
+        }
+        VEND(t[k].name);
+    }
+}
+
+/* PALIGNR mm (16-byte concat, imm >= 16 -> 0), PSHUFW, PEXTRW/PINSRW mm (imm[1:0] selects), PMOVMSKB mm */
+#define MMPALIGNR_C(n) case n: __asm__ volatile("movq %1, %%mm0\n\tmovq %2, %%mm1\n\tpalignr %3, %%mm1, %%mm0\n\tmovq %%mm0, %0\n\temms" \
+    : "=m"(r) : "m"(a), "m"(b), "i"(n) : "mm0", "mm1"); break;
+#define MMPSHUFW_C(n) case n: __asm__ volatile("movq %1, %%mm1\n\tpshufw %2, %%mm1, %%mm0\n\tmovq %%mm0, %0\n\temms" \
+    : "=m"(r) : "m"(b), "i"(n) : "mm0", "mm1"); break;
+#define MMPEXTRW_C(n) case n: __asm__ volatile("movq %1, %%mm2\n\tpextrw %2, %%mm2, %k0\n\temms" : "+r"(g) : "m"(a), "i"(n) : "mm2"); break;
+#define MMPINSRW_C(n) case n: __asm__ volatile("movq %1, %%mm3\n\tpinsrw %3, %k2, %%mm3\n\tmovq %%mm3, %0\n\temms" \
+    : "=m"(r) : "m"(a), "r"(g), "i"(n) : "mm3"); break;
+static T_NOINLINE uint64_t mm_palignr(uint64_t a, uint64_t b, int imm) { uint64_t r = 0; switch (imm) { I256(MMPALIGNR_C) } return r; }
+static T_NOINLINE uint64_t mm_pshufw(uint64_t b, int imm) { uint64_t r = 0; switch (imm) { I256(MMPSHUFW_C) } return r; }
+static T_NOINLINE uintptr_t mm_pextrw(uint64_t a, int imm) { uintptr_t g = (uintptr_t)-1; switch (imm) { I256(MMPEXTRW_C) } return g; }
+static T_NOINLINE uint64_t mm_pinsrw(uint64_t a, uintptr_t g, int imm) { uint64_t r = 0; switch (imm) { I256(MMPINSRW_C) } return r; }
+static T_NOINLINE uintptr_t mm_pmovmskb(uint64_t a) { uintptr_t g = (uintptr_t)-1;
+    __asm__ volatile("movq %1, %%mm4\n\tpmovmskb %%mm4, %k0\n\temms" : "+r"(g) : "m"(a) : "mm4"); return g; }
+
+TEST(mmx_forms_shuffles_imm_sweep) {
+    NEED(F_MMX);
+    NEED(F_SSE);
+    t_rng r; t_rng_seed(&r, 0x3A0101);
+    vbegin();
+    for (int imm = 0; imm < 256; imm++)
+        for (int it = 0; it < 6; it++) {
+            V128 va, vb; gen_int(&r, &va); gen_int(&r, &vb);
+            uint64_t a = va.q[0], b = vb.q[1];
+            uint16_t w[4], o[4]; memcpy(w, &b, 8);
+            for (int i = 0; i < 4; i++) o[i] = w[(imm >> (2 * i)) & 3];
+            uint64_t want; memcpy(&want, o, 8);
+            uint64_t got = mm_pshufw(b, imm);
+            VCHECK(got == want, "pshufw imm 0x%02x b=0x%016llx: got 0x%016llx want 0x%016llx", imm, (unsigned long long)b,
+                   (unsigned long long)got, (unsigned long long)want);
+            uintptr_t g = mm_pextrw(a, imm);
+            VCHECK(g == (uint16_t)(a >> (16 * (imm & 3))), "pextrw r32, mm imm 0x%02x: got 0x%llx (zero-extended word imm[1:0])", imm, (unsigned long long)g);
+            uintptr_t src = (uintptr_t)t_rng_next(&r);
+            uint64_t ins = mm_pinsrw(a, src, imm), wi = (a & ~(0xFFFFull << (16 * (imm & 3)))) | ((uint64_t)(uint16_t)src << (16 * (imm & 3)));
+            VCHECK(ins == wi, "pinsrw mm imm 0x%02x: got 0x%016llx want 0x%016llx", imm, (unsigned long long)ins, (unsigned long long)wi);
+            if (cpu_has(F_SSSE3)) {
+                unsigned char cat[16]; memcpy(cat, &b, 8); memcpy(cat + 8, &a, 8);
+                unsigned char ob[8]; for (int i = 0; i < 8; i++) ob[i] = imm + i < 16 ? cat[imm + i] : 0;
+                uint64_t wp; memcpy(&wp, ob, 8);
+                uint64_t gp = mm_palignr(a, b, imm);
+                VCHECK(gp == wp, "palignr mm imm %d a=0x%016llx b=0x%016llx: got 0x%016llx want 0x%016llx", imm,
+                       (unsigned long long)a, (unsigned long long)b, (unsigned long long)gp, (unsigned long long)wp);
+            }
+        }
+    for (int it = 0; it < 500; it++) {
+        V128 va; gen_int(&r, &va);
+        uint64_t a = va.q[it & 1]; uintptr_t want = 0;
+        for (int i = 0; i < 8; i++) want |= (uintptr_t)((a >> (8 * i + 7)) & 1) << i;
+        uintptr_t g = mm_pmovmskb(a);
+        VCHECK(g == want, "pmovmskb r32, mm(0x%016llx) = 0x%llx want 0x%llx", (unsigned long long)a, (unsigned long long)g, (unsigned long long)want);
+    }
+    VEND("mmx shuffles/extract/insert");
+    if (!cpu_has(F_SSSE3)) t_note("palignr mm: ssse3 not usable, not tested");
+}
+
+/* CVTPI2PS / CVTPS2PI / CVTTPS2PI / CVTPI2PD / CVTPD2PI / CVTTPD2PI: MMX <-> XMM conversions.
+ * CVTPI2PS rounds by MXCSR.RC and keeps xmm[127:64]; CVTPI2PD is exact; the to-integer forms give
+ * 0x80000000 (integer indefinite) with IE for NaN / out of range. Results placed in d (mm -> d.q[0]). */
+static T_NOINLINE void fop_cvtpi2ps(V128 *d, const V128 *s, uint32_t *mx, int imm) { (void)imm;
+    MX_RUN("movq %3, %%mm0\n\tcvtpi2ps %%mm0, %0\n\temms", : "+x"(d->v), "=m"(sv_), "+m"(*mx) : "m"(s->q[0]) : "mm0"); }
+static T_NOINLINE void fop_cvtpi2pd(V128 *d, const V128 *s, uint32_t *mx, int imm) { (void)imm;
+    MX_RUN("movq %3, %%mm0\n\tcvtpi2pd %%mm0, %0\n\temms", : "+x"(d->v), "=m"(sv_), "+m"(*mx) : "m"(s->q[0]) : "mm0"); }
+#define CVT_TO_MM(nm, insn) static T_NOINLINE void fop_##nm(V128 *d, const V128 *s, uint32_t *mx, int imm) { (void)imm; \
+    memset(d, 0, sizeof *d); \
+    MX_RUN(insn " %3, %%mm0\n\tmovq %%mm0, %0\n\temms", : "=m"(d->q[0]), "=m"(sv_), "+m"(*mx) : "x"(s->v) : "mm0"); }
+CVT_TO_MM(cvtps2pi, "cvtps2pi") CVT_TO_MM(cvttps2pi, "cvttps2pi") CVT_TO_MM(cvtpd2pi, "cvtpd2pi") CVT_TO_MM(cvttpd2pi, "cvttpd2pi")
+static void vr_cvtpi2ps(V128 *r, const V128 *a, const V128 *b, int rc, int daz, uint32_t *fl, int *unc, V128 *care, int imm) {
+    (void)daz; (void)unc; (void)care; (void)imm; *r = *a;
+    for (int i = 0; i < 2; i++) r->d[i] = (uint32_t)sf_from_i64(&SF32, b->sd[i], rc, fl);
+}
+static void vr_cvtpi2pd(V128 *r, const V128 *a, const V128 *b, int rc, int daz, uint32_t *fl, int *unc, V128 *care, int imm) {
+    (void)a; (void)daz; (void)unc; (void)care; (void)imm;
+    int32_t s0 = b->sd[0], s1 = b->sd[1];
+    r->q[0] = sf_from_i64(&SF64, s0, rc, fl); r->q[1] = sf_from_i64(&SF64, s1, rc, fl);
+}
+static void vr_cvtps2pi_g(V128 *r, const V128 *b, int rc, int daz, uint32_t *fl, const sf_fmt *f) {
+    int u = 0; V128 t; memset(&t, 0, sizeof t);
+    for (int i = 0; i < 2; i++) t.d[i] = (uint32_t)sf_to_int(f, lget(b, f, i), 32, rc, daz, fl, &u);
+    *r = t;
+}
+static void vr_cvtps2pi(V128 *r, const V128 *a, const V128 *b, int rc, int daz, uint32_t *fl, int *unc, V128 *care, int imm) { (void)a; (void)unc; (void)care; (void)imm; vr_cvtps2pi_g(r, b, rc, daz, fl, &SF32); }
+static void vr_cvttps2pi(V128 *r, const V128 *a, const V128 *b, int rc, int daz, uint32_t *fl, int *unc, V128 *care, int imm) { (void)a; (void)rc; (void)unc; (void)care; (void)imm; vr_cvtps2pi_g(r, b, RC_RZ, daz, fl, &SF32); }
+static void vr_cvtpd2pi(V128 *r, const V128 *a, const V128 *b, int rc, int daz, uint32_t *fl, int *unc, V128 *care, int imm) { (void)a; (void)unc; (void)care; (void)imm; vr_cvtps2pi_g(r, b, rc, daz, fl, &SF64); }
+static void vr_cvttpd2pi(V128 *r, const V128 *a, const V128 *b, int rc, int daz, uint32_t *fl, int *unc, V128 *care, int imm) { (void)a; (void)rc; (void)unc; (void)care; (void)imm; vr_cvtps2pi_g(r, b, RC_RZ, daz, fl, &SF64); }
+
+TEST(mmx_forms_cvtpi_cvtps2pi_conversions) {
+    NEED(F_MMX);
+    NEED(F_SSE);
+    static const fop_t t[] = {
+        { "cvtpi2ps", F_SSE, fop_cvtpi2ps, vr_cvtpi2ps, GK_ANY, 0, &SF32, NULL, 0, 0, NODAZ, 800, 0 },
+        { "cvtps2pi", F_SSE, fop_cvtps2pi, vr_cvtps2pi, 0, GK_CVT, NULL, &SF32, 0, 0, NODAZ, 800, 0 },
+        { "cvttps2pi", F_SSE, fop_cvttps2pi, vr_cvttps2pi, 0, GK_CVT, NULL, &SF32, 0, 0, NODAZ, 800, 0 },
+        { "cvtpi2pd", F_SSE2, fop_cvtpi2pd, vr_cvtpi2pd, 0, 0, &SF64, NULL, 0, 0, NODAZ, 400, 0 },
+        { "cvtpd2pi", F_SSE2, fop_cvtpd2pi, vr_cvtpd2pi, 0, GK_CVT, NULL, &SF64, 0, 0, NODAZ, 800, 0 },
+        { "cvttpd2pi", F_SSE2, fop_cvttpd2pi, vr_cvttpd2pi, 0, GK_CVT, NULL, &SF64, 0, 0, NODAZ, 800, 0 } };
+    run_fops(t, T_COUNTOF(t), 0x3A0201);
+    /* known answers: indefinite, RN ties, upper half of xmm kept by CVTPI2PS */
+    V128 b = { .d = { 0x4F000000, 0x40200000, 0, 0 } }, d; uint32_t mx = MXRN;
+    fop_cvtps2pi(&d, &b, &mx, 0);
+    CHECKF(d.d[0] == 0x80000000u && d.d[1] == 2 && (mx & 0x3F) == (FL_IE | FL_PE), "cvtps2pi(2^31, 2.5) = 0x%08x,%d flags 0x%02x", d.d[0], (int)d.d[1], mx & 0x3F);
+    V128 a = { .d = { 0, 0, 0x11111111, 0x22222222 } }; V128 s = { .sd = { 0x7FFFFFFF, -3, 0, 0 } }; mx = MXRZ; d = a;
+    fop_cvtpi2ps(&d, &s, &mx, 0);
+    CHECKF(d.d[0] == 0x4EFFFFFF && d.d[1] == 0xC0400000 && d.d[2] == 0x11111111 && d.d[3] == 0x22222222 && (mx & 0x3F) == FL_PE,
+           "cvtpi2ps RZ (2^31-1, -3): %s flags 0x%02x", hx(&d, 4), mx & 0x3F);
+}
+
+/* ================================================================ memory operands at the end of a page
+ * Scalar/partial memory forms read or write exactly their element (8/16/32/64 bits): with the operand
+ * in the last bytes before a PAGE_NOACCESS page they must not fault, and stores must leave the bytes
+ * before them untouched. Every memory form is compared with the register form of the same instruction.
+ * Packed m128 forms use a 16-byte aligned operand ending at the page end. */
+#define PE_CHECK_LD(insn, T) do { \
+        T *p_ = (T *)(pg + 64 - sizeof(T)); T v_; t_rng_fill(&r, &v_, sizeof v_); memcpy(p_, &v_, sizeof v_); \
+        V128 s_; gen_int(&r, &s_); memcpy(&s_, &v_, sizeof v_); \
+        V128 d1_, d2_; gen_int(&r, &d1_); d2_ = d1_; \
+        __asm__ volatile(insn " %1, %0" : "+x"(d1_.v) : "m"(*p_)); \
+        __asm__ volatile(insn " %1, %0" : "+x"(d2_.v) : "x"(s_.v)); \
+        VCHECK(!memcmp(&d1_, &d2_, 16), "%s m%d at page end: mem %s reg %s", insn, (int)(8 * sizeof(T)), hx(&d1_, 4), hx(&d2_, 4)); \
+    } while (0)
+/* load whose register form takes a GPR (same width) */
+#define PE_CHECK_LDG(insn, T) do { \
+        T *p_ = (T *)(pg + 64 - sizeof(T)); T v_; t_rng_fill(&r, &v_, sizeof v_); memcpy(p_, &v_, sizeof v_); \
+        V128 d1_, d2_; gen_int(&r, &d1_); d2_ = d1_; \
+        __asm__ volatile(insn " %1, %0" : "+x"(d1_.v) : "m"(*p_)); \
+        __asm__ volatile(insn " %1, %0" : "+x"(d2_.v) : "r"(v_ + 0u)); /* >= 32-bit register */ \
+        VCHECK(!memcmp(&d1_, &d2_, 16), "%s m%d at page end: mem %s reg %s", insn, (int)(8 * sizeof(T)), hx(&d1_, 4), hx(&d2_, 4)); \
+    } while (0)
+/* GPR result from an xmm/m source */
+#define PE_CHECK_TOG(insn, T, G) do { \
+        T *p_ = (T *)(pg + 64 - sizeof(T)); T v_; t_rng_fill(&r, &v_, sizeof v_); memcpy(p_, &v_, sizeof v_); \
+        V128 s_; gen_int(&r, &s_); memcpy(&s_, &v_, sizeof v_); G g1_ = 0, g2_ = 0; \
+        __asm__ volatile(insn " %1, %0" : "=r"(g1_) : "m"(*p_)); \
+        __asm__ volatile(insn " %1, %0" : "=r"(g2_) : "x"(s_.v)); \
+        VCHECK(g1_ == g2_, "%s m%d at page end: mem 0x%llx reg 0x%llx", insn, (int)(8 * sizeof(T)), (unsigned long long)g1_, (unsigned long long)g2_); \
+    } while (0)
+/* GPR result from a GPR/m source (popcnt, lzcnt, movbe-load, crc32 handled separately) */
+#define PE_CHECK_GG(insn, T) do { \
+        T *p_ = (T *)(pg + 64 - sizeof(T)); T v_; t_rng_fill(&r, &v_, sizeof v_); memcpy(p_, &v_, sizeof v_); T g1_ = 0, g2_ = 0; \
+        __asm__ volatile(insn " %1, %0" : "=r"(g1_) : "m"(*p_)); \
+        __asm__ volatile(insn " %1, %0" : "=r"(g2_) : "r"(v_)); \
+        VCHECK(g1_ == g2_, "%s m%d at page end: mem 0x%llx reg 0x%llx", insn, (int)(8 * sizeof(T)), (unsigned long long)g1_, (unsigned long long)g2_); \
+    } while (0)
+/* store of the low element / an extracted element: compare with the register-extract result and check
+ * that the preceding bytes are unchanged */
+#define PE_CHECK_ST(insn, T, wantexpr) do { \
+        T *p_ = (T *)(pg + 64 - sizeof(T)); memset(pg, 0xC3, 64); \
+        V128 s_; gen_int(&r, &s_); \
+        __asm__ volatile(insn " %1, %0" : "=m"(*p_) : "x"(s_.v)); \
+        T w_ = (T)(wantexpr); int pre_ok_ = 1; for (size_t i_ = 0; i_ < 64 - sizeof(T); i_++) if (pg[i_] != 0xC3) pre_ok_ = 0; \
+        VCHECK(!memcmp(p_, &w_, sizeof(T)) && pre_ok_, "%s m%d store at page end: %s (bytes before %s)", insn, (int)(8 * sizeof(T)), \
+               hx(&s_, 4), pre_ok_ ? "intact" : "CLOBBERED"); \
+    } while (0)
+
+TEST(memory_operands_at_page_end) {
+    NEED(F_SSE2);
+    void *base = NULL;
+    unsigned char *pg = (unsigned char *)t_guarded_alloc(64, &base);   /* pg + 64 is the first no-access byte */
+    REQUIRE(pg != NULL);
+    REQUIRE(((uintptr_t)(pg + 64) & 15) == 0);
+    t_rng r; t_rng_seed(&r, 0x3A0301);
+    uint32_t mxs; __asm__ volatile("stmxcsr %0" : "=m"(mxs));
+    vbegin();
+    for (int it = 0; it < 40; it++) {
+        /* SSE / SSE2 scalar arithmetic, compares, conversions, moves */
+        PE_CHECK_LD("addss", uint32_t); PE_CHECK_LD("subss", uint32_t); PE_CHECK_LD("mulss", uint32_t); PE_CHECK_LD("divss", uint32_t);
+        PE_CHECK_LD("sqrtss", uint32_t); PE_CHECK_LD("minss", uint32_t); PE_CHECK_LD("maxss", uint32_t);
+        PE_CHECK_LD("rcpss", uint32_t); PE_CHECK_LD("rsqrtss", uint32_t); PE_CHECK_LD("cmpss $1,", uint32_t); PE_CHECK_LD("cmpss $7,", uint32_t);
+        PE_CHECK_LD("addsd", uint64_t); PE_CHECK_LD("subsd", uint64_t); PE_CHECK_LD("mulsd", uint64_t); PE_CHECK_LD("divsd", uint64_t);
+        PE_CHECK_LD("sqrtsd", uint64_t); PE_CHECK_LD("minsd", uint64_t); PE_CHECK_LD("maxsd", uint64_t); PE_CHECK_LD("cmpsd $2,", uint64_t);
+        PE_CHECK_LD("cvtss2sd", uint32_t); PE_CHECK_LD("cvtsd2ss", uint64_t);
+        PE_CHECK_LD("cvtdq2pd", uint64_t); PE_CHECK_LD("cvtps2pd", uint64_t);
+        PE_CHECK_LDG("cvtsi2ssl", int32_t); PE_CHECK_LDG("cvtsi2sdl", int32_t);
+        PE_CHECK_TOG("cvtss2si", uint32_t, uint32_t); PE_CHECK_TOG("cvttss2si", uint32_t, uint32_t);
+        PE_CHECK_TOG("cvtsd2si", uint64_t, uint32_t); PE_CHECK_TOG("cvttsd2si", uint64_t, uint32_t);
+        PE_CHECK_LD("unpcklps", V128); PE_CHECK_LD("punpcklbw", V128); PE_CHECK_LD("paddd", V128); PE_CHECK_LD("pmaddwd", V128);
+        PE_CHECK_LD("addps", V128); PE_CHECK_LD("mulpd", V128); PE_CHECK_LD("packsswb", V128); PE_CHECK_LD("psadbw", V128);
+        PE_CHECK_LD("pshufd $0x1B,", V128); PE_CHECK_LD("shufps $0x4E,", V128); PE_CHECK_LD("cvtdq2ps", V128); PE_CHECK_LD("pcmpgtd", V128);
+        /* SSE3 / SSSE3 */
+        if (cpu_has(F_SSE3)) { PE_CHECK_LD("movddup", uint64_t); PE_CHECK_LD("haddps", V128); }   /* LDDQU: sse3_movdup_lddqu */
+        if (cpu_has(F_SSSE3)) { PE_CHECK_LD("pshufb", V128); PE_CHECK_LD("palignr $5,", V128); PE_CHECK_LD("pmaddubsw", V128); }
+        /* SSE4.1 */
+        if (cpu_has(F_SSE41)) {
+            PE_CHECK_LD("roundss $9,", uint32_t); PE_CHECK_LD("roundsd $10,", uint64_t);
+            PE_CHECK_LD("pmovsxbw", uint64_t); PE_CHECK_LD("pmovzxwd", uint64_t); PE_CHECK_LD("pmovsxdq", uint64_t);
+            PE_CHECK_LD("pmovzxbd", uint32_t); PE_CHECK_LD("pmovsxwq", uint32_t); PE_CHECK_LD("pmovzxbq", uint16_t);
+            PE_CHECK_LD("pmulld", V128); PE_CHECK_LD("pminud", V128); PE_CHECK_LD("dpps $0xF1,", V128); PE_CHECK_LD("pblendw $0xA5,", V128);
+            /* PINSRB/W/D m8/m16/m32 (the register form takes a GPR) and INSERTPS m32 at the page end */
+            PE_CHECK_LDG("pinsrb $13,", uint8_t); PE_CHECK_LDG("pinsrd $2,", uint32_t);
+            {
+                uint32_t *p = (uint32_t *)(pg + 60); uint32_t v = t_rng_u32(&r); *p = v;
+                V128 d; gen_int(&r, &d); V128 w = d; w.d[1] = v; w.d[3] = 0;
+                __asm__ volatile("insertps $0x58, %1, %0" : "+x"(d.v) : "m"(*p));   /* dest lane 1, zero lane 3 */
+                VCHECK(!memcmp(&d, &w, 16), "insertps m32 at page end: %s want %s", hx(&d, 4), hx(&w, 4));
+            }
+        }
+        PE_CHECK_LDG("pinsrw $6,", uint16_t);
+        /* loads that merge or zero-extend */
+        {   /* MOVSS/MOVSD loads zero the rest of the register (unlike their register forms, which merge) */
+            uint32_t *p32 = (uint32_t *)(pg + 60); uint64_t *p64 = (uint64_t *)(pg + 56);
+            *p64 = t_rng_next(&r);
+            V128 d, w; gen_int(&r, &d); memset(&w, 0, 16); w.d[0] = *p32;
+            __asm__ volatile("movss %1, %0" : "+x"(d.v) : "m"(*p32));
+            VCHECK(!memcmp(&d, &w, 16), "movss xmm, m32 at page end: %s", hx(&d, 4));
+            gen_int(&r, &d); memset(&w, 0, 16); w.q[0] = *p64;
+            __asm__ volatile("movsd %1, %0" : "+x"(d.v) : "m"(*p64));
+            VCHECK(!memcmp(&d, &w, 16), "movsd xmm, m64 at page end: %s", hx(&d, 8));
+        }
+        {
+            uint64_t *p = (uint64_t *)(pg + 56); uint64_t v = t_rng_next(&r); *p = v;
+            V128 d; gen_int(&r, &d); V128 w = d; w.q[1] = v;
+            __asm__ volatile("movhps %1, %0" : "+x"(d.v) : "m"(*p));
+            VCHECK(!memcmp(&d, &w, 16), "movhps m64 at page end: %s", hx(&d, 8));
+            gen_int(&r, &d); w = d; w.q[0] = v;
+            __asm__ volatile("movlpd %1, %0" : "+x"(d.v) : "m"(*p));
+            VCHECK(!memcmp(&d, &w, 16), "movlpd m64 at page end: %s", hx(&d, 8));
+            gen_int(&r, &d); memset(&w, 0, 16); w.q[0] = v;
+            __asm__ volatile("movq %1, %0" : "+x"(d.v) : "m"(*p));
+            VCHECK(!memcmp(&d, &w, 16), "movq xmm, m64 at page end: %s", hx(&d, 8));
+            uint32_t *p32 = (uint32_t *)(pg + 60);
+            gen_int(&r, &d); memset(&w, 0, 16); w.d[0] = *p32;
+            __asm__ volatile("movd %1, %0" : "+x"(d.v) : "m"(*p32));
+            VCHECK(!memcmp(&d, &w, 16), "movd xmm, m32 at page end: %s", hx(&d, 4));
+        }
+        /* comiss / ucomisd m32/m64 */
+        {
+            uint32_t *p = (uint32_t *)(pg + 60); uint32_t v = (uint32_t)gen_fp(&r, &SF32, GK_ANY); *p = v;
+            V128 a; fill_fp(&r, &a, &SF32, GK_ANY, NULL); V128 s = a; s.d[0] = v;
+            uint8_t z1, c1, p1, z2, c2, p2;
+            __asm__ volatile("comiss %3, %4" : "=@ccz"(z1), "=@ccc"(c1), "=@ccp"(p1) : "m"(*p), "x"(a.v));
+            __asm__ volatile("comiss %3, %4" : "=@ccz"(z2), "=@ccc"(c2), "=@ccp"(p2) : "x"(s.v), "x"(a.v));
+            VCHECK(z1 == z2 && c1 == c2 && p1 == p2, "comiss m32 at page end: ZF%d CF%d PF%d vs reg ZF%d CF%d PF%d", z1, c1, p1, z2, c2, p2);
+            uint64_t *q = (uint64_t *)(pg + 56); uint64_t vq = gen_fp(&r, &SF64, GK_ANY); *q = vq;
+            fill_fp(&r, &a, &SF64, GK_ANY, NULL); s = a; s.q[0] = vq;
+            __asm__ volatile("ucomisd %3, %4" : "=@ccz"(z1), "=@ccc"(c1), "=@ccp"(p1) : "m"(*q), "x"(a.v));
+            __asm__ volatile("ucomisd %3, %4" : "=@ccz"(z2), "=@ccc"(c2), "=@ccp"(p2) : "x"(s.v), "x"(a.v));
+            VCHECK(z1 == z2 && c1 == c2 && p1 == p2, "ucomisd m64 at page end: ZF%d CF%d PF%d vs reg ZF%d CF%d PF%d", z1, c1, p1, z2, c2, p2);
+        }
+        /* stores of one element */
+        PE_CHECK_ST("movss", uint32_t, s_.d[0]); PE_CHECK_ST("movsd", uint64_t, s_.q[0]); PE_CHECK_ST("movd", uint32_t, s_.d[0]);
+        PE_CHECK_ST("movq", uint64_t, s_.q[0]); PE_CHECK_ST("movlps", uint64_t, s_.q[0]); PE_CHECK_ST("movhps", uint64_t, s_.q[1]);
+        PE_CHECK_ST("movhpd", uint64_t, s_.q[1]);
+        PE_CHECK_ST("movaps", V128, s_.v); PE_CHECK_ST("movdqu", V128, s_.v);
+        if (cpu_has(F_SSE41)) {
+            PE_CHECK_ST("pextrb $11,", uint8_t, s_.b[11]); PE_CHECK_ST("pextrw $5,", uint16_t, s_.w[5]);
+            PE_CHECK_ST("pextrd $3,", uint32_t, s_.d[3]); PE_CHECK_ST("extractps $2,", uint32_t, s_.d[2]);
+        }
+#ifdef T_X64
+        PE_CHECK_LDG("cvtsi2ssq", int64_t); PE_CHECK_LDG("cvtsi2sdq", int64_t);
+        PE_CHECK_TOG("cvttsd2si", uint64_t, uint64_t); PE_CHECK_TOG("cvtss2si", uint32_t, uint64_t);
+        if (cpu_has(F_SSE41)) { PE_CHECK_LDG("pinsrq $1,", uint64_t); PE_CHECK_ST("pextrq $1,", uint64_t, s_.q[1]); }
+#endif
+        /* GPR instructions with memory sources */
+        if (cpu_has(F_POPCNT)) { PE_CHECK_GG("popcnt", uint16_t); PE_CHECK_GG("popcnt", uint32_t); }
+        if (cpu_has(F_LZCNT)) PE_CHECK_GG("lzcnt", uint16_t);
+        if (cpu_has(F_BMI1)) PE_CHECK_GG("tzcnt", uint32_t);
+        if (cpu_has(F_SSE42)) {
+            uint8_t *p8 = pg + 63; *p8 = (uint8_t)t_rng_next(&r);
+            uint16_t *p16 = (uint16_t *)(pg + 62);
+            uint32_t c0 = t_rng_u32(&r), c1 = c0, c2 = c0;
+            __asm__ volatile("crc32b %1, %0" : "+r"(c1) : "m"(*p8));
+            VCHECK(c1 == crc32c_sw(c0, p8, 1), "crc32b m8 at page end");
+            c1 = c0; __asm__ volatile("crc32w %1, %0" : "+r"(c1) : "m"(*p16));
+            uint16_t v16 = *p16; __asm__ volatile("crc32w %1, %0" : "+r"(c2) : "r"(v16));
+            VCHECK(c1 == c2 && c1 == crc32c_sw(c0, p16, 2), "crc32w m16 at page end");
+        }
+        if (cpu_has(F_MOVBE)) {
+            uint16_t *p16 = (uint16_t *)(pg + 62); uint16_t v = (uint16_t)t_rng_next(&r), o;
+            *p16 = v; __asm__ volatile("movbe %1, %0" : "=r"(o) : "m"(*p16));
+            VCHECK(o == (uint16_t)((v >> 8) | (v << 8)), "movbe r16, m16 at page end");
+            memset(pg, 0xC3, 64);
+            __asm__ volatile("movbe %1, %0" : "=m"(*p16) : "r"(v));
+            VCHECK(*p16 == (uint16_t)((v >> 8) | (v << 8)) && pg[61] == 0xC3, "movbe m16, r16 at page end");
+        }
+    }
+    VEND("page-end memory operands");
+    uint32_t mxe; __asm__ volatile("stmxcsr %0" : "=m"(mxe));
+    __asm__ volatile("ldmxcsr %0" : : "m"(mxs));   /* drop status flags the random inputs raised */
+    CHECKF((mxe & ~0x3Fu) == (mxs & ~0x3Fu), "MXCSR control bits changed: 0x%08x -> 0x%08x", mxs, mxe);
+    t_guarded_free(base);
 }

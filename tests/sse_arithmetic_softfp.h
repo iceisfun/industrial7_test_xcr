@@ -12,7 +12,12 @@
  *   - Rounding: MXCSR.RC (0 RN-even, 1 toward -inf, 2 toward +inf, 3 toward zero).
  *   - Overflow: RN->inf, RZ->max finite, RD-> -inf/+max, RU-> +inf/-max. Flags OE|PE.
  *   - Underflow flag (masked UM): tiny (detected AFTER rounding, i.e. with unbounded exponent) AND
- *     inexact. Gradual underflow to denormals (FTZ is only exercised by directed vectors).
+ *     inexact. Gradual underflow to denormals.
+ *   - FTZ (MXCSR[15], set the model's sf_ftz): when the result is tiny (same after-rounding test) it is
+ *     replaced by a zero of the result's sign and UE|PE are set, even when the tiny result was exact
+ *     (SDM Vol.1 10.2.3.3: "returns a zero result with the sign of the true result; sets the
+ *     precision and underflow exception flags"). FTZ never changes operands (that is DAZ) and does
+ *     not touch MIN/MAX/compare/convert-to-integer results, which cannot underflow.
  *   - DAZ: denormal sources become signed zero before any computation, DE is not set.
  *   - Exact zero sum of opposite-signed operands is +0, or -0 when RC = toward -inf.
  * The model returns the flags it is sure about and sets *unc when the architecture leaves room
@@ -46,6 +51,8 @@ static inline uint64_t sf_defnan(const sf_fmt *f) { return sf_signbit(f) | (sf_e
 static inline uint64_t sf_inf(const sf_fmt *f, int s) { return (s ? sf_signbit(f) : 0) | (sf_expmax(f) << f->M); }
 static inline uint64_t sf_zero(const sf_fmt *f, int s) { return s ? sf_signbit(f) : 0; }
 static inline uint64_t sf_maxfin(const sf_fmt *f, int s) { return (s ? sf_signbit(f) : 0) | (((sf_expmax(f) - 1) << f->M) | sf_mmask(f)); }
+
+static int sf_ftz;   /* models MXCSR.FTZ for the next operations (single-threaded use) */
 
 static inline int sf_clz64(uint64_t x) { int n = 0; if (!x) return 64; while (!(x >> 63)) { x <<= 1; n++; } return n; }
 
@@ -102,6 +109,7 @@ static uint64_t sf_round_pack(const sf_fmt *f, int sign, int e, uint64_t sig, in
                 }
                 if (qn + in2 == (1ull << (f->M + 1))) tiny = 0;
             }
+            if (tiny && sf_ftz) { *fl |= FL_UE | FL_PE; return sb; }
             if (tiny && inexact) *fl |= FL_UE;
             return sb | q;
         }
@@ -145,8 +153,12 @@ static uint64_t sf_add(const sf_fmt *f, uint64_t a, uint64_t b, int sub, int rc,
         return sf_isinf(f, a) ? a : b;
     }
     if (sf_iszero(f, a) && sf_iszero(f, b)) return sf_zero(f, sa == sb ? sa : rc == RC_RD);
-    if (sf_iszero(f, a)) return b;
-    if (sf_iszero(f, b)) return a;
+    /* x + 0: the result is x itself, which is tiny when x is a denormal (FTZ flushes it, UE|PE) */
+    if (sf_iszero(f, a) || sf_iszero(f, b)) {
+        uint64_t x = sf_iszero(f, a) ? b : a;
+        if (sf_ftz && sf_isden(f, x)) { *fl |= FL_UE | FL_PE; return x & sf_signbit(f); }
+        return x;
+    }
     uint64_t ma, mb; int ea, eb;
     sf_unpack(f, a, &ma, &ea); sf_unpack(f, b, &mb, &eb);
     ma <<= 9; ea -= 9; mb <<= 9; eb -= 9;
