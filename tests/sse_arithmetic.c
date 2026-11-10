@@ -1036,3 +1036,756 @@ TEST(sse_cvt_known_answers) {
     }
 #endif
 }
+
+/* ================================================================ integer harness */
+typedef void (*iop_fn)(V128 *d, const V128 *s, int imm);
+typedef void (*iref_fn)(V128 *r, const V128 *a, const V128 *b, int imm);
+enum { GB_INT, GB_COUNT };
+typedef struct { const char *name; int feat; iop_fn op; iref_fn ref; int gen_b; int imm_lo, imm_hi; int iters; } iop_t;
+
+static void run_iop(const iop_t *o, uint64_t seed) {
+    if (!cpu_has(o->feat)) { t_note("%s: %s not usable, not tested", o->name, cpu_feature_name(o->feat)); return; }
+    t_rng r; t_rng_seed(&r, seed);
+    vbegin();
+    for (int imm = o->imm_lo; imm <= o->imm_hi; imm++)
+        for (int it = 0; it < o->iters; it++) {
+            V128 a, b, d, w;
+            gen_int(&r, &a);
+            if (o->gen_b == GB_COUNT) gen_count(&r, &b);
+            else if (t_rng_range(&r, 8) == 0) b = a;          /* equal operands */
+            else gen_int(&r, &b);
+            d = a;
+            o->op(&d, &b, imm);
+            o->ref(&w, &a, &b, imm);
+            VCHECK(!memcmp(&d, &w, 16), "%s imm=0x%02x: a=%s b=%s got=%s want=%s", o->name, imm,
+                   hx(&a, 2), hx(&b, 2), hx(&d, 2), hx(&w, 2));
+        }
+    VEND(o->name);
+}
+static void run_iops(const iop_t *t, size_t n, uint64_t seed) { for (size_t i = 0; i < n; i++) run_iop(&t[i], seed + i * 104729); }
+
+#define IOP(nm, insn) static T_NOINLINE void op_##nm(V128 *d, const V128 *s, int imm) { (void)imm; \
+    __asm__ volatile(insn " %1, %0" : "+x"(d->v) : "x"(s->v)); }
+#define IOPI_C(n) case n: __asm__ volatile(INSN_ " %2, %1, %0" : "+x"(d->v) : "x"(s->v), "i"(n)); break;
+#define IOPI(nm, SWEEP) static T_NOINLINE void op_##nm(V128 *d, const V128 *s, int imm) { switch (imm) { SWEEP(IOPI_C) default: break; } }
+#define IOPS_C(n) case n: __asm__ volatile(INSN_ " %1, %0" : "+x"(d->v) : "i"(n)); break;
+#define IOPS(nm, SWEEP) static T_NOINLINE void op_##nm(V128 *d, const V128 *s, int imm) { (void)s; switch (imm) { SWEEP(IOPS_C) default: break; } }
+
+#define LANES_U(nm, N, F, expr) static void ref_##nm(V128 *r, const V128 *a, const V128 *b, int imm) { V128 t; (void)imm; \
+    for (int i = 0; i < N; i++) { uint64_t x = a->F[i], y = b->F[i]; (void)x; (void)y; t.F[i] = (expr); } *r = t; }
+#define LANES_S(nm, N, F, expr) static void ref_##nm(V128 *r, const V128 *a, const V128 *b, int imm) { V128 t; (void)imm; \
+    for (int i = 0; i < N; i++) { int64_t x = a->F[i], y = b->F[i]; (void)x; (void)y; t.F[i] = (expr); } *r = t; }
+
+static inline int64_t clampi(int64_t v, int64_t lo, int64_t hi) { return v < lo ? lo : v > hi ? hi : v; }
+#define SAT_S8(v)  clampi((v), -128, 127)
+#define SAT_U8(v)  clampi((v), 0, 255)
+#define SAT_S16(v) clampi((v), -32768, 32767)
+#define SAT_U16(v) clampi((v), 0, 65535)
+#define MN(x, y) ((x) < (y) ? (x) : (y))
+#define MX(x, y) ((x) > (y) ? (x) : (y))
+#define ABS(x) ((x) < 0 ? -(x) : (x))
+
+/* SSE2 add/sub (wrap-around) */
+LANES_U(paddb, 16, b, x + y) LANES_U(paddw, 8, w, x + y) LANES_U(paddd, 4, d, x + y) LANES_U(paddq, 2, q, x + y)
+LANES_U(psubb, 16, b, x - y) LANES_U(psubw, 8, w, x - y) LANES_U(psubd, 4, d, x - y) LANES_U(psubq, 2, q, x - y)
+IOP(paddb, "paddb") IOP(paddw, "paddw") IOP(paddd, "paddd") IOP(paddq, "paddq")
+IOP(psubb, "psubb") IOP(psubw, "psubw") IOP(psubd, "psubd") IOP(psubq, "psubq")
+/* saturating */
+LANES_S(paddsb, 16, sb, SAT_S8(x + y)) LANES_S(paddsw, 8, sw, SAT_S16(x + y))
+LANES_S(psubsb, 16, sb, SAT_S8(x - y)) LANES_S(psubsw, 8, sw, SAT_S16(x - y))
+LANES_S(paddusb, 16, b, SAT_U8(x + y)) LANES_S(paddusw, 8, w, SAT_U16(x + y))
+LANES_S(psubusb, 16, b, SAT_U8(x - y)) LANES_S(psubusw, 8, w, SAT_U16(x - y))
+IOP(paddsb, "paddsb") IOP(paddsw, "paddsw") IOP(psubsb, "psubsb") IOP(psubsw, "psubsw")
+IOP(paddusb, "paddusb") IOP(paddusw, "paddusw") IOP(psubusb, "psubusb") IOP(psubusw, "psubusw")
+/* multiply */
+LANES_S(pmullw, 8, sw, (int16_t)(x * y)) LANES_S(pmulhw, 8, sw, (x * y) >> 16) LANES_U(pmulhuw, 8, w, (x * y) >> 16)
+static void ref_pmuludq(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    t.q[0] = (uint64_t)a->d[0] * b->d[0]; t.q[1] = (uint64_t)a->d[2] * b->d[2]; *r = t; }
+static void ref_pmaddwd(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    for (int i = 0; i < 4; i++) t.d[i] = (uint32_t)((int64_t)a->sw[2 * i] * b->sw[2 * i] + (int64_t)a->sw[2 * i + 1] * b->sw[2 * i + 1]);
+    *r = t; }
+IOP(pmullw, "pmullw") IOP(pmulhw, "pmulhw") IOP(pmulhuw, "pmulhuw") IOP(pmuludq, "pmuludq") IOP(pmaddwd, "pmaddwd")
+/* average, SAD */
+LANES_U(pavgb, 16, b, (x + y + 1) >> 1) LANES_U(pavgw, 8, w, (x + y + 1) >> 1)
+static void ref_psadbw(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    for (int h = 0; h < 2; h++) { uint64_t s = 0; for (int i = 0; i < 8; i++) { int dd = a->b[8 * h + i] - b->b[8 * h + i]; s += (uint64_t)ABS(dd); } t.q[h] = s; } *r = t; }
+IOP(pavgb, "pavgb") IOP(pavgw, "pavgw") IOP(psadbw, "psadbw")
+/* min/max (SSE2 subset) and SSE4.1 full set */
+LANES_U(pminub, 16, b, MN(x, y)) LANES_U(pmaxub, 16, b, MX(x, y)) LANES_S(pminsw, 8, sw, MN(x, y)) LANES_S(pmaxsw, 8, sw, MX(x, y))
+LANES_S(pminsb, 16, sb, MN(x, y)) LANES_S(pmaxsb, 16, sb, MX(x, y)) LANES_U(pminuw, 8, w, MN(x, y)) LANES_U(pmaxuw, 8, w, MX(x, y))
+LANES_S(pminsd, 4, sd, MN(x, y)) LANES_S(pmaxsd, 4, sd, MX(x, y)) LANES_U(pminud, 4, d, MN(x, y)) LANES_U(pmaxud, 4, d, MX(x, y))
+IOP(pminub, "pminub") IOP(pmaxub, "pmaxub") IOP(pminsw, "pminsw") IOP(pmaxsw, "pmaxsw")
+IOP(pminsb, "pminsb") IOP(pmaxsb, "pmaxsb") IOP(pminuw, "pminuw") IOP(pmaxuw, "pmaxuw")
+IOP(pminsd, "pminsd") IOP(pmaxsd, "pmaxsd") IOP(pminud, "pminud") IOP(pmaxud, "pmaxud")
+/* compares */
+LANES_U(pcmpeqb, 16, b, x == y ? ~0ull : 0) LANES_U(pcmpeqw, 8, w, x == y ? ~0ull : 0) LANES_U(pcmpeqd, 4, d, x == y ? ~0ull : 0)
+LANES_U(pcmpeqq, 2, q, x == y ? ~0ull : 0)
+LANES_S(pcmpgtb, 16, sb, x > y ? -1 : 0) LANES_S(pcmpgtw, 8, sw, x > y ? -1 : 0) LANES_S(pcmpgtd, 4, sd, x > y ? -1 : 0)
+LANES_S(pcmpgtq, 2, sq, x > y ? -1 : 0)
+IOP(pcmpeqb, "pcmpeqb") IOP(pcmpeqw, "pcmpeqw") IOP(pcmpeqd, "pcmpeqd") IOP(pcmpeqq, "pcmpeqq")
+IOP(pcmpgtb, "pcmpgtb") IOP(pcmpgtw, "pcmpgtw") IOP(pcmpgtd, "pcmpgtd") IOP(pcmpgtq, "pcmpgtq")
+/* logic */
+LANES_U(pand, 2, q, x & y) LANES_U(pandn, 2, q, ~x & y) LANES_U(por, 2, q, x | y) LANES_U(pxor, 2, q, x ^ y)
+IOP(pand, "pand") IOP(pandn, "pandn") IOP(por, "por") IOP(pxor, "pxor")
+
+TEST(sse2_int_add_sub_wraparound) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "paddb", F_SSE2, op_paddb, ref_paddb, GB_INT, 0, 0, 1500 }, { "paddw", F_SSE2, op_paddw, ref_paddw, GB_INT, 0, 0, 1500 },
+        { "paddd", F_SSE2, op_paddd, ref_paddd, GB_INT, 0, 0, 1500 }, { "paddq", F_SSE2, op_paddq, ref_paddq, GB_INT, 0, 0, 1500 },
+        { "psubb", F_SSE2, op_psubb, ref_psubb, GB_INT, 0, 0, 1500 }, { "psubw", F_SSE2, op_psubw, ref_psubw, GB_INT, 0, 0, 1500 },
+        { "psubd", F_SSE2, op_psubd, ref_psubd, GB_INT, 0, 0, 1500 }, { "psubq", F_SSE2, op_psubq, ref_psubq, GB_INT, 0, 0, 1500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0001);
+}
+TEST(sse2_int_saturating_add_sub) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "paddsb", F_SSE2, op_paddsb, ref_paddsb, GB_INT, 0, 0, 1500 }, { "paddsw", F_SSE2, op_paddsw, ref_paddsw, GB_INT, 0, 0, 1500 },
+        { "psubsb", F_SSE2, op_psubsb, ref_psubsb, GB_INT, 0, 0, 1500 }, { "psubsw", F_SSE2, op_psubsw, ref_psubsw, GB_INT, 0, 0, 1500 },
+        { "paddusb", F_SSE2, op_paddusb, ref_paddusb, GB_INT, 0, 0, 1500 }, { "paddusw", F_SSE2, op_paddusw, ref_paddusw, GB_INT, 0, 0, 1500 },
+        { "psubusb", F_SSE2, op_psubusb, ref_psubusb, GB_INT, 0, 0, 1500 }, { "psubusw", F_SSE2, op_psubusw, ref_psubusw, GB_INT, 0, 0, 1500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0002);
+}
+TEST(sse2_int_multiply) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "pmullw", F_SSE2, op_pmullw, ref_pmullw, GB_INT, 0, 0, 1500 }, { "pmulhw", F_SSE2, op_pmulhw, ref_pmulhw, GB_INT, 0, 0, 1500 },
+        { "pmulhuw", F_SSE2, op_pmulhuw, ref_pmulhuw, GB_INT, 0, 0, 1500 }, { "pmuludq", F_SSE2, op_pmuludq, ref_pmuludq, GB_INT, 0, 0, 1500 },
+        { "pmaddwd", F_SSE2, op_pmaddwd, ref_pmaddwd, GB_INT, 0, 0, 1500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0003);
+}
+TEST(sse2_int_avg_sad) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "pavgb", F_SSE2, op_pavgb, ref_pavgb, GB_INT, 0, 0, 1500 }, { "pavgw", F_SSE2, op_pavgw, ref_pavgw, GB_INT, 0, 0, 1500 },
+        { "psadbw", F_SSE2, op_psadbw, ref_psadbw, GB_INT, 0, 0, 1500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0004);
+}
+TEST(sse2_int_min_max) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "pminub", F_SSE2, op_pminub, ref_pminub, GB_INT, 0, 0, 1500 }, { "pmaxub", F_SSE2, op_pmaxub, ref_pmaxub, GB_INT, 0, 0, 1500 },
+        { "pminsw", F_SSE2, op_pminsw, ref_pminsw, GB_INT, 0, 0, 1500 }, { "pmaxsw", F_SSE2, op_pmaxsw, ref_pmaxsw, GB_INT, 0, 0, 1500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0005);
+}
+TEST(sse2_int_compare) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "pcmpeqb", F_SSE2, op_pcmpeqb, ref_pcmpeqb, GB_INT, 0, 0, 1500 }, { "pcmpeqw", F_SSE2, op_pcmpeqw, ref_pcmpeqw, GB_INT, 0, 0, 1500 },
+        { "pcmpeqd", F_SSE2, op_pcmpeqd, ref_pcmpeqd, GB_INT, 0, 0, 1500 }, { "pcmpgtb", F_SSE2, op_pcmpgtb, ref_pcmpgtb, GB_INT, 0, 0, 1500 },
+        { "pcmpgtw", F_SSE2, op_pcmpgtw, ref_pcmpgtw, GB_INT, 0, 0, 1500 }, { "pcmpgtd", F_SSE2, op_pcmpgtd, ref_pcmpgtd, GB_INT, 0, 0, 1500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0006);
+}
+TEST(sse2_int_logic) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "pand", F_SSE2, op_pand, ref_pand, GB_INT, 0, 0, 500 }, { "pandn", F_SSE2, op_pandn, ref_pandn, GB_INT, 0, 0, 500 },
+        { "por", F_SSE2, op_por, ref_por, GB_INT, 0, 0, 500 }, { "pxor", F_SSE2, op_pxor, ref_pxor, GB_INT, 0, 0, 500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0007);
+}
+
+/* ---- shifts: count = whole low quadword (xmm form) or imm8; count > width-1 -> 0 (logical) or sign fill */
+enum { SH_LL, SH_RL, SH_RA };
+static void shift_ref(V128 *r, const V128 *a, uint64_t cnt, int width, int kind) {
+    V128 t;
+    for (int i = 0; i < 128 / width; i++) {
+        uint64_t x = width == 16 ? a->w[i] : width == 32 ? a->d[i] : a->q[i], v;
+        uint64_t mask = width == 64 ? ~0ull : (1ull << width) - 1;
+        if (kind == SH_RA) {
+            int64_t sx = width == 16 ? (int64_t)a->sw[i] : width == 32 ? (int64_t)a->sd[i] : a->sq[i];
+            uint64_t c = cnt > (uint64_t)width - 1 ? (uint64_t)width - 1 : cnt;
+            v = (uint64_t)(sx >> c) & mask;
+        } else if (cnt >= (uint64_t)width) v = 0;
+        else v = (kind == SH_LL ? x << cnt : x >> cnt) & mask;
+        if (width == 16) t.w[i] = (uint16_t)v; else if (width == 32) t.d[i] = (uint32_t)v; else t.q[i] = v;
+    }
+    *r = t;
+}
+#define SHREFS(nm, W, K) \
+    static void ref_##nm(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; shift_ref(r, a, b->q[0], W, K); } \
+    static void ref_##nm##_i(V128 *r, const V128 *a, const V128 *b, int imm) { (void)b; shift_ref(r, a, (uint64_t)imm, W, K); }
+SHREFS(psllw, 16, SH_LL) SHREFS(pslld, 32, SH_LL) SHREFS(psllq, 64, SH_LL)
+SHREFS(psrlw, 16, SH_RL) SHREFS(psrld, 32, SH_RL) SHREFS(psrlq, 64, SH_RL)
+SHREFS(psraw, 16, SH_RA) SHREFS(psrad, 32, SH_RA)
+IOP(psllw, "psllw") IOP(pslld, "pslld") IOP(psllq, "psllq") IOP(psrlw, "psrlw") IOP(psrld, "psrld") IOP(psrlq, "psrlq")
+IOP(psraw, "psraw") IOP(psrad, "psrad")
+#define INSN_ "psllw"
+IOPS(psllw_i, I256)
+#undef INSN_
+#define INSN_ "pslld"
+IOPS(pslld_i, I256)
+#undef INSN_
+#define INSN_ "psllq"
+IOPS(psllq_i, I256)
+#undef INSN_
+#define INSN_ "psrlw"
+IOPS(psrlw_i, I256)
+#undef INSN_
+#define INSN_ "psrld"
+IOPS(psrld_i, I256)
+#undef INSN_
+#define INSN_ "psrlq"
+IOPS(psrlq_i, I256)
+#undef INSN_
+#define INSN_ "psraw"
+IOPS(psraw_i, I256)
+#undef INSN_
+#define INSN_ "psrad"
+IOPS(psrad_i, I256)
+#undef INSN_
+#define INSN_ "pslldq"
+IOPS(pslldq, I256)
+#undef INSN_
+#define INSN_ "psrldq"
+IOPS(psrldq, I256)
+#undef INSN_
+static void ref_pslldq(V128 *r, const V128 *a, const V128 *b, int imm) { (void)b; V128 t; memset(&t, 0, 16);
+    { for (int i = 0; i < 16; i++) if (i - imm >= 0) t.b[i] = a->b[i - imm]; }
+    *r = t; }
+static void ref_psrldq(V128 *r, const V128 *a, const V128 *b, int imm) { (void)b; V128 t; memset(&t, 0, 16);
+    { for (int i = 0; i < 16; i++) if (i + imm < 16) t.b[i] = a->b[i + imm]; }
+    *r = t; }
+
+TEST(sse2_shift_by_xmm_count) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "psllw xmm", F_SSE2, op_psllw, ref_psllw, GB_COUNT, 0, 0, 1500 }, { "pslld xmm", F_SSE2, op_pslld, ref_pslld, GB_COUNT, 0, 0, 1500 },
+        { "psllq xmm", F_SSE2, op_psllq, ref_psllq, GB_COUNT, 0, 0, 1500 }, { "psrlw xmm", F_SSE2, op_psrlw, ref_psrlw, GB_COUNT, 0, 0, 1500 },
+        { "psrld xmm", F_SSE2, op_psrld, ref_psrld, GB_COUNT, 0, 0, 1500 }, { "psrlq xmm", F_SSE2, op_psrlq, ref_psrlq, GB_COUNT, 0, 0, 1500 },
+        { "psraw xmm", F_SSE2, op_psraw, ref_psraw, GB_COUNT, 0, 0, 1500 }, { "psrad xmm", F_SSE2, op_psrad, ref_psrad, GB_COUNT, 0, 0, 1500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0011);
+}
+TEST(sse2_shift_by_imm_sweep) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "psllw imm", F_SSE2, op_psllw_i, ref_psllw_i, GB_INT, 0, 255, 6 }, { "pslld imm", F_SSE2, op_pslld_i, ref_pslld_i, GB_INT, 0, 255, 6 },
+        { "psllq imm", F_SSE2, op_psllq_i, ref_psllq_i, GB_INT, 0, 255, 6 }, { "psrlw imm", F_SSE2, op_psrlw_i, ref_psrlw_i, GB_INT, 0, 255, 6 },
+        { "psrld imm", F_SSE2, op_psrld_i, ref_psrld_i, GB_INT, 0, 255, 6 }, { "psrlq imm", F_SSE2, op_psrlq_i, ref_psrlq_i, GB_INT, 0, 255, 6 },
+        { "psraw imm", F_SSE2, op_psraw_i, ref_psraw_i, GB_INT, 0, 255, 6 }, { "psrad imm", F_SSE2, op_psrad_i, ref_psrad_i, GB_INT, 0, 255, 6 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0012);
+}
+TEST(sse2_byte_shift_pslldq_psrldq) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "pslldq", F_SSE2, op_pslldq, ref_pslldq, GB_INT, 0, 255, 6 }, { "psrldq", F_SSE2, op_psrldq, ref_psrldq, GB_INT, 0, 255, 6 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0013);
+}
+
+/* ---- pack / unpack */
+static void ref_packsswb(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    for (int i = 0; i < 8; i++) { t.sb[i] = (int8_t)SAT_S8(a->sw[i]); t.sb[8 + i] = (int8_t)SAT_S8(b->sw[i]); } *r = t; }
+static void ref_packuswb(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    for (int i = 0; i < 8; i++) { t.b[i] = (uint8_t)SAT_U8(a->sw[i]); t.b[8 + i] = (uint8_t)SAT_U8(b->sw[i]); } *r = t; }
+static void ref_packssdw(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    for (int i = 0; i < 4; i++) { t.sw[i] = (int16_t)SAT_S16(a->sd[i]); t.sw[4 + i] = (int16_t)SAT_S16(b->sd[i]); } *r = t; }
+static void ref_packusdw(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    for (int i = 0; i < 4; i++) { t.w[i] = (uint16_t)SAT_U16(a->sd[i]); t.w[4 + i] = (uint16_t)SAT_U16(b->sd[i]); } *r = t; }
+IOP(packsswb, "packsswb") IOP(packuswb, "packuswb") IOP(packssdw, "packssdw") IOP(packusdw, "packusdw")
+#define UNPK(nm, F, N, hi) static void ref_##nm(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t; \
+    for (int i = 0; i < N / 2; i++) { t.F[2 * i] = a->F[i + (hi ? N / 2 : 0)]; t.F[2 * i + 1] = b->F[i + (hi ? N / 2 : 0)]; } *r = t; }
+UNPK(punpcklbw, b, 16, 0) UNPK(punpckhbw, b, 16, 1) UNPK(punpcklwd, w, 8, 0) UNPK(punpckhwd, w, 8, 1)
+UNPK(punpckldq, d, 4, 0) UNPK(punpckhdq, d, 4, 1) UNPK(punpcklqdq, q, 2, 0) UNPK(punpckhqdq, q, 2, 1)
+IOP(punpcklbw, "punpcklbw") IOP(punpckhbw, "punpckhbw") IOP(punpcklwd, "punpcklwd") IOP(punpckhwd, "punpckhwd")
+IOP(punpckldq, "punpckldq") IOP(punpckhdq, "punpckhdq") IOP(punpcklqdq, "punpcklqdq") IOP(punpckhqdq, "punpckhqdq")
+IOP(unpcklps, "unpcklps") IOP(unpckhps, "unpckhps") IOP(unpcklpd, "unpcklpd") IOP(unpckhpd, "unpckhpd")
+static void ref_movlhps(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t = *a; t.q[1] = b->q[0]; *r = t; }
+static void ref_movhlps(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t = *a; t.q[0] = b->q[1]; *r = t; }
+static void ref_movss(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t = *a; t.d[0] = b->d[0]; *r = t; }
+static void ref_movsd(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t = *a; t.q[0] = b->q[0]; *r = t; }
+static void ref_movq0(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; (void)a; V128 t = { 0 }; t.q[0] = b->q[0]; *r = t; }
+IOP(movlhps, "movlhps") IOP(movhlps, "movhlps") IOP(movss_rr, "movss") IOP(movsd_rr, "movsd") IOP(movq_rr, "movq")
+
+TEST(sse2_pack_saturate) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "packsswb", F_SSE2, op_packsswb, ref_packsswb, GB_INT, 0, 0, 1500 }, { "packuswb", F_SSE2, op_packuswb, ref_packuswb, GB_INT, 0, 0, 1500 },
+        { "packssdw", F_SSE2, op_packssdw, ref_packssdw, GB_INT, 0, 0, 1500 },
+        { "packusdw", F_SSE41, op_packusdw, ref_packusdw, GB_INT, 0, 0, 1500 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0021);
+}
+TEST(sse2_unpack_interleave_and_moves) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "punpcklbw", F_SSE2, op_punpcklbw, ref_punpcklbw, GB_INT, 0, 0, 300 }, { "punpckhbw", F_SSE2, op_punpckhbw, ref_punpckhbw, GB_INT, 0, 0, 300 },
+        { "punpcklwd", F_SSE2, op_punpcklwd, ref_punpcklwd, GB_INT, 0, 0, 300 }, { "punpckhwd", F_SSE2, op_punpckhwd, ref_punpckhwd, GB_INT, 0, 0, 300 },
+        { "punpckldq", F_SSE2, op_punpckldq, ref_punpckldq, GB_INT, 0, 0, 300 }, { "punpckhdq", F_SSE2, op_punpckhdq, ref_punpckhdq, GB_INT, 0, 0, 300 },
+        { "punpcklqdq", F_SSE2, op_punpcklqdq, ref_punpcklqdq, GB_INT, 0, 0, 300 }, { "punpckhqdq", F_SSE2, op_punpckhqdq, ref_punpckhqdq, GB_INT, 0, 0, 300 },
+        { "unpcklps", F_SSE, op_unpcklps, ref_punpckldq, GB_INT, 0, 0, 300 }, { "unpckhps", F_SSE, op_unpckhps, ref_punpckhdq, GB_INT, 0, 0, 300 },
+        { "unpcklpd", F_SSE2, op_unpcklpd, ref_punpcklqdq, GB_INT, 0, 0, 300 }, { "unpckhpd", F_SSE2, op_unpckhpd, ref_punpckhqdq, GB_INT, 0, 0, 300 },
+        { "movlhps", F_SSE, op_movlhps, ref_movlhps, GB_INT, 0, 0, 300 }, { "movhlps", F_SSE, op_movhlps, ref_movhlps, GB_INT, 0, 0, 300 },
+        { "movss xmm,xmm (merge)", F_SSE, op_movss_rr, ref_movss, GB_INT, 0, 0, 300 },
+        { "movsd xmm,xmm (merge)", F_SSE2, op_movsd_rr, ref_movsd, GB_INT, 0, 0, 300 },
+        { "movq xmm,xmm (zero upper)", F_SSE2, op_movq_rr, ref_movq0, GB_INT, 0, 0, 300 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0022);
+}
+
+/* ---- shuffles with immediate sweeps */
+#define INSN_ "pshufd"
+IOPI(pshufd, I256)
+#undef INSN_
+#define INSN_ "pshuflw"
+IOPI(pshuflw, I256)
+#undef INSN_
+#define INSN_ "pshufhw"
+IOPI(pshufhw, I256)
+#undef INSN_
+#define INSN_ "shufps"
+IOPI(shufps, I256)
+#undef INSN_
+#define INSN_ "shufpd"
+IOPI(shufpd, I256)
+#undef INSN_
+static void ref_pshufd(V128 *r, const V128 *a, const V128 *b, int imm) { (void)a; V128 t; for (int i = 0; i < 4; i++) t.d[i] = b->d[(imm >> (2 * i)) & 3]; *r = t; }
+static void ref_pshuflw(V128 *r, const V128 *a, const V128 *b, int imm) { (void)a; V128 t = *b; for (int i = 0; i < 4; i++) t.w[i] = b->w[(imm >> (2 * i)) & 3]; *r = t; }
+static void ref_pshufhw(V128 *r, const V128 *a, const V128 *b, int imm) { (void)a; V128 t = *b; for (int i = 0; i < 4; i++) t.w[4 + i] = b->w[4 + ((imm >> (2 * i)) & 3)]; *r = t; }
+static void ref_shufps(V128 *r, const V128 *a, const V128 *b, int imm) { V128 t;
+    t.d[0] = a->d[imm & 3]; t.d[1] = a->d[(imm >> 2) & 3]; t.d[2] = b->d[(imm >> 4) & 3]; t.d[3] = b->d[(imm >> 6) & 3]; *r = t; }
+static void ref_shufpd(V128 *r, const V128 *a, const V128 *b, int imm) { V128 t; t.q[0] = a->q[imm & 1]; t.q[1] = b->q[(imm >> 1) & 1]; *r = t; }
+TEST(sse2_pshufd_pshuflw_pshufhw_imm_sweep) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "pshufd", F_SSE2, op_pshufd, ref_pshufd, GB_INT, 0, 255, 4 }, { "pshuflw", F_SSE2, op_pshuflw, ref_pshuflw, GB_INT, 0, 255, 4 },
+        { "pshufhw", F_SSE2, op_pshufhw, ref_pshufhw, GB_INT, 0, 255, 4 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0031);
+}
+TEST(sse_shufps_shufpd_imm_sweep) {
+    NEED(F_SSE2);
+    static const iop_t t[] = {
+        { "shufps", F_SSE, op_shufps, ref_shufps, GB_INT, 0, 255, 4 },
+        { "shufpd", F_SSE2, op_shufpd, ref_shufpd, GB_INT, 0, 3, 50 } };   /* imm[7:2] of SHUFPD reserved */
+    run_iops(t, T_COUNTOF(t), 0x1A0032);
+}
+
+/* ---- MOVMSKPS / MOVMSKPD / PMOVMSKB: sign bits to a GPR, upper bits zero */
+TEST(sse_movmskps_movmskpd_pmovmskb) {
+    NEED(F_SSE2);
+    t_rng r; t_rng_seed(&r, 0x1A0041);
+    vbegin();
+    for (int it = 0; it < 2000; it++) {
+        V128 a; gen_int(&r, &a);
+        uintptr_t m1 = (uintptr_t)-1, m2 = (uintptr_t)-1, m3 = (uintptr_t)-1;
+        /* write the full-width register: the 32-bit result must zero-extend */
+        __asm__ volatile("movmskps %1, %k0" : "+r"(m1) : "x"(a.v));
+        __asm__ volatile("movmskpd %1, %k0" : "+r"(m2) : "x"(a.v));
+        __asm__ volatile("pmovmskb %1, %k0" : "+r"(m3) : "x"(a.v));
+        uintptr_t w1 = 0, w2 = 0, w3 = 0;
+        for (int i = 0; i < 4; i++) w1 |= (uintptr_t)(a.d[i] >> 31) << i;
+        for (int i = 0; i < 2; i++) w2 |= (uintptr_t)(a.q[i] >> 63) << i;
+        for (int i = 0; i < 16; i++) w3 |= (uintptr_t)(a.b[i] >> 7) << i;
+        VCHECK(m1 == w1 && m2 == w2 && m3 == w3, "a=%s movmskps 0x%llx/0x%llx movmskpd 0x%llx/0x%llx pmovmskb 0x%llx/0x%llx",
+               hx(&a, 4), (unsigned long long)m1, (unsigned long long)w1, (unsigned long long)m2, (unsigned long long)w2,
+               (unsigned long long)m3, (unsigned long long)w3);
+    }
+    VEND("movmsk");
+}
+
+/* ---- MOVD / MOVQ / MOVSS / MOVSD load forms: zero the rest of the register */
+TEST(sse2_movd_movq_zero_extension) {
+    NEED(F_SSE2);
+    t_rng r; t_rng_seed(&r, 0x1A0042);
+    vbegin();
+    for (int it = 0; it < 500; it++) {
+        V128 junk, d; gen_int(&r, &junk);
+        uint32_t g32 = t_rng_u32(&r); uint64_t m64 = t_rng_next(&r); uint32_t m32 = t_rng_u32(&r);
+        d = junk; __asm__ volatile("movd %1, %0" : "+x"(d.v) : "r"(g32));
+        VCHECK(d.d[0] == g32 && d.d[1] == 0 && d.q[1] == 0, "movd xmm, r32: %s", hx(&d, 4));
+        d = junk; __asm__ volatile("movq %1, %0" : "+x"(d.v) : "m"(m64));
+        VCHECK(d.q[0] == m64 && d.q[1] == 0, "movq xmm, m64: %s", hx(&d, 8));
+        d = junk; __asm__ volatile("movd %1, %0" : "+x"(d.v) : "m"(m32));
+        VCHECK(d.d[0] == m32 && d.d[1] == 0 && d.q[1] == 0, "movd xmm, m32: %s", hx(&d, 4));
+        d = junk; __asm__ volatile("movss %1, %0" : "+x"(d.v) : "m"(m32));
+        VCHECK(d.d[0] == m32 && d.d[1] == 0 && d.q[1] == 0, "movss xmm, m32: %s", hx(&d, 4));
+        d = junk; __asm__ volatile("movsd %1, %0" : "+x"(d.v) : "m"(m64));
+        VCHECK(d.q[0] == m64 && d.q[1] == 0, "movsd xmm, m64: %s", hx(&d, 8));
+        uint32_t o32 = 0; __asm__ volatile("movd %1, %0" : "=r"(o32) : "x"(junk.v));
+        VCHECK(o32 == junk.d[0], "movd r32, xmm: 0x%x want 0x%x", o32, junk.d[0]);
+        uint64_t o64 = 0; __asm__ volatile("movq %1, %0" : "=m"(o64) : "x"(junk.v));
+        VCHECK(o64 == junk.q[0], "movq m64, xmm");
+        /* MOVLPS/MOVHPS/MOVLPD/MOVHPD loads merge */
+        d = junk; __asm__ volatile("movhps %1, %0" : "+x"(d.v) : "m"(m64));
+        VCHECK(d.q[0] == junk.q[0] && d.q[1] == m64, "movhps xmm, m64: %s", hx(&d, 8));
+        d = junk; __asm__ volatile("movlpd %1, %0" : "+x"(d.v) : "m"(m64));
+        VCHECK(d.q[0] == m64 && d.q[1] == junk.q[1], "movlpd xmm, m64: %s", hx(&d, 8));
+#ifdef T_X64
+        uint64_t g64 = t_rng_next(&r);
+        d = junk; __asm__ volatile("movq %1, %0" : "+x"(d.v) : "r"(g64));
+        VCHECK(d.q[0] == g64 && d.q[1] == 0, "movq xmm, r64: %s", hx(&d, 8));
+        uint64_t o = 0; __asm__ volatile("movq %1, %0" : "=r"(o) : "x"(junk.v));
+        VCHECK(o == junk.q[0], "movq r64, xmm");
+#endif
+    }
+    VEND("movd/movq/movss/movsd");
+}
+
+/* ---- MASKMOVDQU: byte-masked store to [EDI/RDI]; unselected bytes untouched */
+TEST(sse2_maskmovdqu) {
+    NEED(F_SSE2);
+    t_rng r; t_rng_seed(&r, 0x1A0043);
+    void *base = NULL;
+    unsigned char *pg = (unsigned char *)t_guarded_alloc(64, &base);   /* the 64 bytes end at a no-access page */
+    REQUIRE(pg != NULL);
+    vbegin();
+    for (int it = 0; it < 1000; it++) {
+        V128 data, mask; gen_int(&r, &data); gen_int(&r, &mask);
+        int off = (int)t_rng_range(&r, 49);                              /* any alignment, last at 48 = page end */
+        unsigned char before[64], want[64];
+        t_rng_fill(&r, before, 64);
+        memcpy(pg, before, 64); memcpy(want, before, 64);
+        for (int i = 0; i < 16; i++) if (mask.b[i] & 0x80) want[off + i] = data.b[i];
+        unsigned char *dst = pg + off;
+        __asm__ volatile("maskmovdqu %1, %0\n\tsfence" : : "x"(data.v), "x"(mask.v), "D"(dst) : "memory");
+        VCHECK(!memcmp(pg, want, 64), "maskmovdqu off=%d mask=%s data=%s", off, hx(&mask, 1), hx(&data, 1));
+    }
+    VEND("maskmovdqu");
+    t_guarded_free(base);
+}
+
+/* ---- PEXTRW / PINSRW (SSE2) */
+#define PEXTRW_C(n) case n: __asm__ volatile("pextrw %2, %1, %k0" : "+r"(g) : "x"(a->v), "i"(n)); break;
+#define PINSRW_C(n) case n: __asm__ volatile("pinsrw %2, %k1, %0" : "+x"(d->v) : "r"(g), "i"(n)); break;
+static T_NOINLINE uintptr_t do_pextrw(const V128 *a, int imm) { uintptr_t g = (uintptr_t)-1; switch (imm) { I256(PEXTRW_C) } return g; }
+static T_NOINLINE void do_pinsrw(V128 *d, uintptr_t g, int imm) { switch (imm) { I256(PINSRW_C) } }
+TEST(sse2_pextrw_pinsrw_imm_sweep) {
+    NEED(F_SSE2);
+    t_rng r; t_rng_seed(&r, 0x1A0044);
+    vbegin();
+    for (int imm = 0; imm < 256; imm++)
+        for (int it = 0; it < 8; it++) {
+            V128 a; gen_int(&r, &a);
+            uintptr_t g = do_pextrw(&a, imm);
+            VCHECK(g == a.w[imm & 7], "pextrw imm %d: got 0x%llx want 0x%x (imm[2:0] selects, zero-extended)", imm, (unsigned long long)g, a.w[imm & 7]);
+            V128 d = a; uintptr_t src = (uintptr_t)t_rng_next(&r);
+            do_pinsrw(&d, src, imm);
+            V128 w = a; w.w[imm & 7] = (uint16_t)src;
+            VCHECK(!memcmp(&d, &w, 16), "pinsrw imm %d src 0x%llx: got %s want %s", imm, (unsigned long long)src, hx(&d, 2), hx(&w, 2));
+        }
+    VEND("pextrw/pinsrw");
+}
+
+/* ================================================================ SSE3 moves */
+static void ref_movshdup(V128 *r, const V128 *a, const V128 *b, int imm) { (void)a; (void)imm; V128 t = { .d = { b->d[1], b->d[1], b->d[3], b->d[3] } }; *r = t; }
+static void ref_movsldup(V128 *r, const V128 *a, const V128 *b, int imm) { (void)a; (void)imm; V128 t = { .d = { b->d[0], b->d[0], b->d[2], b->d[2] } }; *r = t; }
+static void ref_movddup(V128 *r, const V128 *a, const V128 *b, int imm) { (void)a; (void)imm; V128 t = { .q = { b->q[0], b->q[0] } }; *r = t; }
+IOP(movshdup, "movshdup") IOP(movsldup, "movsldup") IOP(movddup, "movddup")
+TEST(sse3_movdup_lddqu) {
+    NEED(F_SSE3);
+    static const iop_t t[] = {
+        { "movshdup", F_SSE3, op_movshdup, ref_movshdup, GB_INT, 0, 0, 300 }, { "movsldup", F_SSE3, op_movsldup, ref_movsldup, GB_INT, 0, 0, 300 },
+        { "movddup", F_SSE3, op_movddup, ref_movddup, GB_INT, 0, 0, 300 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0051);
+    /* LDDQU: unaligned 16-byte load at every offset, including the last 16 bytes before a no-access page */
+    void *base = NULL;
+    unsigned char *pg = (unsigned char *)t_guarded_alloc(64, &base);
+    REQUIRE(pg != NULL);
+    for (int i = 0; i < 64; i++) pg[i] = (unsigned char)(i * 7 + 3);
+    for (int off = 0; off <= 48; off++) {
+        V128 d;
+        __asm__ volatile("lddqu %1, %0" : "=x"(d.v) : "m"(*(const unsigned char (*)[16])(pg + off)));
+        CHECKF(!memcmp(&d, pg + off, 16), "lddqu offset %d: %s", off, hx(&d, 1));
+    }
+    /* MOVDDUP m64 at the page end */
+    V128 d; __asm__ volatile("movddup %1, %0" : "=x"(d.v) : "m"(*(const uint64_t *)(pg + 56)));
+    uint64_t q; memcpy(&q, pg + 56, 8);
+    CHECKF(d.q[0] == q && d.q[1] == q, "movddup m64 at page end: %s", hx(&d, 8));
+    t_guarded_free(base);
+}
+
+/* ================================================================ SSSE3 */
+LANES_S(pabsb, 16, sb, (int8_t)ABS(y)) LANES_S(pabsw, 8, sw, (int16_t)ABS(y)) LANES_S(pabsd, 4, sd, (int32_t)ABS(y))
+LANES_S(psignb, 16, sb, y < 0 ? (int8_t)-x : y == 0 ? 0 : x) LANES_S(psignw, 8, sw, y < 0 ? (int16_t)-x : y == 0 ? 0 : x)
+LANES_S(psignd, 4, sd, y < 0 ? (int32_t)-x : y == 0 ? 0 : x)
+IOP(pabsb, "pabsb") IOP(pabsw, "pabsw") IOP(pabsd, "pabsd") IOP(psignb, "psignb") IOP(psignw, "psignw") IOP(psignd, "psignd")
+#define HOR(nm, F, N, T, expr) static void ref_##nm(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t; \
+    for (int i = 0; i < N / 2; i++) { int64_t x = a->F[2 * i], y = a->F[2 * i + 1]; t.F[i] = (T)(expr); } \
+    for (int i = 0; i < N / 2; i++) { int64_t x = b->F[2 * i], y = b->F[2 * i + 1]; t.F[N / 2 + i] = (T)(expr); } *r = t; }
+HOR(phaddw, sw, 8, int16_t, x + y) HOR(phaddd, sd, 4, int32_t, x + y) HOR(phaddsw, sw, 8, int16_t, SAT_S16(x + y))
+HOR(phsubw, sw, 8, int16_t, x - y) HOR(phsubd, sd, 4, int32_t, x - y) HOR(phsubsw, sw, 8, int16_t, SAT_S16(x - y))
+IOP(phaddw, "phaddw") IOP(phaddd, "phaddd") IOP(phaddsw, "phaddsw") IOP(phsubw, "phsubw") IOP(phsubd, "phsubd") IOP(phsubsw, "phsubsw")
+static void ref_pmaddubsw(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    { for (int i = 0; i < 8; i++) t.sw[i] = (int16_t)SAT_S16((int64_t)a->b[2 * i] * b->sb[2 * i] + (int64_t)a->b[2 * i + 1] * b->sb[2 * i + 1]); }
+    *r = t; }
+LANES_S(pmulhrsw, 8, sw, (int16_t)((((x * y) >> 14) + 1) >> 1))
+static void ref_pshufb(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    { for (int i = 0; i < 16; i++) t.b[i] = (b->b[i] & 0x80) ? 0 : a->b[b->b[i] & 15]; }
+    *r = t; }
+IOP(pmaddubsw, "pmaddubsw") IOP(pmulhrsw, "pmulhrsw") IOP(pshufb, "pshufb")
+#define INSN_ "palignr"
+IOPI(palignr, I256)
+#undef INSN_
+static void ref_palignr(V128 *r, const V128 *a, const V128 *b, int imm) {
+    unsigned char cat[32]; memcpy(cat, b, 16); memcpy(cat + 16, a, 16);   /* dest:src, shifted right imm bytes */
+    V128 t; for (int i = 0; i < 16; i++) t.b[i] = imm + i < 32 ? cat[imm + i] : 0; *r = t;
+}
+TEST(ssse3_abs_sign) {
+    NEED(F_SSSE3);
+    static const iop_t t[] = {
+        { "pabsb", F_SSSE3, op_pabsb, ref_pabsb, GB_INT, 0, 0, 1000 }, { "pabsw", F_SSSE3, op_pabsw, ref_pabsw, GB_INT, 0, 0, 1000 },
+        { "pabsd", F_SSSE3, op_pabsd, ref_pabsd, GB_INT, 0, 0, 1000 }, { "psignb", F_SSSE3, op_psignb, ref_psignb, GB_INT, 0, 0, 1000 },
+        { "psignw", F_SSSE3, op_psignw, ref_psignw, GB_INT, 0, 0, 1000 }, { "psignd", F_SSSE3, op_psignd, ref_psignd, GB_INT, 0, 0, 1000 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0061);
+}
+TEST(ssse3_horizontal_add_sub) {
+    NEED(F_SSSE3);
+    static const iop_t t[] = {
+        { "phaddw", F_SSSE3, op_phaddw, ref_phaddw, GB_INT, 0, 0, 1000 }, { "phaddd", F_SSSE3, op_phaddd, ref_phaddd, GB_INT, 0, 0, 1000 },
+        { "phaddsw", F_SSSE3, op_phaddsw, ref_phaddsw, GB_INT, 0, 0, 1000 }, { "phsubw", F_SSSE3, op_phsubw, ref_phsubw, GB_INT, 0, 0, 1000 },
+        { "phsubd", F_SSSE3, op_phsubd, ref_phsubd, GB_INT, 0, 0, 1000 }, { "phsubsw", F_SSSE3, op_phsubsw, ref_phsubsw, GB_INT, 0, 0, 1000 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0062);
+}
+TEST(ssse3_pmaddubsw_pmulhrsw) {
+    NEED(F_SSSE3);
+    static const iop_t t[] = {
+        { "pmaddubsw", F_SSSE3, op_pmaddubsw, ref_pmaddubsw, GB_INT, 0, 0, 2000 }, { "pmulhrsw", F_SSSE3, op_pmulhrsw, ref_pmulhrsw, GB_INT, 0, 0, 2000 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0063);
+}
+TEST(ssse3_pshufb) {
+    NEED(F_SSSE3);
+    static const iop_t t[] = { { "pshufb", F_SSSE3, op_pshufb, ref_pshufb, GB_INT, 0, 0, 3000 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0064);
+    /* identity, reverse, broadcast, all-zero (bit 7) controls */
+    V128 a; for (int i = 0; i < 16; i++) a.b[i] = (uint8_t)(0xA0 + i);
+    V128 c, d, w;
+    for (int i = 0; i < 16; i++) c.b[i] = (uint8_t)(15 - i);
+    d = a; op_pshufb(&d, &c, 0); ref_pshufb(&w, &a, &c, 0);
+    CHECKF(!memcmp(&d, &w, 16) && d.b[0] == 0xAF, "pshufb reverse: %s", hx(&d, 1));
+    for (int i = 0; i < 16; i++) c.b[i] = (uint8_t)(0x80 | i);
+    d = a; op_pshufb(&d, &c, 0);
+    CHECKF(d.q[0] == 0 && d.q[1] == 0, "pshufb bit7 controls must zero: %s", hx(&d, 1));
+    for (int i = 0; i < 16; i++) c.b[i] = (uint8_t)(0x70 | 5);   /* bits 6:4 ignored */
+    d = a; op_pshufb(&d, &c, 0);
+    CHECKF(d.b[0] == 0xA5 && d.b[15] == 0xA5, "pshufb ignores control bits 6:4: %s", hx(&d, 1));
+}
+TEST(ssse3_palignr_imm_sweep) {
+    NEED(F_SSSE3);
+    static const iop_t t[] = { { "palignr", F_SSSE3, op_palignr, ref_palignr, GB_INT, 0, 255, 8 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0065);
+}
+
+/* ================================================================ SSE4.1 integer and blends */
+LANES_S(pmulld, 4, sd, (int32_t)(uint32_t)(x * y))
+static void ref_pmuldq(V128 *r, const V128 *a, const V128 *b, int imm) { (void)imm; V128 t;
+    t.sq[0] = (int64_t)a->sd[0] * b->sd[0]; t.sq[1] = (int64_t)a->sd[2] * b->sd[2]; *r = t; }
+IOP(pmulld, "pmulld") IOP(pmuldq, "pmuldq")
+TEST(sse41_pmulld_pmuldq) {
+    NEED(F_SSE41);
+    static const iop_t t[] = {
+        { "pmulld", F_SSE41, op_pmulld, ref_pmulld, GB_INT, 0, 0, 2000 }, { "pmuldq", F_SSE41, op_pmuldq, ref_pmuldq, GB_INT, 0, 0, 2000 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0071);
+}
+TEST(sse41_min_max_all_widths) {
+    NEED(F_SSE41);
+    static const iop_t t[] = {
+        { "pminsb", F_SSE41, op_pminsb, ref_pminsb, GB_INT, 0, 0, 1000 }, { "pmaxsb", F_SSE41, op_pmaxsb, ref_pmaxsb, GB_INT, 0, 0, 1000 },
+        { "pminuw", F_SSE41, op_pminuw, ref_pminuw, GB_INT, 0, 0, 1000 }, { "pmaxuw", F_SSE41, op_pmaxuw, ref_pmaxuw, GB_INT, 0, 0, 1000 },
+        { "pminsd", F_SSE41, op_pminsd, ref_pminsd, GB_INT, 0, 0, 1000 }, { "pmaxsd", F_SSE41, op_pmaxsd, ref_pmaxsd, GB_INT, 0, 0, 1000 },
+        { "pminud", F_SSE41, op_pminud, ref_pminud, GB_INT, 0, 0, 1000 }, { "pmaxud", F_SSE41, op_pmaxud, ref_pmaxud, GB_INT, 0, 0, 1000 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0072);
+}
+TEST(sse41_pcmpeqq_sse42_pcmpgtq) {
+    NEED(F_SSE41);
+    static const iop_t t[] = {
+        { "pcmpeqq", F_SSE41, op_pcmpeqq, ref_pcmpeqq, GB_INT, 0, 0, 2000 }, { "pcmpgtq", F_SSE42, op_pcmpgtq, ref_pcmpgtq, GB_INT, 0, 0, 2000 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0073);
+}
+#define INSN_ "pblendw"
+IOPI(pblendw, I256)
+#undef INSN_
+#define INSN_ "blendps"
+IOPI(blendps, I16)
+#undef INSN_
+#define INSN_ "blendpd"
+IOPI(blendpd, I16)
+#undef INSN_
+#define INSN_ "insertps"
+IOPI(insertps, I256)
+#undef INSN_
+#define INSN_ "mpsadbw"
+IOPI(mpsadbw, I16)
+#undef INSN_
+static void ref_pblendw(V128 *r, const V128 *a, const V128 *b, int imm) { V128 t; for (int i = 0; i < 8; i++) t.w[i] = (imm >> i) & 1 ? b->w[i] : a->w[i]; *r = t; }
+static void ref_blendps(V128 *r, const V128 *a, const V128 *b, int imm) { V128 t; for (int i = 0; i < 4; i++) t.d[i] = (imm >> i) & 1 ? b->d[i] : a->d[i]; *r = t; }
+static void ref_blendpd(V128 *r, const V128 *a, const V128 *b, int imm) { V128 t; for (int i = 0; i < 2; i++) t.q[i] = (imm >> i) & 1 ? b->q[i] : a->q[i]; *r = t; }
+static void ref_insertps(V128 *r, const V128 *a, const V128 *b, int imm) {
+    V128 t = *a; t.d[(imm >> 4) & 3] = b->d[(imm >> 6) & 3];
+    for (int i = 0; i < 4; i++) if ((imm >> i) & 1) t.d[i] = 0;
+    *r = t;
+}
+static void ref_mpsadbw(V128 *r, const V128 *a, const V128 *b, int imm) {
+    int o1 = ((imm >> 2) & 1) * 4, o2 = (imm & 3) * 4; V128 t;
+    for (int i = 0; i < 8; i++) { int s = 0; for (int k = 0; k < 4; k++) { int dd = a->b[o1 + i + k] - b->b[o2 + k]; s += ABS(dd); } t.w[i] = (uint16_t)s; }
+    *r = t;
+}
+TEST(sse41_blend_imm_sweep) {
+    NEED(F_SSE41);
+    static const iop_t t[] = {
+        { "pblendw", F_SSE41, op_pblendw, ref_pblendw, GB_INT, 0, 255, 6 },
+        { "blendps", F_SSE41, op_blendps, ref_blendps, GB_INT, 0, 15, 40 },
+        { "blendpd", F_SSE41, op_blendpd, ref_blendpd, GB_INT, 0, 3, 100 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0074);
+}
+TEST(sse41_insertps_imm_sweep) {
+    NEED(F_SSE41);
+    static const iop_t t[] = { { "insertps", F_SSE41, op_insertps, ref_insertps, GB_INT, 0, 255, 8 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0075);
+    /* memory form: loads 32 bits, imm[7:6] ignored */
+    V128 a = { .d = { 1, 2, 3, 4 } }; uint32_t m = 0xDEADBEEF;
+    __asm__ volatile("insertps $0xE0, %1, %0" : "+x"(a.v) : "m"(m));   /* count_s=3 ignored, count_d=2 */
+    CHECKF(a.d[0] == 1 && a.d[1] == 2 && a.d[2] == 0xDEADBEEF && a.d[3] == 4, "insertps m32 imm 0xE0: %s", hx(&a, 4));
+}
+TEST(sse41_mpsadbw) {
+    NEED(F_SSE41);
+    static const iop_t t[] = { { "mpsadbw", F_SSE41, op_mpsadbw, ref_mpsadbw, GB_INT, 0, 7, 300 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0076);
+}
+
+/* PBLENDVB / BLENDVPS / BLENDVPD: implicit XMM0 mask, selected by the top bit of each element */
+#define BLENDV(nm, insn) static T_NOINLINE void bv_##nm(V128 *d, const V128 *s, const V128 *m) { \
+    __asm__ volatile("movdqu %2, %%xmm0\n\t" insn " %%xmm0, %1, %0" : "+x"(d->v) : "x"(s->v), "m"(m->v) : "xmm0"); }
+BLENDV(pblendvb, "pblendvb") BLENDV(blendvps, "blendvps") BLENDV(blendvpd, "blendvpd")
+TEST(sse41_blendv_xmm0_mask) {
+    NEED(F_SSE41);
+    t_rng r; t_rng_seed(&r, 0x1A0077);
+    vbegin();
+    for (int it = 0; it < 3000; it++) {
+        V128 a, b, m, d, w; gen_int(&r, &a); gen_int(&r, &b); gen_int(&r, &m);
+        d = a; bv_pblendvb(&d, &b, &m);
+        for (int i = 0; i < 16; i++) w.b[i] = (m.b[i] & 0x80) ? b.b[i] : a.b[i];
+        VCHECK(!memcmp(&d, &w, 16), "pblendvb a=%s b=%s m=%s got=%s", hx(&a, 1), hx(&b, 1), hx(&m, 1), hx(&d, 1));
+        d = a; bv_blendvps(&d, &b, &m);
+        for (int i = 0; i < 4; i++) w.d[i] = (m.d[i] >> 31) ? b.d[i] : a.d[i];
+        VCHECK(!memcmp(&d, &w, 16), "blendvps a=%s b=%s m=%s got=%s", hx(&a, 4), hx(&b, 4), hx(&m, 4), hx(&d, 4));
+        d = a; bv_blendvpd(&d, &b, &m);
+        for (int i = 0; i < 2; i++) w.q[i] = (m.q[i] >> 63) ? b.q[i] : a.q[i];
+        VCHECK(!memcmp(&d, &w, 16), "blendvpd a=%s b=%s m=%s got=%s", hx(&a, 8), hx(&b, 8), hx(&m, 8), hx(&d, 8));
+    }
+    VEND("blendv");
+}
+
+/* PMOVSX / PMOVZX (all 12 forms; register and m64/m32/m16 sources) */
+#define PMOVX(nm, insn) IOP(nm, insn)
+PMOVX(pmovsxbw, "pmovsxbw") PMOVX(pmovsxbd, "pmovsxbd") PMOVX(pmovsxbq, "pmovsxbq") PMOVX(pmovsxwd, "pmovsxwd")
+PMOVX(pmovsxwq, "pmovsxwq") PMOVX(pmovsxdq, "pmovsxdq") PMOVX(pmovzxbw, "pmovzxbw") PMOVX(pmovzxbd, "pmovzxbd")
+PMOVX(pmovzxbq, "pmovzxbq") PMOVX(pmovzxwd, "pmovzxwd") PMOVX(pmovzxwq, "pmovzxwq") PMOVX(pmovzxdq, "pmovzxdq")
+#define XREF(nm, DF, N, SF, T) static void ref_##nm(V128 *r, const V128 *a, const V128 *b, int imm) { (void)a; (void)imm; V128 t; \
+    { for (int i = 0; i < N; i++) t.DF[i] = (T)b->SF[i]; } *r = t; }
+XREF(pmovsxbw, sw, 8, sb, int16_t) XREF(pmovsxbd, sd, 4, sb, int32_t) XREF(pmovsxbq, sq, 2, sb, int64_t)
+XREF(pmovsxwd, sd, 4, sw, int32_t) XREF(pmovsxwq, sq, 2, sw, int64_t) XREF(pmovsxdq, sq, 2, sd, int64_t)
+XREF(pmovzxbw, w, 8, b, uint16_t) XREF(pmovzxbd, d, 4, b, uint32_t) XREF(pmovzxbq, q, 2, b, uint64_t)
+XREF(pmovzxwd, d, 4, w, uint32_t) XREF(pmovzxwq, q, 2, w, uint64_t) XREF(pmovzxdq, q, 2, d, uint64_t)
+TEST(sse41_pmovsx_pmovzx) {
+    NEED(F_SSE41);
+    static const iop_t t[] = {
+        { "pmovsxbw", F_SSE41, op_pmovsxbw, ref_pmovsxbw, GB_INT, 0, 0, 400 }, { "pmovsxbd", F_SSE41, op_pmovsxbd, ref_pmovsxbd, GB_INT, 0, 0, 400 },
+        { "pmovsxbq", F_SSE41, op_pmovsxbq, ref_pmovsxbq, GB_INT, 0, 0, 400 }, { "pmovsxwd", F_SSE41, op_pmovsxwd, ref_pmovsxwd, GB_INT, 0, 0, 400 },
+        { "pmovsxwq", F_SSE41, op_pmovsxwq, ref_pmovsxwq, GB_INT, 0, 0, 400 }, { "pmovsxdq", F_SSE41, op_pmovsxdq, ref_pmovsxdq, GB_INT, 0, 0, 400 },
+        { "pmovzxbw", F_SSE41, op_pmovzxbw, ref_pmovzxbw, GB_INT, 0, 0, 400 }, { "pmovzxbd", F_SSE41, op_pmovzxbd, ref_pmovzxbd, GB_INT, 0, 0, 400 },
+        { "pmovzxbq", F_SSE41, op_pmovzxbq, ref_pmovzxbq, GB_INT, 0, 0, 400 }, { "pmovzxwd", F_SSE41, op_pmovzxwd, ref_pmovzxwd, GB_INT, 0, 0, 400 },
+        { "pmovzxwq", F_SSE41, op_pmovzxwq, ref_pmovzxwq, GB_INT, 0, 0, 400 }, { "pmovzxdq", F_SSE41, op_pmovzxdq, ref_pmovzxdq, GB_INT, 0, 0, 400 } };
+    run_iops(t, T_COUNTOF(t), 0x1A0078);
+    /* memory forms read only 8/4/2 bytes: place the source right before a no-access page */
+    void *base = NULL;
+    unsigned char *pg = (unsigned char *)t_guarded_alloc(16, &base);
+    REQUIRE(pg != NULL);
+    for (int i = 0; i < 16; i++) pg[i] = (unsigned char)(0xF0 + i);
+    V128 d, b, w; memset(&b, 0, sizeof b);
+    memcpy(&b, pg + 8, 8);
+    __asm__ volatile("pmovsxbw %1, %0" : "=x"(d.v) : "m"(*(const uint64_t *)(pg + 8))); ref_pmovsxbw(&w, &b, &b, 0);
+    CHECKF(!memcmp(&d, &w, 16), "pmovsxbw m64 at page end: %s", hx(&d, 2));
+    memset(&b, 0, sizeof b); memcpy(&b, pg + 12, 4);
+    __asm__ volatile("pmovzxbd %1, %0" : "=x"(d.v) : "m"(*(const uint32_t *)(pg + 12))); ref_pmovzxbd(&w, &b, &b, 0);
+    CHECKF(!memcmp(&d, &w, 16), "pmovzxbd m32 at page end: %s", hx(&d, 4));
+    memset(&b, 0, sizeof b); memcpy(&b, pg + 14, 2);
+    __asm__ volatile("pmovsxbq %1, %0" : "=x"(d.v) : "m"(*(const uint16_t *)(pg + 14))); ref_pmovsxbq(&w, &b, &b, 0);
+    CHECKF(!memcmp(&d, &w, 16), "pmovsxbq m16 at page end: %s", hx(&d, 8));
+    t_guarded_free(base);
+}
+
+/* PTEST: ZF = (src AND dst) == 0, CF = (src AND NOT dst) == 0; AF, OF, PF, SF cleared */
+TEST(sse41_ptest_flags) {
+    NEED(F_SSE41);
+    t_rng r; t_rng_seed(&r, 0x1A0079);
+    vbegin();
+    for (int it = 0; it < 4000; it++) {
+        V128 a, b; gen_int(&r, &a); gen_int(&r, &b);
+        switch (it % 5) { case 1: memset(&b, 0, 16); break; case 2: b = a; break; case 3: for (int i = 0; i < 2; i++) b.q[i] = ~a.q[i]; break;
+                          case 4: for (int i = 0; i < 2; i++) b.q[i] &= a.q[i]; break; }
+        uint8_t zf, cf, of, sf, pf;
+        __asm__ volatile("ptest %6, %5" : "=@ccz"(zf), "=@ccc"(cf), "=@cco"(of), "=@ccs"(sf), "=@ccp"(pf) : "x"(a.v), "x"(b.v));
+        int wz = !((a.q[0] & b.q[0]) | (a.q[1] & b.q[1])), wc = !((~a.q[0] & b.q[0]) | (~a.q[1] & b.q[1]));
+        VCHECK(zf == wz && cf == wc && !of && !sf && !pf, "ptest dst=%s src=%s: ZF%d CF%d OF%d SF%d PF%d want ZF%d CF%d",
+               hx(&a, 8), hx(&b, 8), zf, cf, of, sf, pf, wz, wc);
+    }
+    VEND("ptest");
+}
+
+/* PHMINPOSUW: min unsigned word -> bits 15:0, its lowest index -> bits 18:16, rest zero */
+static void ref_phminposuw(V128 *r, const V128 *a, const V128 *b, int imm) { (void)a; (void)imm;
+    int idx = 0; for (int i = 1; i < 8; i++) if (b->w[i] < b->w[idx]) idx = i;
+    V128 t = { 0 }; t.w[0] = b->w[idx]; t.w[1] = (uint16_t)idx; *r = t; }
+IOP(phminposuw, "phminposuw")
+TEST(sse41_phminposuw) {
+    NEED(F_SSE41);
+    static const iop_t t[] = { { "phminposuw", F_SSE41, op_phminposuw, ref_phminposuw, GB_INT, 0, 0, 4000 } };
+    run_iops(t, T_COUNTOF(t), 0x1A007A);
+}
+
+/* EXTRACTPS / PEXTRB / PEXTRD / PEXTRQ / PINSRB / PINSRD / PINSRQ (index = low imm bits; rest ignored) */
+#define PEXB_C(n) case n: __asm__ volatile("pextrb %2, %1, %k0" : "+r"(g) : "x"(a->v), "i"(n)); break;
+#define PEXD_C(n) case n: __asm__ volatile("pextrd %2, %1, %k0" : "+r"(g) : "x"(a->v), "i"(n)); break;
+#define EXPS_C(n) case n: __asm__ volatile("extractps %2, %1, %k0" : "+r"(g) : "x"(a->v), "i"(n)); break;
+#define PEXWM_C(n) case n: __asm__ volatile("pextrw %2, %1, %0" : "=m"(m16) : "x"(a->v), "i"(n)); break;
+#define PINB_C(n) case n: __asm__ volatile("pinsrb %2, %k1, %0" : "+x"(d->v) : "r"(g), "i"(n)); break;
+#define PIND_C(n) case n: __asm__ volatile("pinsrd %2, %k1, %0" : "+x"(d->v) : "r"(g), "i"(n)); break;
+static T_NOINLINE uintptr_t do_pextrb(const V128 *a, int imm) { uintptr_t g = (uintptr_t)-1; switch (imm) { I256(PEXB_C) } return g; }
+static T_NOINLINE uintptr_t do_pextrd(const V128 *a, int imm) { uintptr_t g = (uintptr_t)-1; switch (imm) { I256(PEXD_C) } return g; }
+static T_NOINLINE uintptr_t do_extractps(const V128 *a, int imm) { uintptr_t g = (uintptr_t)-1; switch (imm) { I256(EXPS_C) } return g; }
+static T_NOINLINE uint16_t do_pextrw_m(const V128 *a, int imm) { uint16_t m16 = 0xABCD; switch (imm) { I256(PEXWM_C) } return m16; }
+static T_NOINLINE void do_pinsrb(V128 *d, uintptr_t g, int imm) { switch (imm) { I256(PINB_C) } }
+static T_NOINLINE void do_pinsrd(V128 *d, uintptr_t g, int imm) { switch (imm) { I256(PIND_C) } }
+#ifdef T_X64
+#define PEXQ_C(n) case n: __asm__ volatile("pextrq %2, %1, %0" : "=r"(g) : "x"(a->v), "i"(n)); break;
+#define PINQ_C(n) case n: __asm__ volatile("pinsrq %2, %1, %0" : "+x"(d->v) : "r"(g), "i"(n)); break;
+static T_NOINLINE uint64_t do_pextrq(const V128 *a, int imm) { uint64_t g = 0; switch (imm) { I256(PEXQ_C) } return g; }
+static T_NOINLINE void do_pinsrq(V128 *d, uint64_t g, int imm) { switch (imm) { I256(PINQ_C) } }
+#endif
+TEST(sse41_extract_insert_imm_sweep) {
+    NEED(F_SSE41);
+    t_rng r; t_rng_seed(&r, 0x1A007B);
+    vbegin();
+    for (int imm = 0; imm < 256; imm++)
+        for (int it = 0; it < 4; it++) {
+            V128 a; gen_int(&r, &a);
+            uintptr_t g;
+            g = do_pextrb(&a, imm); VCHECK(g == a.b[imm & 15], "pextrb imm %d: 0x%llx want 0x%x", imm, (unsigned long long)g, a.b[imm & 15]);
+            g = do_pextrd(&a, imm); VCHECK(g == a.d[imm & 3], "pextrd imm %d: 0x%llx want 0x%x", imm, (unsigned long long)g, a.d[imm & 3]);
+            g = do_extractps(&a, imm); VCHECK(g == a.d[imm & 3], "extractps imm %d: 0x%llx want 0x%x", imm, (unsigned long long)g, a.d[imm & 3]);
+            uint16_t m = do_pextrw_m(&a, imm); VCHECK(m == a.w[imm & 7], "pextrw m16 (SSE4.1 form) imm %d: 0x%x want 0x%x", imm, m, a.w[imm & 7]);
+            uintptr_t src = (uintptr_t)t_rng_next(&r);
+            V128 d = a, w = a; do_pinsrb(&d, src, imm); w.b[imm & 15] = (uint8_t)src;
+            VCHECK(!memcmp(&d, &w, 16), "pinsrb imm %d: got %s want %s", imm, hx(&d, 1), hx(&w, 1));
+            d = a; w = a; do_pinsrd(&d, src, imm); w.d[imm & 3] = (uint32_t)src;
+            VCHECK(!memcmp(&d, &w, 16), "pinsrd imm %d: got %s want %s", imm, hx(&d, 4), hx(&w, 4));
+#ifdef T_X64
+            uint64_t q = do_pextrq(&a, imm); VCHECK(q == a.q[imm & 1], "pextrq imm %d", imm);
+            d = a; w = a; uint64_t s64 = t_rng_next(&r); do_pinsrq(&d, s64, imm); w.q[imm & 1] = s64;
+            VCHECK(!memcmp(&d, &w, 16), "pinsrq imm %d: got %s want %s", imm, hx(&d, 8), hx(&w, 8));
+#endif
+        }
+    VEND("extract/insert");
+#ifndef T_X64
+    t_note("PEXTRQ/PINSRQ need REX.W: x64-only, not applicable to this x86 build");
+#endif
+}
+
+/* MOVNTDQA from ordinary write-back memory behaves as an aligned 16-byte load */
+TEST(sse41_movntdqa_wb_memory) {
+    NEED(F_SSE41);
+    static V128 buf[64];
+    t_rng r; t_rng_seed(&r, 0x1A007C);
+    t_rng_fill(&r, buf, sizeof buf);
+    for (int i = 0; i < 64; i++) {
+        V128 d;
+        __asm__ volatile("movntdqa %1, %0" : "=x"(d.v) : "m"(buf[i].v));
+        CHECKF(!memcmp(&d, &buf[i], 16), "movntdqa [%d]: %s want %s", i, hx(&d, 8), hx(&buf[i], 8));
+    }
+}
