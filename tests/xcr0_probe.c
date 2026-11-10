@@ -283,6 +283,12 @@ CHILD(report) {
     printf("API_PRESENT=%d\n", gef != NULL);
     printf("PF17=%d\n", IsProcessorFeaturePresent(PF_XSAVE_ENABLED) ? 1 : 0);
     if (x.osxsave && x.xg1) printf("XINUSE=0x%llx\n", (unsigned long long)t_xgetbv(1));
+    /* process/native machine as the OS reports it to this process (IsWow64Process2, Windows 10 1511+) */
+    BOOL (WINAPI *w2)(HANDLE, USHORT *, USHORT *) = (BOOL (WINAPI *)(HANDLE, USHORT *, USHORT *))t_proc("kernel32.dll", "IsWow64Process2");
+    USHORT pm = 0xFFFF, nm = 0xFFFF;
+    if (w2 && w2(GetCurrentProcess(), &pm, &nm)) printf("W2_PM=0x%x\nW2_NM=0x%x\n", pm, nm);
+    BOOL w = FALSE;
+    if (IsWow64Process(GetCurrentProcess(), &w)) printf("WOW64=%d\n", w ? 1 : 0);
     return 0;
 }
 
@@ -1484,6 +1490,37 @@ TEST(xcr0_same_in_other_architecture_process) {
         CHECK_EQ(api & x.sup & 0xFF, gef() & x.sup & 0xFF);
         if ((api ^ gef()) & x.sup & ~0xFFull)
             t_note("optional user components reported differently: 0x%llx", (unsigned long long)((api ^ gef()) & x.sup & ~0xFFull));
+        /* every reported user (XCR0) component is enabled in the other process's XCR0 as well */
+        CHECKF((api & x.sup & ~v) == 0, "%s process reports XSTATE features 0x%llx outside its XCR0 0x%llx", arch,
+               (unsigned long long)(api & x.sup), (unsigned long long)v);
+    }
+    /* IsWow64Process2 (documented: pProcessMachine = IMAGE_FILE_MACHINE_UNKNOWN when not running under WOW64,
+     * else the WOW64 guest machine; pNativeMachine = the host machine). Both processes run on one host. */
+    BOOL (WINAPI *w2)(HANDLE, USHORT *, USHORT *) = (BOOL (WINAPI *)(HANDLE, USHORT *, USHORT *))t_proc("kernel32.dll", "IsWow64Process2");
+    USHORT pm = 0xFFFF, nm = 0xFFFF;
+    uint64_t opm = 0, onm = 0, ow = 0;
+    int mine2 = w2 && w2(GetCurrentProcess(), &pm, &nm);
+    int theirs2 = child_u64(&r, "W2_PM=", &opm) && child_u64(&r, "W2_NM=", &onm);
+    t_info("iswow64process2", "this %s pm=0x%x nm=0x%x; other %s pm=0x%llx nm=0x%llx", T_ARCH, mine2 ? pm : 0xFFFF, mine2 ? nm : 0xFFFF, arch,
+           (unsigned long long)(theirs2 ? opm : 0xFFFF), (unsigned long long)(theirs2 ? onm : 0xFFFF));
+    if (mine2 && theirs2) {
+        CHECKF(onm == nm, "native machine 0x%llx in the %s process, 0x%x in this one", (unsigned long long)onm, arch, nm);
+#ifdef T_X64
+        CHECKF(pm == 0, "x64 process: IsWow64Process2 process machine 0x%x want IMAGE_FILE_MACHINE_UNKNOWN", pm);
+        CHECKF(opm == IMAGE_FILE_MACHINE_I386, "x86 process on a 64-bit OS: process machine 0x%llx want IMAGE_FILE_MACHINE_I386",
+               (unsigned long long)opm);
+#else
+        CHECKF(pm == IMAGE_FILE_MACHINE_I386, "x86 process on a 64-bit OS: process machine 0x%x want IMAGE_FILE_MACHINE_I386", pm);
+        CHECKF(opm == 0, "x64 process: process machine 0x%llx want IMAGE_FILE_MACHINE_UNKNOWN", (unsigned long long)opm);
+#endif
+    } else t_note("IsWow64Process2 unavailable in %s", mine2 ? arch : "this process");
+    if (child_u64(&r, "WOW64=", &ow)) {
+#ifdef T_X64
+        CHECKF(ow == 1, "x86 process on a 64-bit OS: IsWow64Process = %llu", (unsigned long long)ow);
+#else
+        CHECKF(ow == 0, "x64 process: IsWow64Process = %llu", (unsigned long long)ow);
+        CHECK(e->wow64);
+#endif
     }
 }
 
