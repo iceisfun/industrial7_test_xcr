@@ -3,6 +3,10 @@
 # __attribute__((target("..."))) functions or the asm helpers, behind runtime detection.
 CC64    ?= x86_64-w64-mingw32-gcc
 CC32    ?= i686-w64-mingw32-gcc
+# tests/<name>.cpp: C++ exes (x64 g++ uses Windows SEH). GCC's i686 C++ does not (DWARF/SJLJ), so the x86 exe
+# is built from the same file as C (or with CXX32 when installed); the file then SKIPs every case.
+CXX64   ?= x86_64-w64-mingw32-g++
+CXX32   ?= i686-w64-mingw32-g++
 VERSION := $(shell git describe --always --dirty --tags 2>/dev/null || echo unknown)
 CFLAGS  ?= -O2 -g0
 WARN    := -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers -Wno-cast-function-type
@@ -12,7 +16,8 @@ BASE    := -std=gnu11 -fno-strict-aliasing -fno-omit-frame-pointer -Icommon -DT_
 ARCH32  := -msse2 -mstackrealign
 LIBS    := -static -lkernel32 -ladvapi32 -lntdll -lm
 
-TESTS   := $(basename $(notdir $(wildcard tests/*.c)))
+TESTS   := $(basename $(notdir $(wildcard tests/*.c))) $(basename $(notdir $(wildcard tests/*.cpp)))
+CXXBASE := $(filter-out -std=gnu11,$(BASE)) -std=gnu++17
 CSRC    := $(wildcard common/*.c)
 CHDR    := $(wildcard common/*.h)
 OBJ64   := $(patsubst common/%.c,build/obj/x64/%.o,$(CSRC))
@@ -37,6 +42,17 @@ build/x64/%.exe: tests/%.c $(OBJ64) $(CHDR)
 build/x86/%.exe: tests/%.c $(OBJ32) $(CHDR)
 	@mkdir -p $(@D)
 	$(CC32) $(CFLAGS) $(WARN) $(BASE) $(ARCH32) -o $@ $< $(OBJ32) $(LIBS)
+
+build/x64/%.exe: tests/%.cpp $(OBJ64) $(CHDR)
+	@mkdir -p $(@D)
+	$(CXX64) $(CFLAGS) $(WARN) $(CXXBASE) -o $@ $< $(OBJ64) $(LIBS)
+build/x86/%.exe: tests/%.cpp $(OBJ32) $(CHDR)
+	@mkdir -p $(@D)
+	if command -v $(CXX32) >/dev/null 2>&1; then \
+	  $(CXX32) $(CFLAGS) $(WARN) $(CXXBASE) $(ARCH32) -o $@ $< $(OBJ32) $(LIBS); \
+	else \
+	  $(CC32) $(CFLAGS) $(WARN) $(BASE) $(ARCH32) -o $@ -x c $< -x none $(OBJ32) $(LIBS); \
+	fi
 
 # one exe:  make one T=xmm_registers
 one: build/x64/$(T).exe build/x86/$(T).exe
