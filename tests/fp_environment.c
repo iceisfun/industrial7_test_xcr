@@ -548,20 +548,25 @@ TEST(mxcsr_mask_from_fxsave) {
 
 TEST(mxcsr_writable_bits_roundtrip) {
     /* every bit set in MXCSR_MASK must load and read back (flags and masks included); walking ones/zeros */
+    /* The default MXCSR is restored before every CHECK: some of these values unmask exceptions, and the
+     * harness code that runs between checks must never execute under them. */
     unsigned m = mxcsr_mask() & 0xFFFFu;
     for (int b = 0; b < 16; b++) {
         if (!(m & (1u << b))) continue;
         unsigned v1 = MX_DEF ^ (1u << b);
         t_set_mxcsr(v1);
         unsigned g1 = t_get_mxcsr();
+        t_set_mxcsr(MX_DEF);
         CHECKF(g1 == v1, "bit %d: wrote 0x%04x read 0x%04x", b, v1, g1);
     }
     unsigned all = m;
     t_set_mxcsr(all);
-    CHECKF(t_get_mxcsr() == all, "all mask bits: wrote 0x%04x read 0x%04x", all, t_get_mxcsr());
+    unsigned ga = t_get_mxcsr();
     t_set_mxcsr(0);
-    CHECKF(t_get_mxcsr() == 0, "zero: read 0x%04x", t_get_mxcsr());
+    unsigned gz = t_get_mxcsr();
     t_set_mxcsr(MX_DEF);
+    CHECKF(ga == all, "all mask bits: wrote 0x%04x read 0x%04x", all, ga);
+    CHECKF(gz == 0, "zero: read 0x%04x", gz);
 }
 
 TEST(mxcsr_flags_sticky_and_accumulate) {
@@ -1652,7 +1657,9 @@ TEST(xrstor_mxcsr_and_x87_components) {
     CHECKF(m2 == mxa, "XRSTOR rfbm=2: MXCSR 0x%04x want 0x%04x", m2, mxa);
     CHECKF((c2 & CW_CMP) == (cwb & CW_CMP), "XRSTOR rfbm=2 changed FCW: 0x%04x", c2);
     CHECKF((c3 & CW_CMP) == 0x033F, "XRSTOR init x87: FCW 0x%04x want 0x037F", c3);
-    t_info("xrstor_init_sse_mxcsr", "0x%04x (memory 0x%04x, prior 0x%04x)", m3, mxa, mxb);
+    /* SDM 13.8.1 (standard form): MXCSR is loaded from the legacy area whenever RFBM[1] or RFBM[2] is
+     * set, independent of XSTATE_BV[1] (only the XMM registers are initialized) */
+    CHECKF(m3 == mxa, "XRSTOR rfbm=3 with XSTATE_BV[1]=0: MXCSR 0x%04x want the saved 0x%04x (prior 0x%04x)", m3, mxa, mxb);
 }
 
 /* ======================================================================================
@@ -1812,6 +1819,10 @@ TEST(crt_fpreset_msvcrt) {
     t_set_x87_cw((unsigned short)(0x007F | CW_RC(RZ) | CW_PC24));
     fr();
     unsigned mx = t_get_mxcsr(); unsigned short cw = t_get_x87_cw(), sw = t_get_x87_sw();
+#ifdef T_X86
+    /* the SSE2 half of the x86 CRT environment only exists in the SSE2-aware msvcrt (see crt_sse_on_x86) */
+    if (crt_sse_on_x86())
+#endif
     CHECKF((mx & (MX_MASKS | 0x6000 | MX_FLAGS)) == MX_MASKS, "MXCSR after _fpreset 0x%04x: want all masked, RN, flags clear", mx);
 #ifdef T_X86
     /* x86: msvcrt's floating-point package is the x87 (mingw float.h: msvcrt _fpreset sets FCW 0x27F) */
@@ -1847,6 +1858,15 @@ TEST(crt_fenv_rounding_modes) {
         memcpy(&b, (const void *)&q, 8);
         CHECKF(b == mthird[m], "%s: -1.0/3.0 = 0x%016llx want 0x%016llx", k_rc[m], (unsigned long long)b, (unsigned long long)mthird[m]);
     }
+    /* C99 7.6.3.2: fesetround returns nonzero for a value that is not a rounding mode and leaves the
+     * mode unchanged */
+    CHECK(fesetround(FE_UPWARD) == 0);
+    int bad = fesetround(FE_UPWARD | 0x10000);
+    int after = fegetround();
+    unsigned mrc = (t_get_mxcsr() >> 13) & 3;
+    fesetround(FE_TONEAREST);
+    CHECKF(bad != 0, "fesetround(invalid) returned 0");
+    CHECKF(after == FE_UPWARD && mrc == RU, "fesetround(invalid) changed the mode: fegetround 0x%x MXCSR.RC %u", after, mrc);
     fesetround(FE_TONEAREST);
 }
 
@@ -2037,7 +2057,11 @@ TEST(ctx_get_set_thread_context_fp_env) {
     HANDLE th = CreateThread(NULL, 64 * 1024, th_env_spin, &a, 0, NULL);
     if (!th) SKIP("CreateThread failed");
     if (!wait_count(&ready, 1, 5000)) { stop = 1; WaitForSingleObject(th, 5000); CloseHandle(th); REQUIREF(0, "worker never reached the spin"); }
-    REQUIRE(SuspendThread(th) != (DWORD)-1);
+    if (SuspendThread(th) == (DWORD)-1) {
+        DWORD e = GetLastError();
+        stop = 1; WaitForSingleObject(th, 5000); CloseHandle(th);   /* never leave the spinner behind */
+        REQUIREF(0, "SuspendThread failed: %lu", e);
+    }
     static T_ALIGN(16) CONTEXT c;
     memset(&c, 0, sizeof c);
     unsigned new_mx = MX_DEF | MX_RC(RU) | MXF_IE;
@@ -2117,4 +2141,374 @@ TEST(ctx_set_context_before_thread_start_info) {
     CloseHandle(th);
     CHECKF(ok, "Get/SetThreadContext on a suspended new thread failed: %lu", GetLastError());
     t_info("pre_start_setcontext_mxcsr_seen", "0x%04x (set 0x%04x)", s.mx, new_mx);
+}
+
+/* ======================================================================================
+ * 9. exception precedence, FLDENV-loaded exceptions, concurrent exceptions, reserved-bit
+ *    handling by the OS and the save/restore instructions, CPU migration
+ * ====================================================================================== */
+
+/* <exe> --child=fpx_prec <0|1>: divps with lane 0 = 1/0 (ZE) and lane 1 = 1/3 (PE).
+ * mode 0: ZE unmasked, PE masked; mode 1: ZE masked, PE unmasked. */
+CHILD(fpx_prec) {
+    int mode = argc > 1 ? atoi(argv[1]) : 0;
+    if (!AddVectoredExceptionHandler(1, fx_veh)) { printf("NOVEH=1\n"); return 3; }
+    uint32_t a[4] = { 0x3F800000u, 0x3F800000u, 0x40000000u, 0x40800000u };
+    uint32_t b[4] = { 0x00000000u, 0x40400000u, 0x3F800000u, 0x3F800000u }, r[4] = { 0 };
+    unsigned mo = 0;
+    fx_sse_packed(mode == 0 ? (MX_DEF & ~0x0200u) : (MX_DEF & ~0x1000u), a, b, r, &mo);
+    printf("RES0=0x%08x\nRES1=0x%08x\nRES2=0x%08x\nRES3=0x%08x\nMO=0x%08x\n", r[0], r[1], r[2], r[3], mo);
+    fx_print();
+    return 0;
+}
+
+static void run_fx_prec(int mode) {
+    /* SDM 11.5.2 / 11.5.2.1: for a packed instruction the pre-computation exceptions (IE, DE, ZE) are
+     * detected in all lanes first. An unmasked pre-computation exception is reported with only the
+     * pre-computation flags set (the post-computation conditions OE/UE/PE are not evaluated). If the
+     * pre-computation exceptions are all masked, an unmasked post-computation exception is reported
+     * with the masked pre-computation flags set as well. Either way the destination is unchanged. */
+    static t_child_result r;
+    char args[16]; snprintf(args, sizeof args, "%d", mode);
+    REQUIRE(t_child_run("fpx_prec", args, 15000, &r));
+    REQUIREF(!r.timed_out, "child timed out");
+    REQUIREF(strstr(r.out, "LOOP=") == NULL, "resume with masked MXCSR did not take effect: %s", r.out);
+    REQUIREF(r.exit_code == 0, "child exit 0x%08lx exc 0x%08lx: %s", r.exit_code, r.exc_code, r.out);
+    int k = mode == 0 ? K_ZE : K_PE;
+    unsigned long long hits = cv(&r, "HITS"), code = cv(&r, "CODE"), addr = cv(&r, "ADDR"), lab = cv(&r, "LABEL");
+    unsigned long long cmx = cv(&r, "CTXMX"), x0 = cv(&r, "XMM0LO"), mo = cv(&r, "MO");
+    CHECKF(hits == 1, "handler ran %llu times, want 1", hits);
+    int code_ok = code_acceptable(0, k, (DWORD)code);
+    int wine_code_gap = !code_ok && t_is_wine();
+    if (!wine_code_gap) CHECKF(code_ok, "exception code 0x%08llx, want 0x%08lx (%s)", code, want_code(0, k), k_kind[k]);
+    CHECKF(addr == lab, "ExceptionAddress 0x%llx != faulting divps 0x%llx", addr, lab);
+    if (cmx != 0xFFFFFFFFull) {
+        unsigned want = mode == 0 ? MXF_ZE : (MXF_ZE | MXF_PE);
+        char f1[40], f2[40];
+        CHECKF((cmx & MX_FLAGS) == want, "CONTEXT MXCSR flags %s want %s (MXCSR 0x%08llx)",
+               flag_str((unsigned)cmx & MX_FLAGS, f1, sizeof f1), flag_str(want, f2, sizeof f2), cmx);
+        CHECKF(x0 == 0x3F8000003F800000ull, "XMM0[63:0] at fault 0x%016llx want the unchanged source", x0);
+    } else t_note("CONTEXT carries no MXCSR/XMM state");
+    CHECK_EQ(cv(&r, "RES0"), 0x7F800000u); CHECK_EQ(cv(&r, "RES1"), 0x3EAAAAABu);
+    CHECK_EQ(cv(&r, "RES2"), 0x40000000u); CHECK_EQ(cv(&r, "RES3"), 0x40800000u);
+    CHECKF((mo & MX_FLAGS) == (MXF_ZE | MXF_PE), "flags after the masked re-execution 0x%02llx want ZE|PE", mo & MX_FLAGS);
+    t_info("code", "0x%08llx", code);
+    if (wine_code_gap) XFAIL("Wine %s reports this as 0x%08llx", t_wine_version(), code);
+}
+TEST(sse_unmasked_packed_precomputation_first) { run_fx_prec(0); }
+TEST(sse_unmasked_packed_postcomputation_with_masked_precomputation) { run_fx_prec(1); }
+
+/* <exe> --child=fpx_env: FLDENV loads an x87 environment with a pending unmasked ZE (FSW.ES|ZE, FCW.ZM=0);
+ * the next waiting instruction (FWAIT, label 2:) must raise it. */
+CHILD(fpx_env) {
+    if (!AddVectoredExceptionHandler(1, fx_veh)) { printf("NOVEH=1\n"); return 3; }
+    static uint8_t env[28];
+    unsigned short sv = 0, swo = 0;
+    __asm__ volatile("fnstcw %[sv]\n\tfninit\n\tfnstenv %[e]" : [sv] "=m"(sv), [e] "=m"(env) :: "memory");
+    uint16_t cw = (uint16_t)(0x037F & ~0x04), sw = 0x8084;     /* B | ES | ZE, TOP = 0 */
+    memcpy(env, &cw, 2); memcpy(env + 4, &sw, 2);
+    __asm__ volatile(LAB_TO("2f", "lab")
+                     "fldenv %[e]\n" "2:\n\tfwait\n\tfnstsw %[swo]\n\tfninit\n\tfldcw %[sv]"
+                     : [lab] "=m"(g_fx_label), [swo] "=m"(swo) : [e] "m"(env), [sv] "m"(sv) : LAB_CLOBBER, "memory");
+    printf("SWO=0x%04x\n", swo);
+    fx_print();
+    return 0;
+}
+TEST(x87_fldenv_pending_exception_delivered) {
+    /* SDM 8.6 / FLDENV: an unmasked exception flag loaded by FLDENV is reported by the next waiting x87
+     * instruction. Windows delivers it like any x87 #MF ([K2]: ZE -> FLOAT_DIVIDE_BY_ZERO). */
+    static t_child_result r;
+    REQUIRE(t_child_run("fpx_env", "", 15000, &r));
+    REQUIREF(!r.timed_out, "child timed out");
+    REQUIREF(strstr(r.out, "LOOP=") == NULL, "resume with cleared FSW did not take effect: %s", r.out);
+    REQUIREF(r.exit_code == 0, "child exit 0x%08lx exc 0x%08lx: %s", r.exit_code, r.exc_code, r.out);
+    unsigned long long hits = cv(&r, "HITS"), code = cv(&r, "CODE"), addr = cv(&r, "ADDR"), lab = cv(&r, "LABEL");
+    unsigned long long csw = cv(&r, "CTXSW"), ccw = cv(&r, "CTXCW"), swo = cv(&r, "SWO"), fip = cv(&r, "FIP");
+    CHECKF(hits == 1, "handler ran %llu times, want 1 (FWAIT must report the loaded exception)", hits);
+    CHECKF(code == 0xC000008Eull, "exception code 0x%08llx want 0xC000008E (FLOAT_DIVIDE_BY_ZERO)", code);
+#ifdef T_X64
+    CHECKF(addr == lab, "ExceptionAddress 0x%llx != the FWAIT 0x%llx", addr, lab);
+    (void)fip;
+#else
+    /* as in run_fx_x87: WOW64 reports the FWAIT; other 32-bit implementations the FIP (here the FIP
+     * loaded by FLDENV) */
+    CHECKF(addr == lab || (uint32_t)addr == (uint32_t)fip, "ExceptionAddress 0x%llx is neither the FWAIT 0x%llx nor FIP 0x%llx", addr, lab, fip);
+    t_info("x87_exception_address", "%s", addr == lab ? "fwait" : "fip");
+#endif
+    if (csw != 0xFFFFFFFFull) {
+        CHECKF((csw & (SW_ES | MXF_ZE)) == (SW_ES | MXF_ZE), "CONTEXT FSW 0x%04llx want ES|ZE", csw);
+        CHECKF(!(ccw & 0x04), "CONTEXT FCW 0x%04llx has ZM set", ccw);
+    }
+    CHECKF((swo & 0x80FF) == 0, "FSW after resume 0x%04llx", swo);
+}
+
+/* <exe> --child=fpx_mt <threads> <iters>: every thread repeatedly takes an unmasked SSE ZE with its own
+ * MXCSR (distinct RC/FTZ/DAZ); the shared VEH checks that the CONTEXT holds the faulting thread's MXCSR. */
+static DWORD g_mt_tls = TLS_OUT_OF_INDEXES;
+static volatile LONG g_mt_hits, g_mt_bad, g_mt_nofp, g_mt_limit;
+static volatile unsigned g_mt_first_got, g_mt_first_want;
+static LONG CALLBACK mt_veh(EXCEPTION_POINTERS *ep) {
+    if (!is_flt_code(ep->ExceptionRecord->ExceptionCode)) return EXCEPTION_CONTINUE_SEARCH;
+    CONTEXT *c = ep->ContextRecord;
+    unsigned want = (unsigned)(uintptr_t)TlsGetValue(g_mt_tls), got;
+    if (InterlockedIncrement(&g_mt_hits) > g_mt_limit) { printf("LOOP=1\n"); fflush(stdout); ExitProcess(0xBAD1); }
+#ifdef T_X64
+    got = c->MxCsr;
+    c->MxCsr = (got & ~MX_FLAGS) | 0x0200u;      /* mask ZE, clear the flags: the divss re-executes masked */
+    c->FltSave.MxCsr = c->MxCsr;
+#else
+    if (c->ContextFlags & CONTEXT_EXTENDED_REGISTERS & ~CONTEXT_i386) {
+        memcpy(&got, c->ExtendedRegisters + 24, 4);
+        unsigned n = (got & ~MX_FLAGS) | 0x0200u;
+        memcpy(c->ExtendedRegisters + 24, &n, 4);
+    } else {
+        got = t_get_mxcsr();
+        InterlockedIncrement(&g_mt_nofp);
+        t_set_mxcsr((got & ~MX_FLAGS) | 0x0200u);
+    }
+#endif
+    if ((got & ~MX_FLAGS) != want || (got & MX_FLAGS) != MXF_ZE)
+        if (InterlockedIncrement(&g_mt_bad) == 1) { g_mt_first_got = got; g_mt_first_want = want; }
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+typedef struct mt_arg { unsigned mx; int iters; int bad_after; unsigned last; } mt_arg;
+static DWORD WINAPI mt_thread(void *p) {
+    mt_arg *a = (mt_arg *)p;
+    TlsSetValue(g_mt_tls, (void *)(uintptr_t)a->mx);
+    uint32_t one = 0x3F800000u, zero = 0;
+    for (int i = 0; i < a->iters; i++) {
+        unsigned mo = 0, mx = a->mx, def = MX_DEF;
+        uint32_t r = 0;
+        __asm__ volatile("ldmxcsr %[mx]\n\tmovd %[one], %%xmm0\n\tmovd %[zero], %%xmm1\n\tdivss %%xmm1, %%xmm0\n\t"
+                         "stmxcsr %[mo]\n\tldmxcsr %[def]\n\tmovd %%xmm0, %[r]"
+                         : [mo] "=m"(mo), [r] "=m"(r) : [mx] "m"(mx), [one] "m"(one), [zero] "m"(zero), [def] "m"(def)
+                         : "xmm0", "xmm1", "memory");
+        if (r != 0x7F800000u || mo != (mx | 0x0200u | MXF_ZE)) { a->bad_after++; a->last = mo; }
+        if ((i & 7) == 0) SwitchToThread();
+    }
+    return 0;
+}
+CHILD(fpx_mt) {
+    int n = argc > 1 ? atoi(argv[1]) : 16, iters = argc > 2 ? atoi(argv[2]) : 64;
+    if (n < 1 || n > 64 || iters < 1 || iters > 1000) return 2;
+    g_mt_tls = TlsAlloc();
+    if (g_mt_tls == TLS_OUT_OF_INDEXES) { printf("NOTLS=1\n"); return 3; }
+    g_mt_limit = n * iters * 2 + 16;
+    if (!AddVectoredExceptionHandler(1, mt_veh)) { printf("NOVEH=1\n"); return 3; }
+    static mt_arg a[64]; static HANDLE h[64];
+    int daz = daz_supported(), started = 0;
+    for (int i = 0; i < n; i++) {
+        a[i].mx = (MX_DEF & ~0x0200u) | MX_RC(i & 3) | ((i >> 2) & 1 ? MX_FTZ : 0) | (daz && ((i >> 3) & 1) ? MX_DAZ : 0);
+        a[i].iters = iters;
+        h[i] = CreateThread(NULL, 64 * 1024, mt_thread, &a[i], 0, NULL);
+        if (!h[i]) break;
+        started++;
+    }
+    int bad_after = 0, timeouts = 0; unsigned last = 0;
+    for (int i = 0; i < started; i++) {
+        if (WaitForSingleObject(h[i], 20000) != WAIT_OBJECT_0) timeouts++;
+        CloseHandle(h[i]);
+        if (a[i].bad_after) { bad_after += a[i].bad_after; last = a[i].last; }
+    }
+    printf("MTTHREADS=%d\nMTITERS=%d\nMTHITS=%ld\nMTBAD=%ld\nMTFIRSTGOT=0x%08x\nMTFIRSTWANT=0x%08x\nMTAFTERBAD=%d\nMTLAST=0x%08x\nMTNOFP=%ld\nMTTIMEOUTS=%d\n",
+           started, iters, g_mt_hits, g_mt_bad, g_mt_first_got, g_mt_first_want, bad_after, last, g_mt_nofp, timeouts);
+    return 0;
+}
+TEST(sse_unmasked_exceptions_concurrent_threads) {
+    /* Each CONTEXT handed to a handler is the faulting thread's own state, even when many threads
+     * fault at the same time with different environments; the environment each handler writes back is
+     * applied to that thread only. */
+    static t_child_result r;
+    REQUIRE(t_child_run("fpx_mt", "16 64", 60000, &r));
+    REQUIREF(!r.timed_out, "child timed out");
+    REQUIREF(strstr(r.out, "LOOP=") == NULL, "handler re-entered without progress: %s", r.out);
+    REQUIREF(r.exit_code == 0 && r.exc_code == 0, "child exit 0x%08lx exc 0x%08lx: %s", r.exit_code, r.exc_code, r.out);
+    unsigned long long thr = 0, it = 0, hits = 0, bad = 0, after = 0, to = 0, fg = 0, fw = 0, last = 0, nofp = 0;
+    REQUIRE(child_hex(&r, "MTTHREADS", &thr) && child_hex(&r, "MTITERS", &it) && child_hex(&r, "MTHITS", &hits));
+    child_hex(&r, "MTBAD", &bad); child_hex(&r, "MTAFTERBAD", &after); child_hex(&r, "MTTIMEOUTS", &to);
+    child_hex(&r, "MTFIRSTGOT", &fg); child_hex(&r, "MTFIRSTWANT", &fw); child_hex(&r, "MTLAST", &last); child_hex(&r, "MTNOFP", &nofp);
+    if (thr < 2) SKIP("could not create worker threads in the child (%llu)", thr);
+    CHECKF(to == 0, "%llu worker threads did not finish", to);
+    CHECKF(hits == thr * it, "handler ran %llu times, want %llu (threads %llu x %llu)", hits, thr * it, thr, it);
+    CHECKF(bad == 0, "%llu handler CONTEXTs did not hold the faulting thread's MXCSR (first: 0x%08llx want 0x%08llx|ZE)", bad, fg, fw);
+    CHECKF(after == 0, "%llu re-executions did not run with the handler's MXCSR (last 0x%08llx)", after, last);
+    t_info("threads", "%llu x %llu exceptions", thr, it);
+    if (nofp) t_note("%llu exception CONTEXTs had no extended registers (live MXCSR fixed instead)", nofp);
+}
+
+/* <exe> --child=ctx_badmx <0|1>: hand the OS an MXCSR with reserved bits through a CONTEXT.
+ * mode 0: VEH continue (NtContinue); mode 1: SetThreadContext on a suspended spinning worker. */
+#define BADMX_VAL (0xFFFF0000u | MX_DEF | MX_RC(RU))
+static LONG CALLBACK badmx_veh(EXCEPTION_POINTERS *ep) {
+    if (ep->ExceptionRecord->ExceptionCode != RX_CODE) return EXCEPTION_CONTINUE_SEARCH;
+    CONTEXT *c = ep->ContextRecord;
+#ifdef T_X64
+    c->MxCsr = BADMX_VAL; c->FltSave.MxCsr = BADMX_VAL;
+    printf("CTXSET=1\n");
+#else
+    if (c->ContextFlags & CONTEXT_EXTENDED_REGISTERS & ~CONTEXT_i386) {
+        unsigned v = BADMX_VAL; memcpy(c->ExtendedRegisters + 24, &v, 4);
+        printf("CTXSET=1\n");
+    } else printf("CTXSET=0\n");
+#endif
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+CHILD(ctx_badmx) {
+    int mode = argc > 1 ? atoi(argv[1]) : 0;
+    if (mode == 0) {
+        if (!AddVectoredExceptionHandler(1, badmx_veh)) { printf("NOVEH=1\n"); return 3; }
+        RaiseException(RX_CODE, 0, 0, NULL);
+        unsigned mx = t_get_mxcsr();
+        t_set_mxcsr(MX_DEF);
+        printf("SURVIVED=1\nMX=0x%08x\n", mx);
+        return 0;
+    }
+    volatile long stop = 0, ready = 0;
+    static spin_args a;
+    memset(&a, 0, sizeof a);
+    a.mx_in = MX_DEF; a.cw_in = 0x027F; a.stop = &stop; a.ready = &ready; a.max = 0x7FFFFFFFul;
+    HANDLE th = CreateThread(NULL, 64 * 1024, th_env_spin, &a, 0, NULL);
+    if (!th) { printf("NOTHREAD=1\n"); return 4; }
+    if (!wait_count(&ready, 1, 5000)) { stop = 1; printf("NOSPIN=1\n"); return 4; }
+    int setok = -1; DWORD err = 0;
+    if (SuspendThread(th) != (DWORD)-1) {
+        static T_ALIGN(16) CONTEXT c;
+        memset(&c, 0, sizeof c);
+#ifdef T_X64
+        c.ContextFlags = CONTEXT_FLOATING_POINT;
+        if (GetThreadContext(th, &c)) {
+            c.MxCsr = BADMX_VAL; c.FltSave.MxCsr = BADMX_VAL;
+            setok = SetThreadContext(th, &c) ? 1 : 0;
+        }
+#else
+        c.ContextFlags = CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
+        if (GetThreadContext(th, &c)) {
+            unsigned v = BADMX_VAL; memcpy(c.ExtendedRegisters + 24, &v, 4);
+            setok = SetThreadContext(th, &c) ? 1 : 0;
+        }
+#endif
+        if (setok == 0) err = GetLastError();
+        ResumeThread(th);
+    }
+    stop = 1;
+    DWORD w = WaitForSingleObject(th, 5000), ec = 0;
+    GetExitCodeThread(th, &ec);
+    CloseHandle(th);
+    printf("SETOK=%d\nSETERR=%lu\nJOINED=%d\nTHREADEXIT=0x%08lx\nMX=0x%08x\nSURVIVED=1\n", setok, err, w == WAIT_OBJECT_0, ec, a.mx_out);
+    return 0;
+}
+static void run_badmx(int mode) {
+    /* An MXCSR value with reserved bits set would #GP on LDMXCSR/FXRSTOR/XRSTOR. A CONTEXT is untrusted
+     * input: [K3] the kernel ANDs CONTEXT.MxCsr with the processor's MXCSR mask (re-checked in the 19041
+     * corpus: KxContextToKframes "TrapFrame->MxCsr = Context->MxCsr & KiMxCsrMask", used by NtContinue
+     * and NtSetContextThread). Contract checked: the
+     * process and the thread survive, and the thread never runs with a reserved MXCSR bit set (the API
+     * may also refuse the value). What is applied is recorded. */
+    static t_child_result r;
+    REQUIRE(t_child_run("ctx_badmx", mode ? "1" : "0", 5000, &r));
+    int survived = !r.timed_out && strstr(r.out, "SURVIVED=1") != NULL && r.exc_code == 0;
+    if (!survived && t_is_wine())
+        XFAIL("Wine %s: a CONTEXT MXCSR with reserved bits %s (exit 0x%08lx exc 0x%08lx)", t_wine_version(),
+              r.timed_out ? "hangs the process" : "kills the process", r.exit_code, r.exc_code);
+    REQUIREF(!r.timed_out, "child hung after a CONTEXT with a reserved MXCSR bit");
+    REQUIREF(survived, "process died: exit 0x%08lx exc 0x%08lx: %s", r.exit_code, r.exc_code, r.out);
+    unsigned long long mx = 0, setok = 1, joined = 1, ctxset = 1;
+    REQUIRE(child_hex(&r, "MX", &mx));
+    if (mode == 0) {
+        child_hex(&r, "CTXSET", &ctxset);
+        if (!ctxset) SKIP("exception CONTEXT carries no MXCSR on this platform");
+    } else {
+        char buf[32];
+        if (t_child_find(&r, "SETOK=", buf, sizeof buf)) setok = (unsigned long long)strtoll(buf, NULL, 10);
+        child_hex(&r, "JOINED", &joined);
+        CHECKF(joined == 1, "worker did not finish after SetThreadContext with a reserved MXCSR bit");
+        REQUIREF(setok != (unsigned long long)-1, "GetThreadContext/SuspendThread failed: %s", r.out);
+        t_info("set_thread_context_result", "%llu", setok);
+        if (setok == 0) { t_note("SetThreadContext refused the reserved MXCSR bits"); return; }
+    }
+    CHECKF((mx & ~(unsigned long long)mxcsr_mask()) == 0, "thread runs with reserved MXCSR bits: 0x%08llx (mask 0x%08x)", mx, mxcsr_mask());
+    t_info("applied_mxcsr", "0x%08llx (requested 0x%08x)", mx, BADMX_VAL);
+}
+TEST(ctx_continue_reserved_mxcsr_bits_sanitized) { run_badmx(0); }
+TEST(ctx_setthreadcontext_reserved_mxcsr_bits_sanitized) { run_badmx(1); }
+
+/* <exe> --child=rstor_bad <0|1|2>: FXRSTOR (0) / XRSTOR rfbm=3 (1) / XRSTOR rfbm=1 (2) of an image
+ * whose MXCSR field has reserved bit 16 set. */
+CHILD(rstor_bad) {
+    int mode = argc > 1 ? atoi(argv[1]) : 0;
+    static T_ALIGN(64) uint8_t area[4096];
+    uint32_t bad = MX_DEF | 0x10000u;
+    memset(area, 0, sizeof area);
+    if (mode == 0) {
+        t_fxsave(area);
+        memcpy(area + 24, &bad, 4);
+        t_fxrstor(area);
+    } else {
+        if (!cpu_has(F_XSAVE) || xsave_std_size(3) > sizeof area) { printf("NOXSAVE=1\n"); return 5; }
+        t_xsave(area, 3);
+        memcpy(area + 24, &bad, 4);
+        t_xrstor(area, mode == 1 ? 3 : 1);
+    }
+    unsigned mx = t_get_mxcsr();
+    t_set_mxcsr(MX_DEF);
+    printf("SURVIVED=0x%08x\n", mx);
+    return 0;
+}
+TEST(fxrstor_xrstor_reserved_mxcsr_fault) {
+    /* SDM FXRSTOR / XRSTOR: #GP(0) when the MXCSR image sets a reserved bit and MXCSR is being loaded
+     * (FXRSTOR always; XRSTOR when RFBM[1] or RFBM[2] is set). Windows delivers the user-mode #GP of a
+     * non-privileged instruction as STATUS_ACCESS_VIOLATION. XRSTOR with RFBM = x87 only does not load
+     * MXCSR: recorded only. */
+    static t_child_result r;
+    REQUIRE(t_child_run("rstor_bad", "0", 10000, &r));
+    CHECKF(!r.timed_out, "child timed out");
+    CHECKF(strstr(r.out, "SURVIVED=") == NULL, "FXRSTOR of MXCSR 0x%08x did not fault: %s", MX_DEF | 0x10000u, r.out);
+    CHECKF(r.exc_code == STATUS_ACCESS_VIOLATION || r.exc_code == STATUS_PRIVILEGED_INSTRUCTION,
+           "FXRSTOR reserved MXCSR: exception 0x%08lx", r.exc_code);
+    if (!cpu_has(F_XSAVE)) { t_note("XSAVE not usable: XRSTOR part skipped"); return; }
+    REQUIRE(t_child_run("rstor_bad", "1", 10000, &r));
+    CHECKF(!r.timed_out, "child timed out");
+    CHECKF(strstr(r.out, "SURVIVED=") == NULL && strstr(r.out, "NOXSAVE") == NULL, "XRSTOR rfbm=3 of a reserved MXCSR did not fault: %s", r.out);
+    CHECKF(r.exc_code == STATUS_ACCESS_VIOLATION || r.exc_code == STATUS_PRIVILEGED_INSTRUCTION,
+           "XRSTOR reserved MXCSR: exception 0x%08lx", r.exc_code);
+    REQUIRE(t_child_run("rstor_bad", "2", 10000, &r));
+    char v[32] = "";
+    t_info("xrstor_x87_only_reserved_mxcsr", "%s", t_child_find(&r, "SURVIVED=", v, sizeof v) ? "no fault" : "faulted");
+}
+
+TEST(env_preserved_across_cpu_migration) {
+    /* A spinning worker holds a non-default MXCSR (flags included), FCW and a non-empty x87 stack
+     * with FSW.ZE while its affinity is moved to every CPU of the process in turn: the FP state is
+     * thread state and must follow the thread to each processor. */
+    DWORD_PTR pm = 0, sm = 0;
+    if (!GetProcessAffinityMask(GetCurrentProcess(), &pm, &sm) || !pm) SKIP("GetProcessAffinityMask failed");
+    int ncpu = 0;
+    for (unsigned b = 0; b < 8 * sizeof(DWORD_PTR); b++) if (pm & ((DWORD_PTR)1 << b)) ncpu++;
+    if (ncpu < 2) SKIP("process can run on one CPU only");
+    volatile long stop = 0, ready = 0;
+    static spin_args a;
+    memset(&a, 0, sizeof a);
+    a.mx_in = MX_DEF | MX_RC(RD) | MX_FTZ | (daz_supported() ? MX_DAZ : 0) | MXF_PE | MXF_DE;
+    a.cw_in = (unsigned short)(0x007F | CW_RC(RU) | CW_PC53);
+    a.stop = &stop; a.ready = &ready; a.max = 0x7FFFFFFFul;
+    HANDLE th = CreateThread(NULL, 64 * 1024, th_env_spin, &a, 0, NULL);
+    if (!th) SKIP("CreateThread failed");
+    int moves = 0, fails = 0, spun = wait_count(&ready, 1, 5000);
+    if (spun)
+        for (int pass = 0; pass < 2; pass++)
+            for (unsigned b = 0; b < 8 * sizeof(DWORD_PTR); b++) {
+                if (!(pm & ((DWORD_PTR)1 << b))) continue;
+                if (SetThreadAffinityMask(th, (DWORD_PTR)1 << b)) moves++; else fails++;
+                Sleep(2);
+            }
+    stop = 1;
+    DWORD w = WaitForSingleObject(th, 5000);
+    CloseHandle(th);
+    REQUIREF(spun, "worker never reached the spin");
+    REQUIREF(w == WAIT_OBJECT_0, "worker did not stop");
+    CHECKF(moves > 0, "SetThreadAffinityMask never succeeded (%d failures)", fails);
+    CHECKF(a.mx_out == a.mx_in, "MXCSR after migration 0x%04x want 0x%04x", a.mx_out, a.mx_in);
+    CHECKF((a.cw_out & CW_CMP) == (a.cw_in & CW_CMP), "FCW after migration 0x%04x want 0x%04x", a.cw_out, a.cw_in);
+    CHECKF((a.sw_out & 0x38FFu) == 0x3004u, "FSW after migration 0x%04x want TOP=6 + ZE", a.sw_out);
+    t_info("affinity_moves", "%d over %d CPUs (%d refused)", moves, ncpu, fails);
 }
