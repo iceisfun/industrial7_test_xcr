@@ -1159,6 +1159,9 @@ static void xsave_case(int op, const char *metric) {
     uint64_t bv, comp; memcpy(&bv, a + 512, 8); memcpy(&comp, a + 520, 8);
     t_info("xstate_bv", "0x%llx", (unsigned long long)bv);
     CHECKF((bv & ~rfbm) == 0, "XSTATE_BV 0x%llx has bits outside RFBM 0x%llx", (unsigned long long)bv, (unsigned long long)rfbm);
+    if (op == 3 && t_sde_model() && comp != ((1ull << 63) | rfbm) && (comp & ~((1ull << 63) | rfbm)) == 0)
+        t_expect_fail("Intel SDE (%s) XSAVEC writes XCOMP_BV without some RFBM components (PKRU, initial ones)",
+                      t_sde_model());   /* emulator artifact, README "Emulated validation" */
     if (op == 3) CHECKF(comp == ((1ull << 63) | rfbm), "XSAVEC XCOMP_BV 0x%llx want 0x%llx (bit 63 | RFBM)", (unsigned long long)comp, (unsigned long long)((1ull << 63) | rfbm));
     else CHECKF(comp == 0, "standard-format XCOMP_BV 0x%llx want 0 (XSAVE/XSAVEOPT do not write it)", (unsigned long long)comp);
     uint32_t smx; memcpy(&smx, a + 24, 4);

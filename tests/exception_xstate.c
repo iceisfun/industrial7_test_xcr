@@ -865,6 +865,12 @@ static void xh_verify(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who)
     DWORD code = rec->ExceptionCode;
     int alt = 0;
     for (int i = 0; i < 3; i++) if (e->alt[i] && code == e->alt[i]) alt = 1;
+#ifdef T_X64
+    /* Wine 9 (seen with the distro Wine tools/sde_run.sh uses; Wine 11 is exact) reports every x64 #XM as
+     * STATUS_FLOAT_MULTIPLE_TRAPS; Windows x64 maps the unmasked flag to one STATUS_FLOAT_* code. */
+    if (t_is_wine() && code == XS_FLT_MULTIPLE_TRAPS && code != e->code && !alt)
+        t_expect_fail("Wine %s reports an x64 #XM as STATUS_FLOAT_MULTIPLE_TRAPS", t_wine_version());
+#endif
     CHECKF(code == e->code || alt, "%s: ExceptionCode 0x%08lx, expected 0x%08lx", who, (unsigned long)code, (unsigned long)e->code);
     if (alt && !s->quiet) t_note("%s: ExceptionCode 0x%08lx (accepted alternative to 0x%08lx)", who, (unsigned long)code,
                                  (unsigned long)e->code);
@@ -946,6 +952,10 @@ static void xh_verify(xh *s, EXCEPTION_RECORD *rec, CONTEXT *c, const char *who)
                 CHECKF((sw & e->x87_sw_clear) == 0, "%s: context x87 SW 0x%04x has 0x%04x set", who, sw, sw & e->x87_sw_clear);
             if (e->check_fip) {
                 uint32_t fip; memcpy(&fip, fx + 8, 4);
+#ifdef T_X86
+                if (t_sde_model() && fip != (uint32_t)(uintptr_t)s->op)   /* emulator artifact, README "Emulated validation" */
+                    t_expect_fail("Intel SDE (%s): the x87 FPU instruction pointer points into Pin's code cache", t_sde_model());
+#endif
                 CHECKF(fip == (uint32_t)(uintptr_t)s->op, "%s: context x87 FIP 0x%08x want 0x%08x (the faulting x87 op)", who,
                        fip, (uint32_t)(uintptr_t)s->op);
             }
@@ -1346,9 +1356,25 @@ static int xk_arm_and_run(xh *s, const xk *k, xf *f, int variant) {
     return (int)s->calls;
 }
 
+/* ZMM frames need AVX-512 in the CPU AND in the OS's XSTATE context configuration: a CONTEXT carries only the
+ * components GetEnabledXStateFeatures reports (Windows documents no other way to name them). On Windows with
+ * AVX-512 enabled in XCR0 that API always reports bits 5-7; a disagreement with XCR0 is reported by xcr0_probe
+ * (api_reports_xcr0_documented_bits), so here such a system just runs the ymm/xmm frames. */
+static const char *zmm_ctx_unusable(void) {
+    static char why[96];
+    if (!cpu_has(F_AVX512F)) return "AVX-512F not usable";
+    const t_env *e = t_env_get();
+    if (e->api_xstate_present && (e->api_xstate_features & 0xE0) != 0xE0) {
+        snprintf(why, sizeof why, "the OS does not report AVX-512 context state (GetEnabledXStateFeatures=0x%llx)",
+                 (unsigned long long)e->api_xstate_features);
+        return why;
+    }
+    return NULL;
+}
+#define NEED_ZMM_CTX() do { const char *why_ = zmm_ctx_unusable(); if (why_) SKIP("%s", why_); } while (0)
 static int vk_supported(int vk) {
     if (vk == 32) return cpu_has(F_AVX);
-    if (vk == 64) return cpu_has(F_AVX512F);
+    if (vk == 64) return zmm_ctx_unusable() == NULL;
     return 1;
 }
 static const char *vk_name(int vk) { return vk == 64 ? "zmm" : vk == 32 ? "ymm" : "xmm"; }
@@ -1483,7 +1509,7 @@ TEST(ref_nop_roundtrip_ymm) {
     xk_test("nop", 32, 0, V_VEH, NULL, "after nop");
 }
 TEST(ref_nop_roundtrip_zmm) {
-    if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
+    NEED_ZMM_CTX();
     xk_test("nop", 64, 0, V_VEH, NULL, "after nop");
 }
 TEST(ref_nop_roundtrip_x87_eflags) { xk_test("nop", 16, 0, V_VEH, tw_x87_efl, "after nop"); }
@@ -1497,11 +1523,7 @@ TEST(veh_div0_record_context_ymm) {
     xk_test("div0", 32, 0, V_VEH, NULL, "after #DE");
 }
 TEST(veh_div0_record_context_zmm) {
-    if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
-    /* The OS documents which XSTATE components a CONTEXT can carry through GetEnabledXStateFeatures; a
-     * disagreement with XCR0 is reported by xcr0_probe (api_reports_xcr0_documented_bits). */
-    if (t_env_get()->api_xstate_present && (t_env_get()->api_xstate_features & 0xE0) != 0xE0)
-        SKIP("the OS does not report AVX-512 context state (GetEnabledXStateFeatures=0x%llx)", t_env_get()->api_xstate_features);
+    NEED_ZMM_CTX();
     xk_test("div0", 64, 0, V_VEH, NULL, "after #DE");
 }
 TEST(veh_div64_record_context) {
@@ -1598,6 +1620,8 @@ TEST(veh_av_execute_nx) {
     xf_init(f, 0x3301, 16, 0, 0);
     xk_prepare(k, f, &s->e);
     REQUIREF(g_nx_page, "VirtualAlloc failed");
+    if (t_sde_model())   /* emulator artifact, README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s) reports an NX instruction fetch as a read (ExceptionInformation[0]=0)", t_sde_model());
     s->veh_on = 1;
     int calls = xk_arm_and_run(s, k, f, V_VEH);
     if (calls == 0) {
@@ -1698,7 +1722,7 @@ TEST(veh_ctx_modify_ymm_and_xmm) {
     xk_test("rd", 32, M_MOD_YMM | M_MOD_XMM | M_MOD_GPR, V_VEH, NULL, "after resume with XMM+YMM+GPR edited");
 }
 TEST(veh_ctx_modify_zmm_upper) {
-    if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
+    NEED_ZMM_CTX();
     xk_test("div0", 64, M_MOD_ZMM, V_VEH, NULL, "after resume with ZMM_Hi256 edited");
 }
 TEST(veh_ctx_modify_x87_st0) {
@@ -1741,7 +1765,7 @@ TEST(veh_handler_clobbers_ymm_upper) {
     xk_test("rd", 32, M_CLOBBER | M_MOD_XMM, V_VEH, NULL, "after clobber + XMM edit");
 }
 TEST(veh_handler_clobbers_zmm) {
-    if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
+    NEED_ZMM_CTX();
     xk_test("div0", 64, M_CLOBBER, V_VEH, NULL, "after a handler that clobbered ZMM/k state");
 }
 TEST(veh_handler_live_fp_environment) {
@@ -2382,7 +2406,7 @@ TEST(thr_worker_exceptions_isolated_ymm) {
     worker_case(32, 16, 60);
 }
 TEST(thr_worker_exceptions_isolated_zmm) {
-    if (!cpu_has(F_AVX512F)) SKIP("AVX-512F not usable");
+    NEED_ZMM_CTX();
     worker_case(64, 8, 40);
 }
 static DWORD WINAPI worker_fp(void *p) {
@@ -2474,6 +2498,8 @@ TEST(child_privileged_misc) {
 }
 TEST(child_xsetbv_privileged) {
     if (!cpu_has(F_OSXSAVE)) SKIP("OSXSAVE not set: XSETBV would be #UD, not a privilege fault");
+    if (t_sde_model())   /* emulator artifact, README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s) emulates XSETBV without the CPL0 check: no #GP at CPL3", t_sde_model());
     DWORD c = 0;
     run_child_kind("xsetbv", cpu_has(F_AVX) ? 32 : 16, 0, V_VEH, &c);
     t_info("code", "0x%08lx", (unsigned long)c);
@@ -3239,7 +3265,7 @@ TEST(child_stack_overflow_context) {
      * reserve is not kept back), the exception frame does not fit, and the thread is killed (x64) or the process
      * hangs (WOW64). Not run there: it would only burn the child timeout. */
     if (t_is_wine()) XFAIL("Wine gap: STATUS_STACK_OVERFLOW delivered without the guaranteed stack; handler cannot run");
-    int vk = cpu_has(F_AVX512F) ? 64 : cpu_has(F_AVX) ? 32 : 16;
+    int vk = vk_supported(64) ? 64 : cpu_has(F_AVX) ? 32 : 16;
     char a[16]; snprintf(a, sizeof a, "%d", vk);
     if (!t_child_run("stkovf", a, 20000, &g_cr) || !g_cr.started) { CHECKF(0, "child spawn failed (error %lu)", (unsigned long)g_cr.spawn_error); return; }
     CHECKF(!g_cr.timed_out, "child timed out");
@@ -3279,6 +3305,9 @@ static DWORD WINAPI hwbp_worker(void *p) {
 TEST(veh_hw_breakpoint_dr0_rf) {
     xs_init();
     hwbp h; memset(&h, 0, sizeof h);
+    if (t_sde_model())   /* emulator artifact, README "Emulated validation" */
+        t_expect_fail("Intel SDE (%s): Pin runs the code from its code cache, so a DR0 execute breakpoint never fires",
+                      t_sde_model());
     h.vk = cpu_has(F_AVX) ? 32 : 16;
     HANDLE t = CreateThread(NULL, 256 * 1024, hwbp_worker, &h, CREATE_SUSPENDED, NULL);
     if (!t) SKIP("CreateThread failed");
@@ -3320,7 +3349,7 @@ TEST(stress_random_patterns_main_thread) {
     t_rng r; t_rng_seed(&r, 0xE5C0DEull);
     xf *f = xf_alloc(); REQUIRE(f);
     xh *s = &g_main_xh;
-    int vmax = cpu_has(F_AVX512F) ? 3 : cpu_has(F_AVX) ? 2 : 1;
+    int vmax = vk_supported(64) ? 3 : cpu_has(F_AVX) ? 2 : 1;
     long ex = 0;
     for (int it = 0; it < 300; it++) {
         const xk *k = xk_find(kinds[t_rng_range(&r, T_COUNTOF(kinds))]);
