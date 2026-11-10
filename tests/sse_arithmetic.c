@@ -2069,6 +2069,61 @@ TEST(sse42_pcmpstr_known_answers) {
     CHECKF(g.mask.d[0] == 0x0A && g.mask.d[1] == 0 && g.mask.q[1] == 0, "pcmpistrm bit mask: %s", hx(&g.mask, 4));
 }
 
+/* Explicit-length registers: the legacy forms read EAX/EDX (on x64 the upper halves of RAX/RDX are
+ * ignored), the REX.W forms (PCMPESTRI/PCMPESTRM with W=1) read the signed 64-bit RAX/RDX; either way
+ * the absolute value saturates at 16 (bytes) / 8 (words). SDM PCMPESTRI "64-bit mode" note. */
+#ifdef T_X64
+static T_NOINLINE void pcs_e_l64(const V128 *a, const V128 *b, uint64_t la, uint64_t lb, int w, pcs_t *o) {
+    if (w) __asm__ volatile("pcmpestriq $0x00, %7, %6" : "=c"(o->idx), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf)
+                            : "x"(a->v), "x"(b->v), "a"(la), "d"(lb));
+    else   __asm__ volatile("pcmpestri $0x00, %7, %6" : "=c"(o->idx), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf)
+                            : "x"(a->v), "x"(b->v), "a"(la), "d"(lb));
+}
+static T_NOINLINE void pcs_em_l64(const V128 *a, const V128 *b, uint64_t la, uint64_t lb, pcs_t *o) {
+    __asm__ volatile("pcmpestrmq $0x00, %7, %6\n\tmovdqa %%xmm0, %0" : "=x"(o->mask.v), "=@ccc"(o->cf), "=@ccz"(o->zf), "=@ccs"(o->sf), "=@cco"(o->of), "=@ccp"(o->pf)
+                     : "x"(a->v), "x"(b->v), "a"(la), "d"(lb) : "xmm0");
+}
+static int pcs_len64(int64_t l) { uint64_t m = l < 0 ? (uint64_t)0 - (uint64_t)l : (uint64_t)l; return m > 16 ? 16 : (int)m; }
+#endif
+TEST(sse42_pcmpestr_length_register_width) {
+    NEED(F_SSE42);
+#ifdef T_X64
+    V128 a, b;
+    memset(&a, 'a', 16); memcpy(&a, "cba", 3);
+    memset(&b, 'x', 16); b.b[10] = 'a'; b.b[1] = 'c';
+    static const struct { uint64_t rax, rdx; } t[] = {
+        { 0xFFFFFFFF00000003ull, 0x0000000500000010ull },   /* legacy: 3,16   W: 16 (huge negative), 16 */
+        { 0x0000000100000000ull, 0x0000000000000010ull },   /* legacy: 0      W: 2^32 -> 16 */
+        { 0x0000000000000010ull, 0x0000000100000002ull },   /* legacy: lb 2   W: lb 16 */
+        { 0x00000000FFFFFFFFull, 0x00000000FFFFFFF5ull },   /* legacy: -1 -> 1, -11 -> 11   W: 2^32-1 -> 16 */
+        { 0xFFFFFFFFFFFFFFFEull, 0x8000000000000001ull },   /* W: -2 -> 2, -(2^63-1) -> 16 */
+        { 0x8000000000000000ull, 0x0000000000000003ull },   /* W: INT64_MIN: |x| not representable, still >= 16 */
+    };
+    for (size_t i = 0; i < T_COUNTOF(t); i++)
+        for (int w = 0; w < 2; w++) {
+            if (w == 1 && t[i].rax == 0x8000000000000000ull) continue;   /* saturation of INT64_MIN not pinned by the SDM text */
+            int la = w ? pcs_len64((int64_t)t[i].rax) : pcs_explicit_len((int32_t)(uint32_t)t[i].rax, 0);
+            int lb = w ? pcs_len64((int64_t)t[i].rdx) : pcs_explicit_len((int32_t)(uint32_t)t[i].rdx, 0);
+            pcs_t g, want; memset(&g, 0, sizeof g);
+            pcs_model(&a, &b, la, lb, 0x00, &want);
+            pcs_e_l64(&a, &b, t[i].rax, t[i].rdx, w, &g);
+            CHECKF(g.idx == want.idx && g.cf == want.cf && g.zf == want.zf && g.sf == want.sf && g.of == want.of && !g.pf,
+                   "pcmpestri%s rax=0x%016llx rdx=0x%016llx (lengths %d,%d): idx=%u CF%d ZF%d SF%d OF%d want idx=%u CF%d ZF%d SF%d OF%d",
+                   w ? "q" : "", (unsigned long long)t[i].rax, (unsigned long long)t[i].rdx, la, lb,
+                   g.idx, g.cf, g.zf, g.sf, g.of, want.idx, want.cf, want.zf, want.sf, want.of);
+            if (w) {
+                memset(&g, 0, sizeof g);
+                pcs_em_l64(&a, &b, t[i].rax, t[i].rdx, &g);
+                CHECKF(!memcmp(&g.mask, &want.mask, 16) && g.cf == want.cf && g.zf == want.zf && g.sf == want.sf,
+                       "pcmpestrmq rax=0x%016llx rdx=0x%016llx: mask %s want %s", (unsigned long long)t[i].rax,
+                       (unsigned long long)t[i].rdx, hx(&g.mask, 4), hx(&want.mask, 4));
+            }
+        }
+#else
+    SKIP("REX.W forms and 64-bit length registers exist only in 64-bit mode (x86 build: EAX/EDX are covered by the sweeps)");
+#endif
+}
+
 /* ================================================================ CRC32 (SSE4.2): CRC-32C, reflected poly 0x82F63B78, no pre/post inversion */
 static uint32_t crc32c_sw(uint32_t crc, const void *p, size_t n) {
     const uint8_t *s = (const uint8_t *)p;
