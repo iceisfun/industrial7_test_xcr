@@ -22,6 +22,10 @@
  *     STATUS_FLOAT_MULTIPLE_TRAPS (0xC00002B5, the documented #XM mapping), the CONTEXT carries MXCSR and
  *     execution resumes with a handler-modified MXCSR; page faults inside VGATHER / VMASKMOV are delivered
  *     as STATUS_ACCESS_VIOLATION and the instruction restarts correctly after EXCEPTION_CONTINUE_EXECUTION.
+ *   - Also: unmasked #O/#U/#P/#D (trigger in an upper YMM lane) and FMA #I deliver one STATUS_FLOAT_* exception
+ *     and restart; DAZ applies to compare/min/max/sqrt/convert sources; F16C DAZ/FTZ treatment; VEX memory
+ *     operands need no alignment (unaligned and page-split); VLDMXCSR/VSTMXCSR (+ reserved-bit #GP);
+ *     vpextr/vpinsr/vinsertps immediates; VEX scalar merge forms.
  * Result policy: feature absent -> SKIP; advertised but wrong -> FAIL. Deliberate faults run in CHILD()
  * processes. Every instruction under test executes inside one asm block (avx_arithmetic_core.h). */
 #include "avx_arithmetic_core.h"
@@ -1591,11 +1595,12 @@ TEST(avx2_gather_nondistinct_registers_ud) {
  * and a handler that masks the exception in CONTEXT and continues re-executes the instruction. */
 static ULONG_PTR g_veh_info[3];
 static DWORD g_veh_nparams;
+static int is_float_status(DWORD code) {
+    return (code >= 0xC000008Du && code <= 0xC0000093u) || code == STATUS_FLOAT_MULTIPLE_FAULTS || code == STATUS_FLOAT_MULTIPLE_TRAPS;
+}
 static LONG CALLBACK veh_simd_fp(EXCEPTION_POINTERS *ep) {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
-    if (code != STATUS_FLOAT_MULTIPLE_TRAPS && code != STATUS_FLOAT_INVALID_OPERATION && code != STATUS_FLOAT_MULTIPLE_FAULTS &&
-        code != STATUS_FLOAT_DIVIDE_BY_ZERO)
-        return EXCEPTION_CONTINUE_SEARCH;
+    if (!is_float_status(code)) return EXCEPTION_CONTINUE_SEARCH;
     if (InterlockedIncrement(&g_veh_count) > 3) return EXCEPTION_CONTINUE_SEARCH;
     g_veh_code = code;
     g_veh_nparams = ep->ExceptionRecord->NumberParameters;
@@ -1607,20 +1612,46 @@ static LONG CALLBACK veh_simd_fp(EXCEPTION_POINTERS *ep) {
     ctx_set_mxcsr(ep->ContextRecord, (mx | 0x1F80u) & ~MX_FLAGS);      /* mask everything, clear flags, retry */
     return EXCEPTION_CONTINUE_EXECUTION;
 }
+/* One unmasked SIMD FP exception per kind. Lanes not named below compute 1 op 2 (exact, no flags).
+ *   inv: vaddps, lane 3 = SNaN + 2            -> #I   (masked retry: QNaN 0x7fe00001)
+ *   div: vdivps, lane 3 = 1 / 0               -> #Z   (+inf)
+ *   ovf: vmulps, lane 6 = FLT_MAX * 2         -> #O   (+inf, SDM 11.5.2.3: unmasked -> no result stored)
+ *   unf: vmulps, lane 6 = 0x00800001 * 0.5    -> #U   (0x00400000, tie to even)
+ *   pe:  vdivps, lane 6 = 1 / 3               -> #P   (0x3eaaaaab)
+ *   den: vaddps, lane 6 = 2^-149 + 2          -> #D   (2.0)
+ *   fma: vfmadd231ps, lane 5 = inf * 0 + 1    -> #I   (default NaN); other lanes 1*2+1 = 3
+ * SSE/AVX exceptions are precise: with any unmasked exception pending the destination is not written
+ * (SDM vol.1 11.5.1 / 11.8), so the CONTEXT shows the old destination and a handler that masks the
+ * exception in CONTEXT.MxCsr and continues re-executes the instruction to completion. */
+static void f_fmadd231ps_y_avx(vctx *c_);   /* defined with the FMA cases below */
+typedef struct simd_exc_kind { const char *name; vop_fn f; int lane; uint32_t a, b, z, mask, flag, want_lane, want_other; int fma; } simd_exc_kind;
+static const simd_exc_kind simd_exc_kinds[] = {
+    { "inv", vaddps_y_avx,       3, 0x7fa00001u, 0x40000000u, 0,           0x080u, MX_IE, 0x7fe00001u, 0x40400000u, 0 },
+    { "div", vdivps_y_avx,       3, 0x3f800000u, 0x00000000u, 0,           0x200u, MX_ZE, 0x7f800000u, 0x3f000000u, 0 },
+    { "ovf", vmulps_y_avx,       6, 0x7f7fffffu, 0x40000000u, 0,           0x400u, MX_OE, 0x7f800000u, 0x40000000u, 0 },
+    { "unf", vmulps_y_avx,       6, 0x00800001u, 0x3f000000u, 0,           0x800u, MX_UE, 0x00400000u, 0x40000000u, 0 },
+    { "pe",  vdivps_y_avx,       6, 0x3f800000u, 0x40400000u, 0,           0x1000u, MX_PE, 0x3eaaaaabu, 0x3f000000u, 0 },
+    { "den", vaddps_y_avx,       6, 0x00000001u, 0x40000000u, 0,           0x100u, MX_DE, 0x40000000u, 0x40400000u, 0 },
+    { "fma", f_fmadd231ps_y_avx, 5, 0x7f800000u, 0x00000000u, 0x3f800000u, 0x080u, MX_IE, 0xffc00000u, 0x40400000u, 1 },
+};
+static const simd_exc_kind *simd_exc_find(const char *n) {
+    for (size_t i = 0; i < T_COUNTOF(simd_exc_kinds); i++) if (!strcmp(simd_exc_kinds[i].name, n)) return &simd_exc_kinds[i];
+    return NULL;
+}
 CHILD(avx_simd_fp_unmasked) {
-    int div = argc > 1 && !strcmp(argv[1], "div");
+    const simd_exc_kind *k = simd_exc_find(argc > 1 ? argv[1] : "");
+    if (!k) return 5;
     PVOID h = AddVectoredExceptionHandler(1, veh_simd_fp);
     if (!h) return 6;
     vctx c; vctx_pattern(&c, 0xFE);
-    for (int i = 0; i < 8; i++) { c.r[1].d[i] = 0x3f800000u; c.r[2].d[i] = 0x40000000u; }
-    if (div) { c.r[2].d[3] = 0; c.mx_in = MX_DEFAULT & ~0x200u; }          /* 1/0 with ZM clear -> #Z */
-    else { c.r[1].d[3] = 0x7fa00001u; c.mx_in = MX_DEFAULT & ~0x80u; }      /* SNaN with IM clear -> #I */
+    for (int i = 0; i < 8; i++) { c.r[1].d[i] = 0x3f800000u; c.r[2].d[i] = 0x40000000u; if (k->fma) c.r[0].d[i] = 0x3f800000u; }
+    c.r[1].d[k->lane] = k->a; c.r[2].d[k->lane] = k->b; if (k->fma) c.r[0].d[k->lane] = k->z;
+    c.mx_in = MX_DEFAULT & ~k->mask;
     vctx in = c;
-    (div ? vdivps_y_avx : vaddps_y_avx)(&c);
+    k->f(&c);
     RemoveVectoredExceptionHandler(h);
     int ok = 1;
-    for (int i = 0; i < 8; i++)
-        ok &= c.r[0].d[i] == (div ? (i == 3 ? 0x7f800000u : 0x3f000000u) : (i == 3 ? 0x7fe00001u : 0x40400000u));
+    for (int i = 0; i < 8; i++) ok &= c.r[0].d[i] == (i == k->lane ? k->want_lane : k->want_other);
     printf("FAULTS=%ld\nCODE=0x%08lx\nNPARAMS=%lu\nINFO0=0x%llx\nINFO1=0x%llx\nCTX_OK=%d\nCTX_MXCSR=0x%08x\nMX_OUT=0x%08x\nDATA_OK=%d\n",
            (long)g_veh_count, (unsigned long)g_veh_code, (unsigned long)g_veh_nparams, (unsigned long long)g_veh_info[0],
            (unsigned long long)g_veh_info[1], g_veh_ctx_ok, g_veh_mxcsr, c.mx_out, ok);
@@ -1629,18 +1660,25 @@ CHILD(avx_simd_fp_unmasked) {
 }
 static void simd_exc_case(const char *kind) {
     static t_child_result r; char v[64] = "";
-    int div = !strcmp(kind, "div");
+    const simd_exc_kind *k = simd_exc_find(kind);
+    REQUIRE(k != NULL);
     REQUIRE(t_child_run("avx_simd_fp_unmasked", kind, 10000, &r));
-    REQUIREF(!r.timed_out && r.exit_code == 0, "%s: child exit 0x%lx exc 0x%lx", kind, (unsigned long)r.exit_code, (unsigned long)r.exc_code);
+    REQUIREF(!r.timed_out && r.exit_code == 0, "%s: child exit 0x%lx exc 0x%lx (unhandled: the exception was not a STATUS_FLOAT_* code or the CONTEXT lacked MXCSR)",
+             kind, (unsigned long)r.exit_code, (unsigned long)r.exc_code);
     CHECKF(t_child_find(&r, "FAULTS=", v, sizeof v) && !strcmp(v, "1"), "%s: exactly one #XM expected, got %s", kind, v);
     t_child_find(&r, "CODE=", v, sizeof v);
-    t_info(div ? "simd_exception_code_div" : "simd_exception_code_inv", "%s", v);
+    char key[48]; snprintf(key, sizeof key, "simd_exception_code_%s", kind);
+    t_info(key, "%s", v);
+    /* Pinned codes (Wine dlls/ntdll/tests/exception.c test_simd_exceptions, written against Windows): x64 #Z and
+     * #I -> the specific EXCEPTION_FLT_* code; x86 (native and WOW64) -> STATUS_FLOAT_MULTIPLE_TRAPS. Other kinds:
+     * only the STATUS_FLOAT_* family is required (veh_simd_fp handles nothing else). */
+    const char *want = NULL;
 #ifdef T_X64
-    const char *want = div ? "0xc000008e" : "0xc0000090";
+    if (k->flag == MX_ZE) want = "0xc000008e"; else if (k->flag == MX_IE) want = "0xc0000090";
 #else
-    const char *want = "0xc00002b5";
+    if (k->flag == MX_ZE || k->flag == MX_IE) want = "0xc00002b5";
 #endif
-    CHECKF(!strcmp(v, want), "%s: exception code %s, want %s", kind, v, want);
+    if (want) CHECKF(!strcmp(v, want), "%s: exception code %s, want %s", kind, v, want);
     char mxs[32] = "";
     t_child_find(&r, "CTX_MXCSR=", mxs, sizeof mxs);
 #ifdef T_X64
@@ -1650,7 +1688,7 @@ static void simd_exc_case(const char *kind) {
            "%s: ExceptionInformation[1] %s, want CONTEXT.MxCsr %s", kind, v, mxs);
 #endif
     CHECKF(t_child_find(&r, "CTX_OK=", v, sizeof v) && !strcmp(v, "1"), "%s: CONTEXT did not carry MXCSR/XMM state", kind);
-    unsigned mx = (unsigned)strtoul(mxs, NULL, 16), fl = div ? MX_ZE : MX_IE, msk = div ? 0x200u : 0x80u;
+    unsigned mx = (unsigned)strtoul(mxs, NULL, 16), fl = k->flag, msk = k->mask;
     CHECKF((mx & fl) && !(mx & msk), "%s: CONTEXT MXCSR 0x%x: want the flag set and its mask clear (state at the faulting instruction)", kind, mx);
     CHECKF(t_child_find(&r, "DEST_UNCHANGED_AT_FAULT=", v, sizeof v) && !strcmp(v, "1"), "%s: destination modified by a faulting instruction", kind);
     CHECKF(t_child_find(&r, "DATA_OK=", v, sizeof v) && !strcmp(v, "1"), "%s: result after the handler masked the exception is wrong", kind);
@@ -1661,6 +1699,11 @@ static void simd_exc_case(const char *kind) {
 }
 TEST(avx_unmasked_simd_exception_invalid) { NEED(AVX); simd_exc_case("inv"); }
 TEST(avx_unmasked_simd_exception_divzero) { NEED(AVX); simd_exc_case("div"); }
+TEST(avx_unmasked_simd_exception_overflow_upper_lane) { NEED(AVX); simd_exc_case("ovf"); }
+TEST(avx_unmasked_simd_exception_underflow_upper_lane) { NEED(AVX); simd_exc_case("unf"); }
+TEST(avx_unmasked_simd_exception_precision_upper_lane) { NEED(AVX); simd_exc_case("pe"); }
+TEST(avx_unmasked_simd_exception_denormal_upper_lane) { NEED(AVX); simd_exc_case("den"); }
+TEST(fma_unmasked_simd_exception_invalid) { NEED(FMA); simd_exc_case("fma"); }
 
 /* =========================================================================== AVX2 integer arithmetic */
 typedef void (*model2)(v256 *d, const v256 *a, const v256 *b);
@@ -2348,6 +2391,364 @@ TEST(adx_adcx_adox_flags_and_chains) {
         }
         ok &= (unsigned)c1 == cf && (unsigned)c2 == of;
         a.n++; if (!ok) agg_fail(&a, "multi-precision chain %d mismatch", it);
+    }
+    AGG_END(&a);
+}
+
+/* =========================================================================== DAZ beyond arithmetic
+ * SDM vol.1 10.2.3.4: with MXCSR.DAZ=1 every denormal SOURCE operand of an SSE/AVX FP instruction is converted
+ * to a zero of the same sign before the operation and #D is not reported. That includes compares, (U)COMIS,
+ * MIN/MAX (which then see two zeros and return src2 - the converted value), SQRT (sqrt(-denormal) = -0, no #I)
+ * and conversions. Hand-worked vectors; the DAZ=0 rows double as a control (DE must be set). */
+TEST(avx_daz_compare_minmax_sqrt_convert) {
+    NEED(AVX);
+    static const uint32_t A[8] = { 0x00000001, 0x80000001, 0x00400000, 0x3f800000, 0x00000000, 0x80000001, 0x00000001, 0x00000000 };
+    static const uint32_t B[8] = { 0x00000000, 0x00000000, 0x00400000, 0x00000001, 0x3f800000, 0x3f800000, 0x80000001, 0x00000001 };
+    static const uint32_t EQ[2][8] = { { 0, 0, ~0u, 0, 0, 0, 0, 0 }, { ~0u, ~0u, ~0u, 0, 0, 0, ~0u, ~0u } };
+    static const uint32_t MN[2][8] = { { 0x00000000, 0x80000001, 0x00400000, 0x00000001, 0x00000000, 0x80000001, 0x80000001, 0x00000000 },
+                                       { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x80000000, 0x80000000, 0x00000000 } };
+    static const uint32_t MXv[2][8] = { { 0x00000001, 0x00000000, 0x00400000, 0x3f800000, 0x3f800000, 0x3f800000, 0x00000001, 0x00000001 },
+                                        { 0x00000000, 0x00000000, 0x00000000, 0x3f800000, 0x3f800000, 0x3f800000, 0x80000000, 0x00000000 } };
+    agg_t a; agg_init(&a, "DAZ applied to vcmpps/vminps/vmaxps/vsqrtps/vcvtps2pd/vucomiss sources");
+    for (int daz = 0; daz < 2; daz++) {
+        uint32_t mx = MX_DEFAULT | (daz ? MX_DAZ : 0), wde = daz ? 0 : MX_DE;
+        char ctx[64]; v256 w;
+        vctx c; vctx_pattern(&c, 0xDA2u + (uint32_t)daz); c.mx_in = mx;
+        memcpy(c.r[1].d, A, 32); memcpy(c.r[2].d, B, 32);
+        vctx o = c; vexec(&a, vcmpps_tab[0], &o, KEEP12);
+        memcpy(w.d, EQ[daz], 32); snprintf(ctx, sizeof ctx, "vcmpeqps DAZ=%d", daz); agg_mem(&a, &o.r[0], &w, 32, 4, ctx);
+        agg_eq(&a, o.mx_out & MX_FLAGS, wde, ctx);
+        o = c; vexec(&a, vminps_y_avx, &o, KEEP12);
+        memcpy(w.d, MN[daz], 32); snprintf(ctx, sizeof ctx, "vminps DAZ=%d", daz); agg_mem(&a, &o.r[0], &w, 32, 4, ctx);
+        agg_eq(&a, o.mx_out & MX_FLAGS, wde, ctx);
+        o = c; vexec(&a, vmaxps_y_avx, &o, KEEP12);
+        memcpy(w.d, MXv[daz], 32); snprintf(ctx, sizeof ctx, "vmaxps DAZ=%d", daz); agg_mem(&a, &o.r[0], &w, 32, 4, ctx);
+        agg_eq(&a, o.mx_out & MX_FLAGS, wde, ctx);
+        /* sqrt: -denormal -> -0 (DAZ) or default NaN + #I (no DAZ); +denormal -> +0 or an exact-ish normal */
+        o = c; for (int i = 0; i < 8; i++) o.r[1].d[i] = (i & 1) ? 0x80000001u : 0x3f800000u;
+        vexec(&a, vsqrtps_y_avx, &o, KEEP12);
+        for (int i = 0; i < 8; i++) w.d[i] = (i & 1) ? (daz ? 0x80000000u : 0xffc00000u) : 0x3f800000u;
+        snprintf(ctx, sizeof ctx, "vsqrtps(-denormal) DAZ=%d", daz); agg_mem(&a, &o.r[0], &w, 32, 4, ctx);
+        /* without DAZ: #I (DE alongside is not pinned: the invalid operand is reported, hardware may stop there) */
+        agg_eq(&a, o.mx_out & (MX_FLAGS & ~MX_DE), daz ? 0 : MX_IE, ctx);
+        if (daz) agg_eq(&a, o.mx_out & MX_DE, 0, "vsqrtps DAZ: no #D");
+        /* vcvtps2pd: denormal -> signed zero under DAZ, exact widening otherwise */
+        o = c; vexec(&a, vcvtps2pd_avx, &o, KEEP12);
+        for (int i = 0; i < 4; i++) w.q[i] = (daz && f_isdenorm(FMT32, A[i])) ? ((uint64_t)(A[i] >> 31) << 63) : f_convert(FMT32, FMT64, A[i], RN, NULL);
+        snprintf(ctx, sizeof ctx, "vcvtps2pd DAZ=%d", daz); agg_mem(&a, &o.r[0], &w, 32, 8, ctx);
+        agg_eq(&a, o.mx_out & MX_FLAGS, wde, ctx);
+        /* vucomiss(denormal, +0): GT without DAZ, EQ with DAZ */
+        o = c; o.r[1].d[0] = 0x00000001u; o.r[2].d[0] = 0;
+        vexec(&a, vucomiss_avx, &o, KEEP12);
+        snprintf(ctx, sizeof ctx, "vucomiss(2^-149, 0) DAZ=%d", daz);
+        agg_eq(&a, o.fl_out & (EF_ZF | EF_PF | EF_CF), daz ? EF_ZF : 0, ctx);
+        agg_eq(&a, o.mx_out & MX_FLAGS, wde, ctx);
+    }
+    AGG_END(&a);
+}
+
+/* =========================================================================== F16C denormal controls
+ * SDM vol.1 14.4.1 (half-precision conversions): VCVTPS2PH honours MXCSR.DAZ for its single-precision source
+ * and ignores MXCSR.FTZ (half denormal results are delivered); VCVTPH2PS is exact - half denormals become
+ * normal singles regardless of DAZ. */
+TEST(f16c_denormal_daz_ftz_treatment) {
+    NEED(F16C);
+    agg_t a; agg_init(&a, "vcvtps2ph DAZ honoured / FTZ ignored; vcvtph2ps ignores DAZ");
+    static const uint32_t din[8] = { 0x00000001, 0x80000001, 0x00400000, 0x807fffff, 0x3f800000, 0x00000000, 0x80000000, 0x00000001 };
+    for (int daz = 0; daz < 2; daz++) {
+        vctx c; vctx_pattern(&c, 0xF0u + (uint32_t)daz); c.mx_in = MX_DEFAULT | (daz ? MX_DAZ : 0);
+        memcpy(c.r[1].d, din, 32);
+        vctx o = c; vexec(&a, vcvtps2ph_tab[2], &o, KEEP12);      /* imm 2: round up */
+        v256 w = V_ZERO; unsigned fl = 0;
+        for (int i = 0; i < 8; i++) {
+            uint32_t x = din[i];
+            if (f_isdenorm(FMT32, x)) { if (daz) x &= 0x80000000u; else fl |= MX_DE; }
+            w.w[i] = f32_to_half(x, RU, &fl);
+        }
+        char ctx[48]; snprintf(ctx, sizeof ctx, "vcvtps2ph RU single denormals DAZ=%d", daz);
+        agg_mem(&a, &o.r[0], &w, 32, 2, ctx);
+        agg_eq(&a, o.r[0].w[0], daz ? 0x0000 : 0x0001, "vcvtps2ph RU(2^-149): 0x0001, or 0 when DAZ flushes the source");
+        agg_eq(&a, o.mx_out & (MX_IE | MX_DE | MX_OE | MX_UE | MX_PE), fl, ctx);
+    }
+    for (int ftz = 0; ftz < 2; ftz++) {
+        static const uint32_t fin[8] = { 0x33800000, 0x38000000, 0x387fc000, 0x34000001, 0x80000000, 0xb8000000, 0x3f800000, 0x38800000 };
+        static const uint16_t fw[8] = { 0x0001, 0x0200, 0x03ff, 0x0002, 0x8000, 0x8200, 0x3c00, 0x0400 };
+        vctx c; vctx_pattern(&c, 0xF2u + (uint32_t)ftz); c.mx_in = MX_DEFAULT | (ftz ? MX_FTZ : 0);
+        memcpy(c.r[1].d, fin, 32);
+        vctx o = c; vexec(&a, vcvtps2ph_tab[0], &o, KEEP12);
+        v256 w = V_ZERO; memcpy(w.w, fw, 16);
+        char ctx[48]; snprintf(ctx, sizeof ctx, "vcvtps2ph RN half-denormal results FTZ=%d", ftz);
+        agg_mem(&a, &o.r[0], &w, 32, 2, ctx);
+        agg_eq(&a, o.mx_out & MX_FLAGS, MX_UE | MX_PE, ctx);       /* only lane 3 is inexact (and tiny) */
+    }
+    static const uint16_t hin[8] = { 0x0001, 0x8200, 0x03ff, 0x0400, 0x83ff, 0x0000, 0x7c00, 0x3c00 };
+    for (int daz = 0; daz < 2; daz++) {
+        vctx c; vctx_pattern(&c, 0xF4u + (uint32_t)daz); c.mx_in = MX_DEFAULT | (daz ? MX_DAZ : 0);
+        memcpy(c.r[1].w, hin, 16);
+        vctx o = c; vexec(&a, h_ph2ps_avx, &o, KEEP12);
+        v256 w; for (int i = 0; i < 8; i++) w.d[i] = half_to_f32(hin[i]);
+        char ctx[48]; snprintf(ctx, sizeof ctx, "vcvtph2ps half denormals DAZ=%d", daz);
+        agg_mem(&a, &o.r[0], &w, 32, 4, ctx);
+        if (o.mx_out & MX_FLAGS) t_note("vcvtph2ps of half denormals set MXCSR flags 0x%02x (DAZ=%d)", o.mx_out & MX_FLAGS, daz);
+    }
+    AGG_END(&a);
+}
+
+/* =========================================================================== VEX memory operands: no alignment
+ * SDM vol.1 14.9: VEX-encoded instructions with a memory operand (other than explicitly aligned moves such as
+ * VMOVAPS/VMOVDQA/VMOVNT*) do not require alignment; legacy SSE arithmetic requires 16-byte alignment.
+ * Runs in a child: a fault here would otherwise take down the whole exe. Operands are placed at +1, +3 and
+ * straddling a page boundary (both pages committed); results must equal the register forms. */
+VOP(um_vaddps_avx, "vaddps (" RC "), %%ymm1, %%ymm0")            VOP(um_vmulpd_avx, "vmulpd (" RC "), %%ymm1, %%ymm0")
+VOP(um_vpermilps_avx, "vpermilps (" RC "), %%ymm1, %%ymm0")      VOP(um_vcmpltps_avx, "vcmpps $1, (" RC "), %%ymm1, %%ymm0")
+VOP(um_vptest_avx, "vptest (" RC "), %%ymm1")                    VOP(um_vbcstss_avx, "vbroadcastss (" RC "), %%ymm0")
+VOP(um_vandnpd_avx, "vandnpd (" RC "), %%ymm1, %%ymm0")          VOP(um_vdivss_avx, "vdivss (" RC "), %%xmm1, %%xmm0")
+VOP(um_fmadd231ps_fma, "vfmadd231ps (" RC "), %%ymm1, %%ymm0")   VOP(um_fmadd132pd_fma, "vfmadd132pd (" RC "), %%ymm1, %%ymm0")
+VOP(um_fnmsub213ss_fma, "vfnmsub213ss (" RC "), %%xmm1, %%xmm0")
+VOP(um_vpaddd_avx, "vpaddd (" RC "), %%ymm1, %%ymm0")            VOP(um_vpshufb_avx, "vpshufb (" RC "), %%ymm1, %%ymm0")
+VOP(um_vpmaddwd_avx, "vpmaddwd (" RC "), %%ymm1, %%ymm0")        VOP(um_vpermd_avx, "vpermd (" RC "), %%ymm1, %%ymm0")
+VOP(um_vph2ps_avx, "vcvtph2ps (" RC "), %%ymm0")
+VOP(um_vdivss_ref_avx, "vdivss %%xmm2, %%xmm1, %%xmm0")
+typedef struct umop { const char *n; vop_fn mem, reg; int bytes, src_reg, need; } umop;   /* need: 0 AVX, 1 FMA, 2 AVX2, 3 F16C */
+static const umop um_ops[] = {
+    { "vaddps m256", um_vaddps_avx, vaddps_y_avx, 32, 2, 0 }, { "vmulpd m256", um_vmulpd_avx, vmulpd_y_avx, 32, 2, 0 },
+    { "vpermilps m256 control", um_vpermilps_avx, vpermilps_v_avx, 32, 2, 0 }, { "vcmpltps m256", um_vcmpltps_avx, vcmpps_0_1_avx, 32, 2, 0 },
+    { "vptest m256", um_vptest_avx, vptest_avx, 32, 2, 0 }, { "vandnpd m256", um_vandnpd_avx, vandnpd_avx, 32, 2, 0 },
+    { "vdivss m32", um_vdivss_avx, um_vdivss_ref_avx, 4, 2, 0 },
+    { "vfmadd231ps m256", um_fmadd231ps_fma, f_fmadd231ps_y_avx, 32, 2, 1 }, { "vfmadd132pd m256", um_fmadd132pd_fma, f_fmadd132pd_y_avx, 32, 2, 1 },
+    { "vfnmsub213ss m32", um_fnmsub213ss_fma, f_fnmsub213ss_avx, 4, 2, 1 },
+    { "vpaddd m256", um_vpaddd_avx, i_paddd_avx, 32, 2, 2 }, { "vpshufb m256", um_vpshufb_avx, vpshufb_y_avx, 32, 2, 2 },
+    { "vpmaddwd m256", um_vpmaddwd_avx, i_pmaddwd_avx, 32, 2, 2 }, { "vpermd m256", um_vpermd_avx, vpermd_avx, 32, 2, 2 },
+    { "vcvtph2ps m128", um_vph2ps_avx, h_ph2ps_avx, 16, 1, 3 },
+};
+static int um_usable(int need) {
+    return need == 0 ? cpu_has(F_AVX) : need == 1 ? cpu_has(F_FMA) : need == 2 ? cpu_has(F_AVX2) : cpu_has(F_F16C);
+}
+CHILD(avx_vex_unaligned_mem) {
+    size_t pg = page_size();
+    uint8_t *b = (uint8_t *)VirtualAlloc(NULL, 2 * pg, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if (!b) { printf("NOALLOC=1\n"); return 4; }
+    t_rng r; t_rng_seed(&r, 0x0A1);
+    static const char *const where[3] = { "+1", "+3", "page-split" };
+    int bad = 0, n = 0;
+    for (size_t k = 0; k < T_COUNTOF(um_ops); k++) {
+        if (!um_usable(um_ops[k].need)) continue;
+        for (int wi = 0; wi < 3; wi++) {
+            size_t off = wi == 0 ? 64 + 1 : wi == 1 ? 128 + 3 : pg - 13;
+            for (int it = 0; it < 8; it++) {
+                vctx c; vctx_pattern(&c, (uint32_t)(k * 31 + (size_t)it));
+                gen_f32v(&r, &c.r[0], 1); gen_f32v(&r, &c.r[1], 1);
+                v256 m; gen_f32v(&r, &m, 1);
+                if (um_ops[k].need == 2) { gen_int(&r, &c.r[1], 4); gen_int(&r, &m, 4); }
+                memcpy(b + off, &m, (size_t)um_ops[k].bytes);
+                c.mem = (uintptr_t)(b + off);
+                vctx om = c, orf = c;
+                memset(&orf.r[um_ops[k].src_reg], 0, 32); memcpy(&orf.r[um_ops[k].src_reg], &m, (size_t)um_ops[k].bytes);
+                um_ops[k].mem(&om);
+                um_ops[k].reg(&orf);
+                n++;
+                if (memcmp(&om.r[0], &orf.r[0], 32) || om.fl_out != orf.fl_out || om.mx_out != orf.mx_out) {
+                    bad++;
+                    printf("BAD=%s at %s (iteration %d)\n", um_ops[k].n, where[wi], it);
+                }
+            }
+        }
+    }
+    VirtualFree(b, 0, MEM_RELEASE);
+    printf("COMPARED=%d\nMISMATCHES=%d\n", n, bad);
+    return 0;
+}
+TEST(avx_vex_memory_operands_unaligned_and_page_split) {
+    NEED(AVX);
+    static t_child_result r; char v[96] = "";
+    REQUIRE(t_child_run("avx_vex_unaligned_mem", NULL, 10000, &r));
+    CHECKF(!r.timed_out && r.exc_code == 0 && r.exit_code == 0,
+           "VEX op with an unaligned / page-split memory operand faulted: exit 0x%lx exc 0x%lx timed_out %d",
+           (unsigned long)r.exit_code, (unsigned long)r.exc_code, r.timed_out);
+    if (t_child_find(&r, "BAD=", v, sizeof v)) CHECKF(0, "memory form differs from the register form: %s", v);
+    CHECKF(t_child_find(&r, "MISMATCHES=", v, sizeof v) && !strcmp(v, "0"), "mismatches: %s", v);
+    if (t_child_find(&r, "COMPARED=", v, sizeof v)) t_info("vex_unaligned_compared", "%s", v);
+}
+
+/* =========================================================================== VLDMXCSR / VSTMXCSR */
+static T_NOINLINE void vmx_roundtrip_avx(const uint32_t *in, uint32_t *legacy, uint32_t *vex) {
+    uint32_t save;
+    __asm__ volatile("stmxcsr %0\n\tvldmxcsr %1\n\tstmxcsr %2\n\tvstmxcsr %3\n\tldmxcsr %0"
+                     : "=m"(save) : "m"(*in), "m"(*legacy), "m"(*vex) : "memory");
+}
+/* vldmxcsr <rc>, then vaddps 1 + 2^-24 in all lanes: RU must round up */
+static T_NOINLINE void vmx_rc_add_avx(const uint32_t *mx, v256 *out) {
+    static const uint32_t one = 0x3f800000u, tiny = 0x33800000u;
+    uint32_t save;
+    __asm__ volatile("stmxcsr %0\n\tvldmxcsr %1\n\tvbroadcastss %2, %%ymm1\n\tvbroadcastss %3, %%ymm2\n\t"
+                     "vaddps %%ymm2, %%ymm1, %%ymm0\n\tvmovdqu %%ymm0, %4\n\tldmxcsr %0\n\tvzeroupper"
+                     : "=m"(save) : "m"(*mx), "m"(one), "m"(tiny), "m"(*out) : "xmm0", "xmm1", "xmm2", "memory");
+}
+CHILD(avx_vldmxcsr_reserved) {
+    static const uint32_t bad = 0x00011F80u;    /* bit 16: reserved on every processor (MXCSR_MASK bits 16-31 are 0) */
+    uint32_t l = 0, v = 0;
+    printf("STEP=vldmxcsr\n"); fflush(stdout);
+    vmx_roundtrip_avx(&bad, &l, &v);
+    printf("NO_FAULT=1 READ=0x%08x\n", l);
+    return 0;
+}
+TEST(avx_vldmxcsr_vstmxcsr) {
+    NEED(AVX);
+    agg_t a; agg_init(&a, "VLDMXCSR/VSTMXCSR equal LDMXCSR/STMXCSR; RC honoured");
+    for (unsigned rc = 0; rc < 4; rc++)
+        for (unsigned ctl = 0; ctl < 8; ctl++) {
+            /* ctl: bit0 DAZ, bit1 FTZ, bit2 all masks clear (no flags set, so nothing is raised) */
+            uint32_t in = ((ctl & 4) ? 0 : 0x1F80u) | (rc << 13) | ((ctl & 1) ? MX_DAZ : 0) | ((ctl & 2) ? MX_FTZ : 0);
+            if (!(ctl & 4)) in |= (rc * 7 + ctl) & MX_FLAGS;       /* sticky flags only with everything masked */
+            uint32_t l = 0, v = 0;
+            vmx_roundtrip_avx(&in, &l, &v);
+            char ctx[48]; snprintf(ctx, sizeof ctx, "load 0x%08x", in);
+            agg_eq(&a, l, in, ctx); agg_eq(&a, v, l, "vstmxcsr == stmxcsr");
+        }
+    static const uint32_t want[4] = { 0x3f800000u, 0x3f800000u, 0x3f800001u, 0x3f800000u };
+    for (int rc = 0; rc < 4; rc++) {
+        uint32_t mx = MX_RC(rc); v256 o;
+        vmx_rc_add_avx(&mx, &o);
+        char ctx[48]; snprintf(ctx, sizeof ctx, "vaddps 1+2^-24 after vldmxcsr %s", rc_name[rc]);
+        for (int i = 0; i < 8; i++) if (!agg_eq(&a, o.d[i], want[rc], ctx)) break;
+    }
+    AGG_END(&a);
+    static t_child_result r;
+    REQUIRE(t_child_run("avx_vldmxcsr_reserved", NULL, 10000, &r));
+    CHECKF(!r.timed_out && (r.exc_code == 0xC0000005u || r.exc_code == 0xC0000096u),
+           "VLDMXCSR with reserved bit 16 set: exception 0x%08lx exit 0x%lx (want #GP as ACCESS_VIOLATION or PRIVILEGED_INSTRUCTION)",
+           (unsigned long)r.exc_code, (unsigned long)r.exit_code);
+}
+
+/* =========================================================================== VEX.128 element insert / extract */
+#define vpextrb_INSN "vpextrb %1, %%xmm1, %%edx"
+#define vpextrw_INSN "vpextrw %1, %%xmm1, %%edx"
+#define vpextrd_INSN "vpextrd %1, %%xmm1, %%edx"
+#define vextractps_INSN "vextractps %1, %%xmm1, %%edx"
+#define vpinsrb_INSN "vpinsrb %1, %%edx, %%xmm1, %%xmm0"
+#define vpinsrw_INSN "vpinsrw %1, %%edx, %%xmm1, %%xmm0"
+#define vpinsrd_INSN "vpinsrd %1, %%edx, %%xmm1, %%xmm0"
+#define vpextrbm_INSN "vpextrb %1, %%xmm1, (" RC ")"
+#define vpinsrwm_INSN "vpinsrw %1, (" RC "), %%xmm1, %%xmm0"
+#define vinsertps_INSN "vinsertps %1, %%xmm2, %%xmm1, %%xmm0"
+#define vinsertpsm_INSN "vinsertps %1, (" RC "), %%xmm1, %%xmm0"
+DEF_IMM32(vpextrb) DEF_IMM32(vpextrw) DEF_IMM32(vpextrd) DEF_IMM32(vextractps) DEF_IMM32(vpinsrb) DEF_IMM32(vpinsrw)
+DEF_IMM32(vpinsrd) DEF_IMM32(vpextrbm) DEF_IMM32(vpinsrwm) DEF_IMM256(vinsertps) DEF_IMM256(vinsertpsm)
+TEST(avx_pextr_pinsr_insertps_all_imm) {
+    NEED(AVX);
+    t_rng r; t_rng_seed(&r, 0x1E5);
+    static uint8_t mem[16];
+    agg_t a; agg_init(&a, "vpextrb/w/d, vextractps, vpinsrb/w/d, vinsertps (imm, ignored imm bits, upper zero)");
+    for (int imm = 0; imm < 32; imm++) {
+        vctx c; vctx_pattern(&c, (uint32_t)imm); t_rng_fill(&r, &c.r[1], 32); c.g_in = t_rng_u32(&r);
+        char ctx[48]; vctx o; v256 w;
+        snprintf(ctx, sizeof ctx, "vpextrb imm=%d", imm);    o = c; vexec(&a, vpextrb_tab[imm], &o, KEEP12);    agg_eq(&a, o.g_out, c.r[1].b[imm & 15], ctx);
+        snprintf(ctx, sizeof ctx, "vpextrw imm=%d", imm);    o = c; vexec(&a, vpextrw_tab[imm], &o, KEEP12);    agg_eq(&a, o.g_out, c.r[1].w[imm & 7], ctx);
+        snprintf(ctx, sizeof ctx, "vpextrd imm=%d", imm);    o = c; vexec(&a, vpextrd_tab[imm], &o, KEEP12);    agg_eq(&a, o.g_out, c.r[1].d[imm & 3], ctx);
+        snprintf(ctx, sizeof ctx, "vextractps imm=%d", imm); o = c; vexec(&a, vextractps_tab[imm], &o, KEEP12); agg_eq(&a, o.g_out, c.r[1].d[imm & 3], ctx);
+        w = V_ZERO; memcpy(&w, &c.r[1], 16); w.b[imm & 15] = (uint8_t)c.g_in;
+        snprintf(ctx, sizeof ctx, "vpinsrb imm=%d", imm); o = c; vexec(&a, vpinsrb_tab[imm], &o, KEEP12); agg_mem(&a, &o.r[0], &w, 32, 1, ctx);
+        w = V_ZERO; memcpy(&w, &c.r[1], 16); w.w[imm & 7] = (uint16_t)c.g_in;
+        snprintf(ctx, sizeof ctx, "vpinsrw imm=%d", imm); o = c; vexec(&a, vpinsrw_tab[imm], &o, KEEP12); agg_mem(&a, &o.r[0], &w, 32, 2, ctx);
+        w = V_ZERO; memcpy(&w, &c.r[1], 16); w.d[imm & 3] = c.g_in;
+        snprintf(ctx, sizeof ctx, "vpinsrd imm=%d", imm); o = c; vexec(&a, vpinsrd_tab[imm], &o, KEEP12); agg_mem(&a, &o.r[0], &w, 32, 4, ctx);
+        /* memory forms: vpextrb writes exactly one byte, vpinsrw reads exactly a word */
+        t_rng_fill(&r, mem, sizeof mem); uint8_t ref[16]; memcpy(ref, mem, 16); ref[5] = c.r[1].b[imm & 15];
+        o = c; o.mem = (uintptr_t)(mem + 5); vexec(&a, vpextrbm_tab[imm], &o, KEEP12);
+        snprintf(ctx, sizeof ctx, "vpextrb m8 imm=%d", imm); agg_mem(&a, mem, ref, 16, 1, ctx);
+        w = V_ZERO; memcpy(&w, &c.r[1], 16); memcpy(&w.w[imm & 7], mem + 7, 2);
+        o = c; o.mem = (uintptr_t)(mem + 7); vexec(&a, vpinsrwm_tab[imm], &o, KEEP12);
+        snprintf(ctx, sizeof ctx, "vpinsrw m16 imm=%d", imm); agg_mem(&a, &o.r[0], &w, 32, 2, ctx);
+    }
+    for (int imm = 0; imm < 256; imm++) {
+        vctx c; vctx_pattern(&c, (uint32_t)imm + 77); t_rng_fill(&r, &c.r[1], 32); t_rng_fill(&r, &c.r[2], 32);
+        t_rng_fill(&r, mem, sizeof mem); c.mem = (uintptr_t)(mem + 3);
+        for (int m = 0; m < 2; m++) {
+            v256 w = V_ZERO; memcpy(&w, &c.r[1], 16);
+            uint32_t src; if (m) memcpy(&src, mem + 3, 4); else src = c.r[2].d[(imm >> 6) & 3];   /* m32: imm[7:6] ignored */
+            w.d[(imm >> 4) & 3] = src;
+            for (int j = 0; j < 4; j++) if ((imm >> j) & 1) w.d[j] = 0;
+            vctx o = c; vexec(&a, (m ? vinsertpsm_tab : vinsertps_tab)[imm], &o, KEEP12);
+            char ctx[48]; snprintf(ctx, sizeof ctx, "vinsertps %s imm=0x%02x", m ? "m32" : "xmm", imm);
+            agg_mem(&a, &o.r[0], &w, 32, 4, ctx);
+        }
+    }
+    AGG_END(&a);
+}
+
+/* =========================================================================== VEX scalar merge forms
+ * VEX scalar ops: bits 31:0 (63:0) = op(src1, src2), 127:32 (127:64) copied from src1 (not from the destination),
+ * 255:128 zeroed. Reference: legacy scalar SSE under the same MXCSR, flags included. */
+VOP(s_vaddss_avx, "vaddss %%xmm2, %%xmm1, %%xmm0")     VOP(s_vsubsd_avx, "vsubsd %%xmm2, %%xmm1, %%xmm0")
+VOP(s_vmulss_avx, "vmulss %%xmm2, %%xmm1, %%xmm0")     VOP(s_vdivsd_avx, "vdivsd %%xmm2, %%xmm1, %%xmm0")
+VOP(s_vminss_avx, "vminss %%xmm2, %%xmm1, %%xmm0")     VOP(s_vmaxsd_avx, "vmaxsd %%xmm2, %%xmm1, %%xmm0")
+VOP(s_vsqrtss_avx, "vsqrtss %%xmm2, %%xmm1, %%xmm0")   VOP(s_vsqrtsd_avx, "vsqrtsd %%xmm2, %%xmm1, %%xmm0")
+VOP(s_vcvtss2sd_avx, "vcvtss2sd %%xmm2, %%xmm1, %%xmm0") VOP(s_vcvtsd2ss_avx, "vcvtsd2ss %%xmm2, %%xmm1, %%xmm0")
+VOP(s_vrcpss_avx, "vrcpss %%xmm2, %%xmm1, %%xmm0")     VOP(s_vrsqrtss_avx, "vrsqrtss %%xmm2, %%xmm1, %%xmm0")
+VOP(s_vroundsd_avx, "vroundsd $4, %%xmm2, %%xmm1, %%xmm0") VOP(s_vmovsd_avx, "vmovsd %%xmm2, %%xmm1, %%xmm0")
+VOP(s_vmovlhps_avx, "vmovlhps %%xmm2, %%xmm1, %%xmm0")
+TEST(avx_scalar_merge_forms) {
+    NEED(AVX);
+    t_rng r; t_rng_seed(&r, 0x5CA);
+    static const struct { const char *n; vop_fn f; int op, dbl; } ar[] = {
+        { "vaddss", s_vaddss_avx, OP_ADD, 0 }, { "vsubsd", s_vsubsd_avx, OP_SUB, 1 }, { "vmulss", s_vmulss_avx, OP_MUL, 0 },
+        { "vdivsd", s_vdivsd_avx, OP_DIV, 1 }, { "vminss", s_vminss_avx, OP_MIN, 0 }, { "vmaxsd", s_vmaxsd_avx, OP_MAX, 1 } };
+    agg_t a; agg_init(&a, "VEX scalar: low = op(src1,src2), rest of 127:0 from src1, 255:128 zero");
+    for (int it = 0; it < 300; it++) {
+        uint32_t mx = fp_modes[it % T_COUNTOF(fp_modes)];
+        vctx c; vctx_pattern(&c, (uint32_t)it); c.mx_in = mx;
+        t_rng_fill(&r, &c.r[0], 32);       /* destination garbage must not leak into the result */
+        gen_f32v(&r, &c.r[1], 0); gen_f32v(&r, &c.r[2], 0);
+        if (it & 1) { gen_f64v(&r, &c.r[1], 0); gen_f64v(&r, &c.r[2], 0); }
+        for (size_t k = 0; k < T_COUNTOF(ar); k++) {
+            vctx o = c; vexec(&a, ar[k].f, &o, KEEP12);
+            v256 w = V_ZERO; memcpy(&w, &c.r[1], 16); uint32_t fl = 0;
+            if (ar[k].dbl) w.q[0] = sse_f64(ar[k].op, c.r[1].q[0], c.r[2].q[0], mx, &fl);
+            else w.d[0] = sse_f32(ar[k].op, c.r[1].d[0], c.r[2].d[0], mx, &fl);
+            agg_mem(&a, &o.r[0], &w, 32, ar[k].dbl ? 8 : 4, ar[k].n);
+            agg_eq(&a, o.mx_out & MX_FLAGS, fl, ar[k].n);
+        }
+        /* sqrt takes its operand from src2 */
+        vctx o = c; vexec(&a, s_vsqrtss_avx, &o, KEEP12);
+        v256 w = V_ZERO; memcpy(&w, &c.r[1], 16); w.d[0] = sse_f32(OP_SQRT, c.r[2].d[0], 0, mx, NULL);
+        agg_mem(&a, &o.r[0], &w, 32, 4, "vsqrtss (operand = src2 low)");
+        o = c; vexec(&a, s_vsqrtsd_avx, &o, KEEP12);
+        w = V_ZERO; memcpy(&w, &c.r[1], 16); w.q[0] = sse_f64(OP_SQRT, c.r[2].q[0], 0, mx, NULL);
+        agg_mem(&a, &o.r[0], &w, 32, 8, "vsqrtsd (operand = src2 low)");
+        /* conversions (DAZ: a denormal source converts as zero) */
+        int rc = (int)((mx >> 13) & 3), daz = (mx & MX_DAZ) != 0, ftz = (mx & MX_FTZ) != 0;
+        o = c; vexec(&a, s_vcvtss2sd_avx, &o, KEEP12);
+        uint32_t s32 = c.r[2].d[0]; if (daz && f_isdenorm(FMT32, s32)) s32 &= 0x80000000u;
+        w = V_ZERO; memcpy(&w, &c.r[1], 16); w.q[0] = f_convert(FMT32, FMT64, s32, rc, NULL);
+        agg_mem(&a, &o.r[0], &w, 32, 8, "vcvtss2sd");
+        o = c; vexec(&a, s_vcvtsd2ss_avx, &o, KEEP12);
+        uint64_t s64 = c.r[2].q[0]; if (daz && f_isdenorm(FMT64, s64)) s64 &= 0x8000000000000000ull;
+        w = V_ZERO; memcpy(&w, &c.r[1], 16);
+        if (f_isnan(FMT64, s64) || f_isinf(FMT64, s64) || f_iszero(FMT64, s64)) w.d[0] = (uint32_t)f_convert(FMT64, FMT32, s64, rc, NULL);
+        else { int sg, e; uint64_t m; f_unpack(FMT64, s64, &sg, &m, &e); w.d[0] = (uint32_t)fround_ex(FMT32, sg, u128_from(m), e, rc, ftz, NULL); }
+        agg_mem(&a, &o.r[0], &w, 32, 4, "vcvtsd2ss");
+        /* round (imm 4: MXCSR.RC) */
+        o = c; vexec(&a, s_vroundsd_avx, &o, KEEP12);
+        w = V_ZERO; memcpy(&w, &c.r[1], 16); w.q[0] = f_round_int(FMT64, (daz && f_isdenorm(FMT64, c.r[2].q[0])) ? c.r[2].q[0] & 0x8000000000000000ull : c.r[2].q[0], rc, 0, NULL);
+        agg_mem(&a, &o.r[0], &w, 32, 8, "vroundsd $4");
+        /* moves */
+        o = c; vexec(&a, s_vmovsd_avx, &o, KEEP12);
+        w = V_ZERO; w.q[0] = c.r[2].q[0]; w.q[1] = c.r[1].q[1]; agg_mem(&a, &o.r[0], &w, 32, 8, "vmovsd xmm,xmm,xmm");
+        o = c; vexec(&a, s_vmovlhps_avx, &o, KEEP12);
+        w = V_ZERO; w.q[0] = c.r[1].q[0]; w.q[1] = c.r[2].q[0]; agg_mem(&a, &o.r[0], &w, 32, 8, "vmovlhps");
+        /* approximations: merge bits exact, low element within the SDM bound */
+        for (int k = 0; k < 2; k++) {
+            vctx q = c; q.mx_in = MX_DEFAULT;
+            q.r[2].d[0] = ((uint32_t)(127 - 40 + t_rng_range(&r, 81)) << 23) | (t_rng_u32(&r) & 0x7fffff);
+            vctx oq = q; vexec(&a, k ? s_vrsqrtss_avx : s_vrcpss_avx, &oq, KEEP12);
+            v256 g = oq.r[0], ww = V_ZERO; memcpy(&ww, &q.r[1], 16);
+            uint32_t low = g.d[0]; g.d[0] = 0; ww.d[0] = 0;
+            agg_mem(&a, &g, &ww, 32, 4, k ? "vrsqrtss merge bits" : "vrcpss merge bits");
+            double x = f32_to_double(q.r[2].d[0]), y = f32_to_double(low), ex = k ? 1.0 / sqrt(x) : 1.0 / x, e = (y - ex) / ex;
+            if (e < 0) e = -e;
+            a.n++;
+            if (!(e <= 1.5 / 4096.0)) agg_fail(&a, "%s(0x%08x) = 0x%08x rel.err %.3g", k ? "vrsqrtss" : "vrcpss", q.r[2].d[0], low, e);
+        }
     }
     AGG_END(&a);
 }
